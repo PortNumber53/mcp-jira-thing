@@ -1,53 +1,141 @@
-# Model Context Protocol (MCP) Server + Github OAuth
+# Model Context Protocol (MCP) Server with GitHub OAuth
 
-This is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server that supports remote MCP connections, with Github OAuth built-in.
+This project provides a template for a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) server that uses GitHub for OAuth 2.0 authentication. It is built to run on [Cloudflare Workers](https://developers.cloudflare.com/workers/), providing a robust and scalable foundation for your own remote MCP services.
 
-You can deploy it to your own Cloudflare account, and after you create your own Github OAuth client app, you'll have a fully functional remote MCP server that you can build off. Users will be able to connect to your MCP server by signing in with their GitHub account.
+Users can connect to your deployed MCP server, and they will be prompted to sign in with their GitHub account to authorize access.
 
-You can use this as a reference example for how to integrate other OAuth providers with an MCP server deployed to Cloudflare, using the [`workers-oauth-provider` library](https://github.com/cloudflare/workers-oauth-provider).
+## Features
 
-The MCP server (powered by [Cloudflare Workers](https://developers.cloudflare.com/workers/)):
-
-* Acts as OAuth _Server_ to your MCP clients
-* Acts as OAuth _Client_ to your _real_ OAuth server (in this case, GitHub)
+- **GitHub OAuth Integration**: Securely authenticates users via GitHub, acting as an OAuth client to GitHub and an OAuth server to the MCP client.
+- **Dynamic Tool Loading**: Demonstrates how to conditionally expose tools based on the authenticated user's identity.
+- **Example Tools**: Includes two sample tools:
+    - A public `add` tool available to all authenticated users.
+    - A restricted `generateImage` tool that is only available to a predefined list of authorized users.
+- **Serverless Deployment**: Built on Cloudflare Workers for a scalable, low-maintenance, serverless architecture.
+- **Secure Secret Management**: Uses Wrangler secrets to manage sensitive credentials, avoiding hard-coded values in the source code.
 
 ## Getting Started
 
-Clone the repo directly & install dependencies: `npm install`.
+### Prerequisites
 
-Alternatively, you can use the command line below to get the remote MCP Server created on your local machine:
+- [Node.js](https://nodejs.org/) (v18 or later)
+- A [Cloudflare account](https://dash.cloudflare.com/sign-up)
+- `npm` or a compatible package manager
+
+### Installation
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/PortNumber53/mcp-jira-thing.git
+    cd mcp-jira-thing
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+
+## Configuration and Deployment
+
+Follow these steps to configure and deploy your MCP server.
+
+### 1. Create a GitHub OAuth App
+
+First, you need to create a [GitHub OAuth App](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app) to get your client credentials.
+
+-   **Homepage URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev`
+-   **Authorization callback URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev/callback`
+
+Once the app is created, note the **Client ID** and generate a new **Client secret**.
+
+### 2. Configure Secrets
+
+Next, use Wrangler to securely store your GitHub credentials and a session encryption key as secrets.
+
 ```bash
-npm create cloudflare@latest -- my-mcp-server --template=cloudflare/ai/demos/remote-mcp-github-oauth
+# Will prompt for your GitHub Client ID
+npx wrangler secret put GITHUB_CLIENT_ID
+
+# Will prompt for your GitHub Client Secret
+npx wrangler secret put GITHUB_CLIENT_SECRET
+
+# Will prompt for a random string to encrypt cookies
+npx wrangler secret put COOKIE_ENCRYPTION_KEY
 ```
 
-### For Production
-Create a new [GitHub OAuth App](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app):
-- For the Homepage URL, specify `https://mcp-github-oauth.<your-subdomain>.workers.dev`
-- For the Authorization callback URL, specify `https://mcp-github-oauth.<your-subdomain>.workers.dev/callback`
-- Note your Client ID and generate a Client secret.
-- Set secrets via Wrangler
+For the `COOKIE_ENCRYPTION_KEY`, you can generate a secure random string with `openssl rand -hex 32`.
+
+### 3. Set up a KV Namespace
+
+This project uses a KV namespace to store OAuth-related data.
+
+1.  **Create the KV namespace:**
+    ```bash
+    npx wrangler kv:namespace create "OAUTH_KV"
+    ```
+2.  **Update `wrangler.jsonc`:** Wrangler will output a binding and an ID. Add the `kv_namespaces` configuration to your `wrangler.jsonc` file, replacing the `id` with the one you received:
+    ```json
+    "kv_namespaces": [
+        {
+            "binding": "OAUTH_KV",
+            "id": "your-kv-namespace-id-here"
+        }
+    ]
+    ```
+
+### 4. Authorize Users
+
+To grant access to restricted tools like `generateImage`, you must add the GitHub usernames of authorized users to the `ALLOWED_USERNAMES` set in `src/index.ts`.
+
+```typescript
+// src/index.ts
+const ALLOWED_USERNAMES = new Set<string>([
+	'PortNumber53',
+	// Add other authorized GitHub usernames here
+]);
+```
+
+### 5. Deploy the Worker
+
+Finally, deploy your configured worker to Cloudflare.
+
 ```bash
-wrangler secret put GITHUB_CLIENT_ID
-wrangler secret put GITHUB_CLIENT_SECRET
-wrangler secret put COOKIE_ENCRYPTION_KEY # add any random string here e.g. openssl rand -hex 32
+npx wrangler deploy
 ```
-#### Set up a KV namespace
-- Create the KV namespace:
-`wrangler kv:namespace create "OAUTH_KV"`
-- Update the Wrangler file with the KV ID
 
-#### Deploy & Test
-Deploy the MCP server to make it available on your workers.dev domain
-` wrangler deploy`
+## Available Tools
 
-Test the remote server using [Inspector](https://modelcontextprotocol.io/docs/tools/inspector):
+This MCP server exposes the following tools:
 
-```
+-   **`add`**
+    -   **Description**: Adds two numbers.
+    -   **Access**: Public (available to all authenticated users).
+    -   **Parameters**: `a` (number), `b` (number).
+
+-   **`generateImage`**
+    -   **Description**: Generates an image using the `@cf/black-forest-labs/flux-1-schnell` model.
+    -   **Access**: Restricted (only available to users in `ALLOWED_USERNAMES`).
+    -   **Parameters**: `prompt` (string), `steps` (number, 4-8).
+
+## Usage
+
+You can test your remote server using the [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector):
+
+```bash
 npx @modelcontextprotocol/inspector@latest
 ```
-Enter `https://mcp-github-oauth.<your-subdomain>.workers.dev/sse` and hit connect. Once you go through the authentication flow, you'll see the Tools working:
 
-<img width="640" alt="image" src="https://github.com/user-attachments/assets/7973f392-0a9d-4712-b679-6dd23f824287" />
+Enter your worker's SSE URL (`https://<your-worker-name>.<your-subdomain>.workers.dev/sse`) and click **Connect**. You will be redirected to GitHub to authenticate. Once authenticated, you will see the available tools in the Inspector.
+
+<img width="640" alt="MCP Inspector showing available tools" src="https://github.com/user-attachments/assets/7973f392-0a9d-4712-b679-6dd23f824287" />
+
+## Project Structure
+
+-   `src/index.ts`: The main entry point for the Cloudflare Worker. Defines the MCP server, its tools, and the logic for conditional tool access.
+-   `src/github-handler.ts`: Contains the logic for handling the GitHub OAuth flow.
+-   `src/workers-oauth-utils.ts`: Provides utility functions for the OAuth process, adapted from the `workers-oauth-provider` library.
+-   `wrangler.jsonc`: The configuration file for the Cloudflare Worker.
+-   `package.json`: Defines project scripts and dependencies.
 
 You now have a remote MCP server deployed!
 
