@@ -1,75 +1,101 @@
-import { McpAgent } from "agents/mcp";
+import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpAgent } from "agents/mcp";
+import { Octokit } from "octokit";
 import { z } from "zod";
+import { GitHubHandler } from "./github-handler";
 
-// Define our MCP agent with tools
-export class MyMCP extends McpAgent {
+// Context from the auth process, encrypted & stored in the auth token
+// and provided to the DurableMCP as this.props
+type Props = {
+	login: string;
+	name: string;
+	email: string;
+	accessToken: string;
+};
+
+const ALLOWED_USERNAMES = new Set<string>([
+	'PortNumber53',
+	// Add GitHub usernames of users who should have access to the image generation tool
+	// For example: 'yourusername', 'coworkerusername'
+]);
+
+export class MyMCP extends McpAgent<Env, Record<string, never>, Props> {
 	server = new McpServer({
-		name: "Authless Calculator",
+		name: "Github OAuth Proxy Demo",
 		version: "1.0.0",
 	});
 
 	async init() {
-		// Simple addition tool
+		// Hello, world!
 		this.server.tool(
 			"add",
+			"Add two numbers the way only MCP can",
 			{ a: z.number(), b: z.number() },
 			async ({ a, b }) => ({
-				content: [{ type: "text", text: String(a + b) }],
-			})
+				content: [{ text: String(a + b), type: "text" }],
+			}),
 		);
 
-		// Calculator tool with multiple operations
+		// Use the upstream access token to facilitate tools
 		this.server.tool(
-			"calculate",
-			{
-				operation: z.enum(["add", "subtract", "multiply", "divide"]),
-				a: z.number(),
-				b: z.number(),
+			"userInfoOctokit",
+			"Get user info from GitHub, via Octokit",
+			{},
+			async () => {
+				const octokit = new Octokit({ auth: this.props.accessToken });
+				return {
+					content: [
+						{
+							text: JSON.stringify(await octokit.rest.users.getAuthenticated()),
+							type: "text",
+						},
+					],
+				};
 			},
-			async ({ operation, a, b }) => {
-				let result: number;
-				switch (operation) {
-					case "add":
-						result = a + b;
-						break;
-					case "subtract":
-						result = a - b;
-						break;
-					case "multiply":
-						result = a * b;
-						break;
-					case "divide":
-						if (b === 0)
-							return {
-								content: [
-									{
-										type: "text",
-										text: "Error: Cannot divide by zero",
-									},
-								],
-							};
-						result = a / b;
-						break;
-				}
-				return { content: [{ type: "text", text: String(result) }] };
-			}
 		);
+
+		// Dynamically add tools based on the user's login. In this case, I want to limit
+		// access to my Image Generation tool to just me
+		if (ALLOWED_USERNAMES.has(this.props.login)) {
+			this.server.tool(
+				"generateImage",
+				"Generate an image using the `flux-1-schnell` model. Works best with 8 steps.",
+				{
+					prompt: z
+						.string()
+						.describe("A text description of the image you want to generate."),
+					steps: z
+						.number()
+						.min(4)
+						.max(8)
+						.default(4)
+						.describe(
+							"The number of diffusion steps; higher values can improve quality but take longer. Must be between 4 and 8, inclusive.",
+						),
+				},
+				async ({ prompt, steps }) => {
+					const response = await this.env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
+						prompt,
+						steps,
+					});
+
+					return {
+						content: [{ data: response.image!, mimeType: "image/jpeg", type: "image" }],
+					};
+				},
+			);
+		}
 	}
 }
 
-export default {
-	fetch(request: Request, env: Env, ctx: ExecutionContext) {
-		const url = new URL(request.url);
-
-		if (url.pathname === "/sse" || url.pathname === "/sse/message") {
-			return MyMCP.serveSSE("/sse").fetch(request, env, ctx);
-		}
-
-		if (url.pathname === "/mcp") {
-			return MyMCP.serve("/mcp").fetch(request, env, ctx);
-		}
-
-		return new Response("Not found", { status: 404 });
-	},
-};
+export default new OAuthProvider({
+	apiHandlers: {
+		'/sse': MyMCP.serveSSE('/sse'),
+		'/mcp': MyMCP.serve('/mcp'),
+	  },
+	authorizeEndpoint: "/authorize",
+	clientRegistrationEndpoint: "/register",
+	defaultHandler: GitHubHandler as any,
+	tokenEndpoint: "/token",
+});
