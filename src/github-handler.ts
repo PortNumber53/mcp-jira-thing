@@ -94,7 +94,7 @@ app.get("/callback", async (c) => {
 		client_secret: c.env.GITHUB_CLIENT_SECRET,
 		code: c.req.query("code"),
 		redirect_uri: new URL("/callback", c.req.url).href,
-		upstream_url: "https://github.com/login/oauth/access_token",
+		upstream_url: "https://github.com/login/oauth/access_tokenn",
 	});
 	if (errResponse) return errResponse;
 
