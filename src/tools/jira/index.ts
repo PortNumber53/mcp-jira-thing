@@ -79,15 +79,104 @@ export class JiraClient extends JiraClientCore {
   }
 
   // Subtask CRUD operations
-  public async createSubtask(parentIssueKey: string, projectKey: string, summary: string, description?: string): Promise<JiraIssue> {
-    const fields: JiraIssueFields = {
-      project: { key: projectKey },
-      summary: summary,
-      issuetype: { name: 'Subtask' }, // Assuming 'Subtask' is the issue type name for Subtasks
-      parent: { key: parentIssueKey },
-      description: description ? { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] } : undefined,
-    };
-    return this.issues.createIssue(fields);
+  public async createSubtask(parentIssueKey: string, projectKey: string, summary: string, description?: string, issueType?: string): Promise<JiraIssue> {
+    try {
+      // Validate parent issue exists first
+      const parentIssue = await this.issues.getIssue(parentIssueKey).catch(error => {
+        throw new Error(`Invalid parent issue key: ${parentIssueKey}. ${error.message || 'Parent issue not found.'}`); 
+      });
+      
+      // Get the parent issue's project key if available - this is more reliable than the provided projectKey
+      const parentProjectKey = parentIssue.fields?.project?.key || projectKey;
+      if (parentProjectKey !== projectKey) {
+        console.warn(`Parent issue ${parentIssueKey} belongs to project ${parentProjectKey}, not ${projectKey}. Using parent's project.`);
+      }
+      
+      // Get available issue types with a focus on subtask types
+      const issueTypes = await this.projects.getProjectIssueTypes(parentProjectKey).catch((error) => {
+        console.warn(`Could not get issue types: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return [];
+      });
+      
+      // Define a type that can have either id or name
+      type IssueTypeIdentifier = { id: string } | { name: string };
+      
+      // Try multiple approaches to find a valid subtask type
+      let subtaskType: IssueTypeIdentifier;
+      
+      // If issueType is provided, use it directly
+      if (issueType) {
+        // Check if it's an ID (numeric) or a name
+        if (/^\d+$/.test(issueType)) {
+          subtaskType = { id: issueType };
+          console.log(`Using provided subtask type ID: ${issueType}`);
+        } else {
+          subtaskType = { name: issueType };
+          console.log(`Using provided subtask type name: ${issueType}`);
+        }
+      }
+      // Otherwise use automatic detection
+      else {
+        // Approach 1: Look for a type with subtask=true
+        const subtaskIssueType = issueTypes.find(type => type && type.subtask === true);
+        if (subtaskIssueType && subtaskIssueType.id) {
+          subtaskType = { id: subtaskIssueType.id };
+          console.log(`Using subtask type ID: ${subtaskIssueType.id} (${subtaskIssueType.name || 'unnamed'})`);
+        } 
+        // Approach 2: Look for a type with 'subtask' in the name (case insensitive)
+        else {
+          const subtaskByName = issueTypes.find(type => 
+            type && type.name && type.name.toLowerCase().includes('subtask'));
+            
+          if (subtaskByName && subtaskByName.id) {
+            subtaskType = { id: subtaskByName.id };
+            console.log(`Using subtask type by name: ${subtaskByName.id} (${subtaskByName.name})`);
+          }
+          // Approach 3: Fall back to the default name 'Sub-task' (common in many Jira instances)
+          else {
+            // Try both 'Subtask' and 'Sub-task' as these are common in different Jira versions
+            subtaskType = { name: 'Sub-task' };
+            console.warn(`No subtask type found. Trying with name 'Sub-task'.`);
+          }
+        }
+      }
+      
+      // Create fields object for the new subtask
+      const fields: any = {
+        project: { key: parentProjectKey }, // Always use the parent's project
+        summary: summary,
+        issuetype: subtaskType,
+        parent: { key: parentIssueKey },
+        description: description ? { 
+          type: 'doc', 
+          version: 1, 
+          content: [{ 
+            type: 'paragraph', 
+            content: [{ type: 'text', text: description }] 
+          }] 
+        } : undefined,
+      };
+      
+      // Create the subtask
+      return this.issues.createIssue(fields);
+    } catch (error: any) {
+      // Enhance error message with more helpful information
+      const errorMsg = error?.message || 'Unknown error creating subtask';
+      
+      if (errorMsg.includes('issuetype')) {
+        throw new Error(
+          `Issue type error: The project may not support subtasks or the subtask type name may be different in your Jira instance. ` +
+          `Common subtask type names are 'Subtask', 'Sub-task', or 'Sub Task'. ` +
+          `Original error: ${errorMsg}`
+        );
+      } else if (errorMsg.includes('parent')) {
+        throw new Error(`Parent issue error: ${errorMsg}. Ensure the parent issue exists and can have subtasks.`);
+      } else if (errorMsg.includes('project')) {
+        throw new Error(`Project error: ${errorMsg}. Ensure the project exists and supports subtasks.`);
+      } else {
+        throw new Error(`Error creating subtask: ${errorMsg}`);
+      }
+    }
   }
 
   public async getSubtask(issueIdOrKey: string): Promise<JiraIssue> {
@@ -135,6 +224,45 @@ export class JiraClient extends JiraClientCore {
     // Parse and sanitize labels to ensure we're setting the right labels
     const sanitizedLabels = parseLabels(labels);
     return this.issues.updateIssue(issueIdOrKey, { labels: sanitizedLabels });
+  }
+
+  /**
+   * Get details of a Jira issue by ID or key
+   * @param issueIdOrKey The ID or key of the issue to retrieve
+   * @returns Promise resolving to the issue details
+   */
+  public async getIssue(issueIdOrKey: string): Promise<JiraIssue> {
+    return this.issues.getIssue(issueIdOrKey);
+  }
+
+  /**
+   * Update any field on a Jira issue
+   * @param issueIdOrKey The ID or key of the issue to update
+   * @param fields Object containing the fields to update
+   * @returns Promise resolving when the update is complete
+   */
+  public async updateIssue(issueIdOrKey: string, fields: Record<string, any>): Promise<void> {
+    // Convert simple text description to Jira's document format if needed
+    if (fields.description && typeof fields.description === 'string') {
+      fields.description = { 
+        type: 'doc', 
+        version: 1, 
+        content: [{ 
+          type: 'paragraph', 
+          content: [{ type: 'text', text: fields.description }] 
+        }] 
+      };
+    }
+    
+    // Format the fields object as expected by the Jira API
+    const formattedFields: Partial<JiraIssueFields> = {};
+    
+    // Use type assertion to handle dynamic field assignment
+    Object.keys(fields).forEach(key => {
+      (formattedFields as any)[key] = fields[key];
+    });
+    
+    return this.issues.updateIssue(issueIdOrKey, formattedFields);
   }
 
   // User management operations
@@ -203,6 +331,10 @@ export class JiraClient extends JiraClientCore {
   public async getProject(projectIdOrKey: string, expand?: string): Promise<JiraProject> {
     return this.projects.getProject(projectIdOrKey, expand);
   }
+  
+  public async getProjectIssueTypes(projectIdOrKey: string): Promise<any[]> {
+    return this.projects.getProjectIssueTypes(projectIdOrKey);
+  }
 
   /**
    * Search for Jira users by query string
@@ -211,5 +343,25 @@ export class JiraClient extends JiraClientCore {
    */
   public async searchUsers(query: string): Promise<any[]> {
     return this.makeRequest<any[]>(`/rest/api/3/user/search?query=${encodeURIComponent(query)}`, 'GET');
+  }
+
+  /**
+   * Get available transitions for a Jira issue
+   * @param issueIdOrKey ID or key of the issue to get transitions for
+   * @returns Promise resolving to the transitions response
+   */
+  public async getTransitions(issueIdOrKey: string): Promise<any> {
+    return this.issues.getTransitions(issueIdOrKey);
+  }
+
+  /**
+   * Perform a transition on a Jira issue to change its status
+   * @param issueIdOrKey ID or key of the issue to transition
+   * @param transitionId ID of the transition to perform
+   * @param comment Optional comment to add when performing the transition
+   * @returns Promise resolving when the transition is complete
+   */
+  public async doTransition(issueIdOrKey: string, transitionId: string, comment?: string): Promise<void> {
+    return this.issues.doTransition(issueIdOrKey, transitionId, comment);
   }
 }

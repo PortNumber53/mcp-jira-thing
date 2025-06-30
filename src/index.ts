@@ -44,7 +44,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 
 	private parseLabels(labels: string[] | string): string[] {
 		let result: string[] = [];
-		
+
 		if (Array.isArray(labels)) {
 			// Handle array input
 			result = labels.map(label => {
@@ -77,7 +77,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 				result = labels.split(',').map(s => s.trim());
 			}
 		}
-		
+
 		// Final cleanup - remove any empty strings
 		return result.filter(label => label.length > 0);
 	}
@@ -148,7 +148,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 			async (payload) => {
 				try {
 					const newProject = await this.jiraClient.createProject(payload);
-					
+
 					// Create a simplified project object for machine parsing
 					const projectData = {
 						id: newProject.id,
@@ -162,10 +162,10 @@ export class MyMCP extends McpAgent<Env, Props> {
 						} : null,
 						success: true
 					};
-					
+
 					// Create JSON string for machine parsing
 					const projectJson = JSON.stringify(projectData, null, 2);
-					
+
 					return {
 						content: [
 							{ text: `Project created: ${newProject.name} (${newProject.key})`, type: "text" },
@@ -176,7 +176,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 					// Provide helpful error message
 					let errorMessage = `Error creating project: ${error?.message || 'Unknown error'}`;
 					let errorType = "unknown";
-					
+
 					// Add specific guidance for common errors
 					if (error?.message && typeof error.message === 'string') {
 						if (error.message.includes("projectLead")) {
@@ -190,7 +190,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 							errorType = "missing_template";
 						}
 					}
-					
+
 					// Create error object for machine parsing
 					const errorData = {
 						success: false,
@@ -198,10 +198,10 @@ export class MyMCP extends McpAgent<Env, Props> {
 						message: error?.message || 'Unknown error',
 						payload: payload
 					};
-					
+
 					// Create JSON string for machine parsing
 					const errorJson = JSON.stringify(errorData, null, 2);
-					
+
 					return {
 						content: [
 							{ text: errorMessage, type: "text" },
@@ -222,7 +222,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 			async ({ projectIdOrKey, expand }) => {
 				try {
 					const project = await this.jiraClient.getProject(projectIdOrKey, expand);
-					
+
 					// Create a simplified project object for machine parsing
 					const projectData = {
 						id: project.id,
@@ -236,19 +236,19 @@ export class MyMCP extends McpAgent<Env, Props> {
 						} : null,
 						success: true
 					};
-					
+
 					// Create JSON string for machine parsing
 					const projectJson = JSON.stringify(projectData, null, 2);
-					
+
 					return {
 						content: [
-							{ 
+							{
 								text: `Project: ${project.name} (${project.key})\n` +
 									`ID: ${project.id}\n` +
 									`Description: ${project.description || 'N/A'}\n` +
 									`Project Type: ${project.projectTypeKey}\n` +
-									`Lead: ${project.lead?.displayName || 'N/A'}`, 
-								type: "text" 
+									`Lead: ${project.lead?.displayName || 'N/A'}`,
+								type: "text"
 							},
 							{
 								text: `MACHINE_PARSEABLE_DATA:\n${projectJson}`,
@@ -263,12 +263,116 @@ export class MyMCP extends McpAgent<Env, Props> {
 						message: error?.message || 'Unknown error',
 						projectIdOrKey: projectIdOrKey
 					}, null, 2);
+
+					return {
+						content: [
+							{ text: errorMessage, type: "text" },
+							{ text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" }
+						],
+					};
+				}
+			},
+		);
+
+		this.server.tool(
+			"getJiraProjectIssueTypes",
+			"Get all available issue types for a Jira project, including subtask types",
+			{
+				projectIdOrKey: z.string().describe("[REQUIRED] ID or key of the project to retrieve issue types for"),
+			},
+			async ({ projectIdOrKey }) => {
+				try {
+					// Get all issue types available
+					const issueTypes = await this.jiraClient.getProjectIssueTypes(projectIdOrKey);
+					
+					if (!issueTypes || issueTypes.length === 0) {
+						return {
+							content: [{ text: `No issue types found for project ${projectIdOrKey}.`, type: "text" }],
+							data: {
+								success: true,
+								projectKey: projectIdOrKey,
+								issueTypes: [],
+								subtaskTypes: [],
+								standardTypes: []
+							}
+						};
+					}
+					
+					// Separate subtask types from standard types
+					const subtaskTypes = issueTypes.filter(type => type && type.subtask === true);
+					const standardTypes = issueTypes.filter(type => type && type.subtask !== true);
+					
+					// Format a human-readable response
+					let result = `Issue types for project ${projectIdOrKey}:\n\n`;
+					
+					result += "Standard Issue Types:\n";
+					if (standardTypes.length > 0) {
+						standardTypes.forEach(type => {
+							result += `- ${type.name} (ID: ${type.id})${type.default ? ' [DEFAULT]' : ''}\n`;
+						});
+					} else {
+						result += "- None found\n";
+					}
+					
+					result += "\nSubtask Issue Types:\n";
+					if (subtaskTypes.length > 0) {
+						subtaskTypes.forEach(type => {
+							result += `- ${type.name} (ID: ${type.id})${type.default ? ' [DEFAULT]' : ''}\n`;
+						});
+					} else {
+						result += "- None found (this project may not support subtasks)\n";
+					}
+					
+					// Create structured data for machine parsing
+					const responseData = {
+						success: true,
+						projectKey: projectIdOrKey,
+						issueTypes: issueTypes.map(type => ({
+							id: type.id,
+							name: type.name,
+							subtask: type.subtask === true,
+							default: type.default === true
+						})),
+						subtaskTypes: subtaskTypes.map(type => ({
+							id: type.id,
+							name: type.name,
+							default: type.default === true
+						})),
+						standardTypes: standardTypes.map(type => ({
+							id: type.id,
+							name: type.name,
+							default: type.default === true
+						}))
+					};
+					
+					// Create JSON string for machine parsing
+					const responseJson = JSON.stringify(responseData, null, 2);
+					
+					return {
+						content: [
+							{ text: result, type: "text" },
+							{ text: `MACHINE_PARSEABLE_DATA:\n${responseJson}`, type: "text" }
+						],
+						data: responseData
+					};
+				} catch (error: any) {
+					const errorMessage = `Error retrieving issue types: ${error?.message || 'Unknown error'}`;
+					const errorJson = JSON.stringify({
+						success: false,
+						error: errorMessage,
+						projectKey: projectIdOrKey
+					}, null, 2);
 					
 					return {
 						content: [
 							{ text: errorMessage, type: "text" },
 							{ text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" }
 						],
+						data: {
+							success: false,
+							error: errorMessage,
+							projectKey: projectIdOrKey
+						}
 					};
 				}
 			},
@@ -285,13 +389,13 @@ export class MyMCP extends McpAgent<Env, Props> {
 				try {
 					// Use the searchUsers method to find users
 					const response = await this.jiraClient.searchUsers(query);
-					
+
 					if (!Array.isArray(response) || response.length === 0) {
 						return {
 							content: [{ text: `No users found matching "${query}"`, type: "text" }],
 						};
 					}
-					
+
 					// Format user information with account IDs in a structured way
 					const formattedUsers = response.map((user: any) => ({
 						displayName: user.displayName,
@@ -299,20 +403,20 @@ export class MyMCP extends McpAgent<Env, Props> {
 						accountId: user.accountId,
 						active: user.active
 					}));
-					
+
 					// Create a structured text format for humans
 					const usersText = formattedUsers.map(user => {
 						return `- ${user.displayName}\n  Account ID: ${user.accountId}\n  Email: ${user.email || 'None'}\n  Active: ${user.active ? 'Yes' : 'No'}`;
 					}).join('\n\n');
-					
+
 					// Create a JSON string for machine parsing
 					const usersJson = JSON.stringify(formattedUsers, null, 2);
-					
+
 					return {
 						content: [
-							{ 
-								text: `Found ${response.length} users matching "${query}":\n\n${usersText}\n\nUse the accountId value when creating projects.`, 
-								type: "text" 
+							{
+								text: `Found ${response.length} users matching "${query}":\n\n${usersText}\n\nUse the accountId value when creating projects.`,
+								type: "text"
 							},
 							{
 								text: `MACHINE_PARSEABLE_DATA:\n${usersJson}`,
@@ -327,7 +431,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 						message: error?.message || 'Unknown error',
 						query: query
 					}, null, 2);
-					
+
 					return {
 						content: [
 							{ text: errorMessage, type: "text" },
@@ -367,12 +471,12 @@ export class MyMCP extends McpAgent<Env, Props> {
 			async ({ name, startDate, endDate, originBoardId, goal }) => {
 				// Create payload with only the provided fields
 				const payload: any = { name, originBoardId };
-				
+
 				// Add optional fields if provided
 				if (startDate) payload.startDate = startDate;
 				if (endDate) payload.endDate = endDate;
 				if (goal) payload.goal = goal;
-				
+
 				const newSprint = await this.jiraClient.createSprint(payload);
 				return {
 					content: [{ text: `Sprint created: ${newSprint.id} - ${newSprint.name}`, type: "text" }],
@@ -637,18 +741,92 @@ export class MyMCP extends McpAgent<Env, Props> {
 
 		this.server.tool(
 			"createJiraSubtask",
-			"Create a new Jira Subtask",
+			"Create a new Jira Subtask under a parent issue",
 			{
-				parentIssueKey: z.string().describe("The key of the parent issue"),
-				projectKey: z.string().describe("The key of the Jira project (e.g., 'TEST')"),
-				summary: z.string().describe("The summary/title of the Subtask"),
-				description: z.string().optional().describe("A detailed description of the Subtask"),
+				parentIssueKey: z.string({
+					required_error: "Parent issue key is required. Please provide a valid Jira issue key (e.g., 'TEST-123')."
+				}).describe("[REQUIRED] The key of the parent issue (e.g., 'TEST-123'). Must be an existing issue key."),
+				projectKey: z.string({
+					required_error: "Project key is required. Please provide a valid Jira project key (e.g., 'TEST')."
+				}).describe("[OPTIONAL] The key of the Jira project. If not provided or incorrect, the parent issue's project will be used automatically."),
+				summary: z.string({
+					required_error: "Summary is required. Please provide a title for the subtask."
+				}).min(1, "Summary cannot be empty.").describe("[REQUIRED] The summary/title of the subtask (e.g., 'Implement login feature')."),
+				description: z.string().optional().describe("[OPTIONAL] A detailed description of the subtask. Supports plain text."),
+				issueType: z.string().optional().describe("[OPTIONAL] The specific issue type to use for the subtask. Can be either an ID or name. If not provided, will be automatically determined."),
 			},
-			async ({ parentIssueKey, projectKey, summary, description }) => {
-				const newSubtask = await this.jiraClient.createSubtask(parentIssueKey, projectKey, summary, description);
-				return {
-					content: [{ text: `Subtask created: ${newSubtask.key} (${newSubtask.id})`, type: "text" }],
-				};
+			async ({ parentIssueKey, projectKey, summary, description, issueType }) => {
+				try {
+					// Validate parameters
+					if (!parentIssueKey) {
+						throw new Error("Parent issue key is required. Please provide a valid Jira issue key (e.g., 'TEST-123').");
+					}
+
+					if (!summary || summary.trim() === '') {
+						throw new Error("Summary is required. Please provide a title for the subtask.");
+					}
+
+					// Note: projectKey is now optional in practice since we'll use the parent's project if needed
+					const newSubtask = await this.jiraClient.createSubtask(parentIssueKey, projectKey || '', summary, description, issueType);
+
+					// Create response data for machine parsing
+					const responseData = {
+						success: true,
+						subtaskId: newSubtask.id,
+						subtaskKey: newSubtask.key,
+						summary: newSubtask.fields?.summary || summary,
+						parentIssueKey,
+						projectKey: newSubtask.fields?.project?.key || projectKey,
+						issueType: {
+							id: newSubtask.fields?.issuetype?.id,
+							name: newSubtask.fields?.issuetype?.name,
+							requested: issueType || null
+						}
+					};
+
+					return {
+						content: [{ text: `Subtask created: ${newSubtask.key} (${newSubtask.id}) under parent ${parentIssueKey}`, type: "text" }],
+						data: responseData
+					};
+				} catch (error: any) {
+					// Handle specific error cases
+					let errorMessage = `Error creating subtask: ${error?.message || 'Unknown error'}`;
+					let errorType = "unknown_error";
+					let errorDetails = {};
+
+					// Check for specific error patterns
+					if (error?.message && typeof error.message === 'string') {
+						if (error.message.includes("issuetype")) {
+							errorMessage = "Issue type error: The project may not support subtasks or the subtask type name may be different in your Jira instance.";
+							errorMessage += "\n\nCommon subtask type names are 'Subtask', 'Sub-task', or 'Sub Task'.";
+							errorType = "invalid_issue_type";
+							errorDetails = { originalError: error.message };
+						} else if (error.message.includes("parent")) {
+							errorMessage = `Parent issue error: Ensure the parent issue '${parentIssueKey}' exists and can have subtasks.`;
+							errorType = "invalid_parent";
+							errorDetails = { parentIssueKey, originalError: error.message };
+						} else if (error.message.includes("project")) {
+							errorMessage = `Project error: Ensure the project '${projectKey}' exists and supports subtasks.`;
+							errorMessage += "\n\nNote: The project key should match the project of the parent issue.";
+							errorType = "invalid_project";
+							errorDetails = { projectKey, originalError: error.message };
+						} else if (error.message.includes("404")) {
+							errorMessage = "API endpoint not found. This could be due to incorrect Jira configuration or API version mismatch.";
+							errorType = "api_not_found";
+							errorDetails = { originalError: error.message };
+						}
+					}
+
+					return {
+						content: [{ text: errorMessage, type: "text" }],
+						data: {
+							success: false,
+							errorType,
+							errorMessage,
+							errorDetails
+						}
+					};
+				}
 			},
 		);
 
@@ -716,27 +894,27 @@ export class MyMCP extends McpAgent<Env, Props> {
 					if (!issueIdOrKey) {
 						throw new Error("Issue ID or key is required. Please provide a valid Jira issue key (e.g., 'TEST-123') or ID.");
 					}
-					
+
 					if (!labels || (Array.isArray(labels) && labels.length === 0)) {
 						throw new Error("At least one label must be provided. Labels can be an array ['bug', 'frontend'] or a comma-separated string 'bug, frontend'.");
 					}
-					
+
 					// Parse and sanitize labels to ensure we're not adding brackets or quotes
 					const normalizedLabels = parseLabels(labels);
-					
+
 					// Add the labels to the issue
 					await this.jiraClient.addLabels(issueIdOrKey, normalizedLabels);
-					
+
 					// Create response data for machine parsing
 					const responseData = {
 						success: true,
 						issueIdOrKey,
 						labelsAdded: normalizedLabels
 					};
-					
+
 					// Create JSON string for machine parsing
 					const responseJson = JSON.stringify(responseData, null, 2);
-					
+
 					return {
 						content: [
 							{ text: `Labels ${normalizedLabels.join(', ')} added to issue ${issueIdOrKey}.`, type: "text" },
@@ -751,7 +929,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 						issueIdOrKey,
 						labelsAttempted: Array.isArray(labels) ? [...labels] : []
 					}, null, 2);
-					
+
 					return {
 						content: [
 							{ text: errorMessage, type: "text" },
@@ -782,27 +960,27 @@ export class MyMCP extends McpAgent<Env, Props> {
 					if (!issueIdOrKey) {
 						throw new Error("Issue ID or key is required. Please provide a valid Jira issue key (e.g., 'TEST-123') or ID.");
 					}
-					
+
 					if (!labels || (Array.isArray(labels) && labels.length === 0)) {
 						throw new Error("At least one label must be provided. Labels can be an array ['bug', 'frontend'] or a comma-separated string 'bug, frontend'.");
 					}
-					
+
 					// Parse and sanitize labels to ensure we're not adding brackets or quotes
 					const normalizedLabels = parseLabels(labels);
-					
+
 					// Remove the labels from the issue
 					await this.jiraClient.removeLabels(issueIdOrKey, normalizedLabels);
-					
+
 					// Create response data for machine parsing
 					const responseData = {
 						success: true,
 						issueIdOrKey,
 						labelsRemoved: normalizedLabels
 					};
-					
+
 					// Create JSON string for machine parsing
 					const responseJson = JSON.stringify(responseData, null, 2);
-					
+
 					return {
 						content: [
 							{ text: `Labels ${normalizedLabels.join(', ')} removed from issue ${issueIdOrKey}.`, type: "text" },
@@ -817,7 +995,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 						issueIdOrKey,
 						labelsAttempted: Array.isArray(labels) ? [...labels] : []
 					}, null, 2);
-					
+
 					return {
 						content: [
 							{ text: errorMessage, type: "text" },
@@ -848,28 +1026,28 @@ export class MyMCP extends McpAgent<Env, Props> {
 					if (!issueIdOrKey) {
 						throw new Error("Issue ID or key is required. Please provide a valid Jira issue key (e.g., 'TEST-123') or ID.");
 					}
-					
+
 					// For setJiraIssueLabels, empty array is valid (to clear all labels)
 					if (labels === undefined) {
 						throw new Error("Labels parameter is required. To clear all labels, provide an empty array [].");
 					}
-					
+
 					// Parse and sanitize labels to ensure we're not adding brackets or quotes
 					const normalizedLabels = parseLabels(labels);
-					
+
 					// Set the labels on the issue
 					await this.jiraClient.setLabels(issueIdOrKey, normalizedLabels);
-					
+
 					// Create response data for machine parsing
 					const responseData = {
 						success: true,
 						issueIdOrKey,
 						labelsSet: normalizedLabels
 					};
-					
+
 					// Create JSON string for machine parsing
 					const responseJson = JSON.stringify(responseData, null, 2);
-					
+
 					return {
 						content: [
 							{ text: `Labels for issue ${issueIdOrKey} set to ${normalizedLabels.join(', ')}.`, type: "text" },
@@ -884,12 +1062,275 @@ export class MyMCP extends McpAgent<Env, Props> {
 						issueIdOrKey,
 						labels: Array.isArray(labels) ? [...labels] : []
 					}, null, 2);
-					
+
 					return {
 						content: [
 							{ text: errorMessage, type: "text" },
 							{ text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" }
 						],
+					};
+				}
+			},
+		);
+
+		this.server.tool(
+			"updateJiraIssue",
+			"Update any field on a Jira issue",
+			{
+				issueIdOrKey: z.string().describe("[REQUIRED] ID or key of the issue to update (e.g., 'TEST-123')"),
+				fields: z.record(z.any()).describe("[REQUIRED] Object containing the fields to update. Supports any valid Jira field. Common fields include:\n\n- summary: String - The issue title/summary\n- description: String or Object - Issue description (simple strings will be automatically converted to Jira document format)\n- priority: Object - Issue priority, e.g., { id: '1' } or { name: 'Highest' }\n- assignee: Object - The assignee, e.g., { accountId: 'user-account-id' } or { name: 'username' }\n- labels: Array - Issue labels, e.g., ['bug', 'critical']\n- components: Array - Components, e.g., [{ id: '10000' }] or [{ name: 'Frontend' }]\n- fixVersions: Array - Fix versions, e.g., [{ id: '10001' }] or [{ name: '2.0' }]\n- duedate: String - Due date in format 'YYYY-MM-DD'\n- customfield_XXXXX: Any - Any custom field where XXXXX is the field ID\n\nExample: { summary: 'New title', description: 'New description', priority: { id: '1' }, labels: ['bug', 'critical'] }")
+			},
+			async ({ issueIdOrKey, fields }) => {
+				try {
+					// Validate parameters
+					if (!issueIdOrKey) {
+						throw new Error("Issue ID or key is required.");
+					}
+
+					if (!fields || Object.keys(fields).length === 0) {
+						throw new Error("At least one field must be provided for update.");
+					}
+
+					// Update the issue
+					await this.jiraClient.updateIssue(issueIdOrKey, fields);
+
+					// Create response data for machine parsing
+					const responseData = {
+						success: true,
+						issueIdOrKey,
+						updatedFields: Object.keys(fields)
+					};
+
+					// Create JSON string for machine parsing
+					const responseJson = JSON.stringify(responseData, null, 2);
+
+					return {
+						content: [
+							{ text: `Issue ${issueIdOrKey} updated successfully.`, type: "text" },
+							{ text: `Updated fields: ${Object.keys(fields).join(', ')}`, type: "text" },
+							{ text: `MACHINE_PARSEABLE_DATA:\n${responseJson}`, type: "text" }
+						],
+						data: responseData
+					};
+				} catch (error: any) {
+					const errorMessage = `Error updating issue: ${error?.message || 'Unknown error'}`;
+					const errorJson = JSON.stringify({
+						success: false,
+						error: errorMessage,
+						issueIdOrKey
+					}, null, 2);
+
+					return {
+						content: [
+							{ text: errorMessage, type: "text" },
+							{ text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" }
+						],
+						data: {
+							success: false,
+							error: errorMessage,
+							issueIdOrKey
+						}
+					};
+				}
+			},
+		);
+
+		this.server.tool(
+			"getJiraIssueTransitions",
+			"Get available transitions for a Jira issue",
+			{
+				issueIdOrKey: z.string().describe("[REQUIRED] ID or key of the issue to get transitions for (e.g., 'TEST-123')")
+			},
+			async ({ issueIdOrKey }) => {
+				try {
+					// Validate parameters
+					if (!issueIdOrKey) {
+						throw new Error("Issue ID or key is required.");
+					}
+
+					// Get transitions for the issue
+					const transitionsResponse = await this.jiraClient.getTransitions(issueIdOrKey);
+
+					// Create response data for machine parsing
+					const responseData = {
+						success: true,
+						issueIdOrKey,
+						transitions: transitionsResponse.transitions.map((t: { id: string; name: string; to: { id: string; name: string; statusCategory: { name: string } } }) => ({
+							id: t.id,
+							name: t.name,
+							toStatus: {
+								id: t.to.id,
+								name: t.to.name,
+								category: t.to.statusCategory.name
+							}
+						}))
+					};
+
+					const responseJson = JSON.stringify(responseData, null, 2);
+
+					return {
+						content: [
+							{ text: `Available transitions for issue ${issueIdOrKey}:`, type: "text" },
+							{ text: transitionsResponse.transitions.map((t: { id: string; name: string; to: { name: string } }) => `- ${t.name} (ID: ${t.id}) → ${t.to.name}`).join('\n'), type: "text" },
+							{ text: `MACHINE_PARSEABLE_DATA:\n${responseJson}`, type: "text" }
+						],
+						data: responseData
+					};
+				} catch (error: any) {
+					const errorMessage = `Error getting transitions for issue ${issueIdOrKey}: ${error?.message || 'Unknown error'}`;
+					const errorJson = JSON.stringify({
+						success: false,
+						message: error?.message || 'Unknown error',
+						issueIdOrKey
+					}, null, 2);
+
+					return {
+						content: [
+							{ text: errorMessage, type: "text" },
+							{ text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" }
+						],
+						data: {
+							success: false,
+							message: error?.message || 'Unknown error',
+							issueIdOrKey
+						}
+					};
+				}
+			},
+		);
+
+		this.server.tool(
+			"transitionJiraIssue",
+			"Change the status of a Jira issue using transitions",
+			{
+				issueIdOrKey: z.string().describe("[REQUIRED] ID or key of the issue to transition (e.g., 'TEST-123')"),
+				transitionId: z.string().describe("[REQUIRED] ID of the transition to perform. Use getJiraIssueTransitions to find available transition IDs."),
+				comment: z.string().optional().describe("[OPTIONAL] Comment to add when performing the transition")
+			},
+			async ({ issueIdOrKey, transitionId, comment }) => {
+				try {
+					// Validate parameters
+					if (!issueIdOrKey) {
+						throw new Error("Issue ID or key is required.");
+					}
+
+					if (!transitionId) {
+						throw new Error("Transition ID is required.");
+					}
+
+					// Perform the transition
+					await this.jiraClient.doTransition(issueIdOrKey, transitionId, comment);
+
+					// Get the issue to confirm the new status
+					const issue = await this.jiraClient.getIssue(issueIdOrKey);
+					const newStatus = issue.fields.status?.name || 'Unknown';
+
+					// Create response data for machine parsing
+					const responseData = {
+						success: true,
+						issueIdOrKey,
+						transitionId,
+						newStatus,
+						commentAdded: !!comment
+					};
+
+					const responseJson = JSON.stringify(responseData, null, 2);
+
+					return {
+						content: [
+							{ text: `Issue ${issueIdOrKey} transitioned successfully to status: ${newStatus}`, type: "text" },
+							{ text: `MACHINE_PARSEABLE_DATA:\n${responseJson}`, type: "text" }
+						],
+						data: responseData
+					};
+				} catch (error: any) {
+					const errorMessage = `Error transitioning issue ${issueIdOrKey}: ${error?.message || 'Unknown error'}`;
+					const errorJson = JSON.stringify({
+						success: false,
+						message: error?.message || 'Unknown error',
+						issueIdOrKey,
+						transitionId,
+						comment: comment || null
+					}, null, 2);
+
+					return {
+						content: [
+							{ text: errorMessage, type: "text" },
+							{ text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" }
+						],
+						data: {
+							success: false,
+							message: error?.message || 'Unknown error',
+							issueIdOrKey,
+							transitionId,
+							comment: comment || null
+						}
+					};
+				}
+			},
+		);
+
+		this.server.tool(
+			"getJiraIssue",
+			"Get details of a Jira issue by ID or key",
+			{
+				issueIdOrKey: z.string().describe("[REQUIRED] ID or key of the issue to retrieve (e.g., 'TEST-123')")
+			},
+			async ({ issueIdOrKey }) => {
+				try {
+					// Validate parameters
+					if (!issueIdOrKey) {
+						throw new Error("Issue ID or key is required.");
+					}
+
+					// Get the issue details
+					const issue = await this.jiraClient.getIssue(issueIdOrKey);
+
+					// Create response data for machine parsing
+					const responseData = {
+						success: true,
+						issue
+					};
+
+					// Create JSON string for machine parsing
+					const responseJson = JSON.stringify(responseData, null, 2);
+
+					// Extract key information for human-readable response
+					const summary = issue.fields?.summary || 'No summary';
+					// Use type assertion for fields not explicitly defined in JiraIssueFields type
+					const status = (issue.fields as any)?.status?.name || 'Unknown status';
+					const issueType = issue.fields?.issuetype?.name || 'Unknown type';
+					const projectKey = issue.fields?.project?.key || 'Unknown project';
+
+					return {
+						content: [
+							{ text: `Issue ${issueIdOrKey} details:`, type: "text" },
+							{ text: `Type: ${issueType}`, type: "text" },
+							{ text: `Project: ${projectKey}`, type: "text" },
+							{ text: `Summary: ${summary}`, type: "text" },
+							{ text: `Status: ${status}`, type: "text" },
+							{ text: `MACHINE_PARSEABLE_DATA:\n${responseJson}`, type: "text" }
+						],
+						data: responseData
+					};
+				} catch (error: any) {
+					const errorMessage = `Error retrieving issue: ${error?.message || 'Unknown error'}`;
+					const errorJson = JSON.stringify({
+						success: false,
+						error: errorMessage,
+						issueIdOrKey
+					}, null, 2);
+
+					return {
+						content: [
+							{ text: errorMessage, type: "text" },
+							{ text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" }
+						],
+						data: {
+							success: false,
+							error: errorMessage,
+							issueIdOrKey
+						}
 					};
 				}
 			},

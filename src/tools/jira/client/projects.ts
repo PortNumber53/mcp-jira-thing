@@ -20,6 +20,24 @@ interface JiraPaginatedProjectsResponse {
  * Optional fields that may be required depending on your Jira configuration:
  * - projectTemplateKey: Template key for the project
  */
+/**
+ * Represents a Jira issue type with its properties
+ */
+export interface JiraIssueType {
+  /** The ID of the issue type */
+  id: string;
+  /** The name of the issue type (e.g., 'Bug', 'Task', 'Subtask') */
+  name: string;
+  /** Whether this is a subtask issue type */
+  subtask: boolean;
+  /** Description of the issue type */
+  description?: string;
+  /** Icon URL for the issue type */
+  iconUrl?: string;
+  /** Whether this is the default issue type */
+  default?: boolean;
+}
+
 export interface JiraProjectCreatePayload {
   /** Project key - must be uppercase, unique, and contain only letters and numbers */
   key: string;
@@ -99,5 +117,33 @@ export class JiraProjects extends JiraClientCore {
   public async getProject(projectIdOrKey: string, expand?: string): Promise<any> {
     const endpoint = `/rest/api/3/project/${projectIdOrKey}${expand ? `?expand=${expand}` : ''}`;
     return this.makeRequest(endpoint);
+  }
+
+  /**
+   * Gets all issue types available for a project
+   * @param projectIdOrKey The project ID or key
+   * @returns Array of issue types for the project
+   */
+  public async getProjectIssueTypes(projectIdOrKey: string): Promise<JiraIssueType[]> {
+    try {
+      // Get all issue types - Jira doesn't have a reliable project-specific issue types endpoint
+      // in all versions of their API, so we'll get all issue types and filter if needed
+      const allIssueTypes = await this.makeRequest('/rest/api/3/issuetype');
+
+      if (!Array.isArray(allIssueTypes)) {
+        console.warn('Issue types endpoint did not return an array');
+        return [];
+      }
+
+      // Filter for subtask issue types
+      const subtaskTypes = allIssueTypes.filter(type => type && type.subtask === true);
+
+      // If we found subtask types, return them, otherwise return all types
+      // so the caller can decide what to do
+      return subtaskTypes.length > 0 ? subtaskTypes : allIssueTypes;
+    } catch (error) {
+      console.error(`Error fetching issue types: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return [];
+    }
   }
 }

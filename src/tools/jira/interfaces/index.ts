@@ -1,7 +1,7 @@
 export interface JiraIssueFields {
   project: { key: string };
   summary: string;
-  issuetype: { name: string };
+  issuetype: { name: string; id?: string };
   description?: {
     type: string;
     version: number;
@@ -9,6 +9,15 @@ export interface JiraIssueFields {
   };
   parent?: { key: string }; // For subtasks
   labels?: string[]; // For tags
+  status?: {
+    id: string;
+    name: string;
+    statusCategory?: {
+      id: number;
+      key: string;
+      name: string;
+    };
+  };
   // Add other common fields as needed
 }
 
