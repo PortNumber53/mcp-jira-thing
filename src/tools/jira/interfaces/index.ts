@@ -37,6 +37,38 @@ export interface JiraIssueSearchResult {
   issues: JiraIssue[];
 }
 
+export interface JiraIssueType {
+  self: string;
+  id: string;
+  description: string;
+  iconUrl: string;
+  name: string;
+  subtask: boolean;
+  avatarId: number;
+  hierarchyLevel: number;
+  scope?: {
+    type: string;
+    project?: {
+      id: string;
+      key: string;
+      name: string;
+    };
+  };
+}
+
+export interface CreateIssueTypePayload {
+  name: string;
+  description?: string;
+  type?: 'standard' | 'subtask';
+  hierarchyLevel?: number;
+}
+
+export interface UpdateIssueTypePayload {
+  name?: string;
+  description?: string;
+  avatarId?: number;
+}
+
 export interface CreateUserPayload {
   emailAddress: string;
   displayName?: string;

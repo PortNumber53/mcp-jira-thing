@@ -1,9 +1,22 @@
-import { JiraIssueFields, JiraIssue, JiraIssueSearchResult, CreateUserPayload, JiraUser, JiraSprint, CreateSprintPayload, UpdateSprintPayload } from './interfaces';
+import { 
+  JiraIssueFields, 
+  JiraIssue, 
+  JiraIssueSearchResult, 
+  CreateUserPayload, 
+  JiraUser, 
+  JiraSprint, 
+  CreateSprintPayload, 
+  UpdateSprintPayload,
+  JiraIssueType,
+  CreateIssueTypePayload,
+  UpdateIssueTypePayload
+} from './interfaces';
 import { JiraClientCore } from './client/core';
 import { JiraIssues } from './client/issues';
 import { JiraSprints } from './client/sprints';
 import { JiraProjects, JiraProjectCreatePayload } from './client/projects';
 import { JiraUsers } from './client/users';
+import { JiraIssueTypes } from './client/issuetypes';
 import { JiraProject } from './interfaces';
 import { parseLabels } from './utils';
 
@@ -12,6 +25,7 @@ export class JiraClient extends JiraClientCore {
   private sprints: JiraSprints;
   private projects: JiraProjects;
   private users: JiraUsers;
+  private issueTypes: JiraIssueTypes;
 
   constructor(env: Env) {
     super(env);
@@ -19,6 +33,7 @@ export class JiraClient extends JiraClientCore {
     this.sprints = new JiraSprints(env);
     this.projects = new JiraProjects(env);
     this.users = new JiraUsers(env);
+    this.issueTypes = new JiraIssueTypes(env);
   }
 
   // Epic CRUD operations
@@ -363,5 +378,86 @@ export class JiraClient extends JiraClientCore {
    */
   public async doTransition(issueIdOrKey: string, transitionId: string, comment?: string): Promise<void> {
     return this.issues.doTransition(issueIdOrKey, transitionId, comment);
+  }
+
+  /**
+   * Get all issue types available to the user
+   * @returns Promise resolving to an array of issue types
+   */
+  public async getAllIssueTypes(): Promise<JiraIssueType[]> {
+    return this.issueTypes.getAllIssueTypes();
+  }
+
+  /**
+   * Create a new issue type
+   * @param payload The issue type creation payload
+   * @returns Promise resolving to the created issue type
+   */
+  public async createIssueType(payload: CreateIssueTypePayload): Promise<JiraIssueType> {
+    return this.issueTypes.createIssueType(payload);
+  }
+
+  /**
+   * Get issue types for a specific project
+   * @param projectId The ID of the project
+   * @returns Promise resolving to an array of issue types
+   */
+  public async getIssueTypesForProject(projectId: string): Promise<JiraIssueType[]> {
+    return this.issueTypes.getIssueTypesForProject(projectId);
+  }
+
+  /**
+   * Get a specific issue type by ID
+   * @param issueTypeId The ID of the issue type
+   * @returns Promise resolving to the issue type
+   */
+  public async getIssueType(issueTypeId: string): Promise<JiraIssueType> {
+    return this.issueTypes.getIssueType(issueTypeId);
+  }
+
+  /**
+   * Update an existing issue type
+   * @param issueTypeId The ID of the issue type to update
+   * @param payload The update payload with fields to modify
+   * @returns Promise resolving to the updated issue type
+   */
+  public async updateIssueType(issueTypeId: string, payload: UpdateIssueTypePayload): Promise<JiraIssueType> {
+    return this.issueTypes.updateIssueType(issueTypeId, payload);
+  }
+
+  /**
+   * Delete an issue type
+   * @param issueTypeId The ID of the issue type to delete
+   * @param alternativeIssueTypeId Optional ID of an issue type to replace the deleted issue type
+   * @returns Promise resolving when the deletion is complete
+   */
+  public async deleteIssueType(issueTypeId: string, alternativeIssueTypeId?: string): Promise<void> {
+    return this.issueTypes.deleteIssueType(issueTypeId, alternativeIssueTypeId);
+  }
+
+  /**
+   * Get alternative issue types that can be used to replace a specific issue type
+   * @param issueTypeId The ID of the issue type
+   * @returns Promise resolving to an array of alternative issue types
+   */
+  public async getAlternativeIssueTypes(issueTypeId: string): Promise<JiraIssueType[]> {
+    return this.issueTypes.getAlternativeIssueTypes(issueTypeId);
+  }
+
+  /**
+   * Load an avatar for an issue type
+   * @param issueTypeId The ID of the issue type
+   * @param size The size of the avatar in pixels
+   * @param avatarData The avatar image data as a base64 encoded string
+   * @param filename The filename of the avatar
+   * @returns Promise resolving to the response from the avatar upload
+   */
+  public async loadIssueTypeAvatar(
+    issueTypeId: string, 
+    size: number, 
+    avatarData: string, 
+    filename: string
+  ): Promise<any> {
+    return this.issueTypes.loadIssueTypeAvatar(issueTypeId, size, avatarData, filename);
   }
 }
