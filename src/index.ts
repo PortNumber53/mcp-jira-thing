@@ -103,7 +103,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 			"createTask",
 			"Create a new Jira task",
 			{
-				projectKey: z.string().describe("[REQUIRED] The key of the Jira project (e.g., 'TEST', 'DEV', 'PROD'). Must be an existing project key."),
+				projectKey: z.string().describe("[REQUIRED] The key of the Jira project (e.g., 'TEST', 'DEV', 'PROD'). Use the 'getProjects' tool to find valid project keys."),
 				summary: z.string().describe("[REQUIRED] The summary/title of the task. Keep it concise but descriptive."),
 				description: z.string().optional().describe("[OPTIONAL] A detailed description of the task. Supports Jira markdown formatting."),
 			},
