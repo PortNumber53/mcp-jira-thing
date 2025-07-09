@@ -21,11 +21,14 @@ import { JiraProject } from './interfaces';
 import { parseLabels } from './utils';
 
 export class JiraClient extends JiraClientCore {
+  public async getUsers(): Promise<JiraUser[]> {
+    return this.users.getUsers();
+  }
   private issues: JiraIssues;
   private sprints: JiraSprints;
   private projects: JiraProjects;
   private users: JiraUsers;
-  private issueTypes: JiraIssueTypes;
+  public issueTypes: JiraIssueTypes;
 
   constructor(env: Env) {
     super(env);

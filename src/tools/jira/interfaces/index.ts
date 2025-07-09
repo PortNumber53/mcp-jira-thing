@@ -77,6 +77,8 @@ export interface CreateUserPayload {
 }
 
 export interface JiraUser {
+  // Already present, just ensuring export
+
   accountId: string;
   accountType: string;
   active: boolean;

@@ -60,17 +60,33 @@ export async function fetchUpstreamAuthToken({
 		return [null, new Response("Missing code", { status: 400 })];
 	}
 
-	const resp = await fetch(upstream_url, {
-		body: new URLSearchParams({ client_id, client_secret, code, redirect_uri }).toString(),
-		headers: {
-			"Content-Type": "application/x-www-form-urlencoded",
-		},
-		method: "POST",
+	console.log('[fetchUpstreamAuthToken] Requesting access token', {
+	client_id,
+	code,
+	redirect_uri,
+	upstream_url
+});
+const resp = await fetch(upstream_url, {
+	body: new URLSearchParams({ client_id, client_secret, code, redirect_uri }).toString(),
+	headers: {
+		"Content-Type": "application/x-www-form-urlencoded",
+	},
+	method: "POST",
+});
+if (!resp.ok) {
+	const errorText = await resp.text();
+	console.error('[fetchUpstreamAuthToken] Failed to fetch access token', {
+		status: resp.status,
+		statusText: resp.statusText,
+		headers: Object.fromEntries(resp.headers.entries()),
+		body: errorText,
+		client_id,
+		code,
+		redirect_uri,
+		upstream_url
 	});
-	if (!resp.ok) {
-		console.log(await resp.text());
-		return [null, new Response("Failed to fetch access token", { status: 500 })];
-	}
+	return [null, new Response("Failed to fetch access token", { status: 500 })];
+}
 	const body = await resp.formData();
 	const accessToken = body.get("access_token") as string;
 	if (!accessToken) {

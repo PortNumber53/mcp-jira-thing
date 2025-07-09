@@ -1380,6 +1380,82 @@ export class MyMCP extends McpAgent<Env, Props> {
 			},
 		);
 
+		this.server.tool(
+			"listJiraIssueTypes",
+			"List all Jira issue types available to the user.",
+			{},
+			async () => {
+				const types = await this.jiraClient.issueTypes.getAllIssueTypes();
+				return {
+					content: [{ text: `Found ${types.length} issue types.`, type: "text" }],
+					issueTypes: types
+				};
+			},
+		);
+
+		// Create a Jira Issue Type
+		this.server.tool(
+			"createJiraIssueType",
+			"Create a new Jira issue type. Parameters: name (required), description (optional), type (optional: 'standard' or 'subtask'), hierarchyLevel (optional).",
+			{
+				name: z.string().describe("[REQUIRED] Name of the new issue type."),
+				description: z.string().optional().describe("[OPTIONAL] Description of the issue type."),
+				type: z.enum(["standard", "subtask"]).optional().describe("[OPTIONAL] Issue type kind: 'standard' or 'subtask'."),
+				hierarchyLevel: z.number().optional().describe("[OPTIONAL] Hierarchy level for Advanced Roadmaps (e.g., 0=Epic, 1=Story, 2=Sub-task)")
+			},
+			async ({ name, description, type, hierarchyLevel }) => {
+				const payload: any = { name };
+				if (description) payload.description = description;
+				if (type) payload.type = type;
+				if (hierarchyLevel !== undefined) payload.hierarchyLevel = hierarchyLevel;
+				const created = await this.jiraClient.issueTypes.createIssueType(payload);
+				return {
+					content: [{ text: `Created issue type: ${created.name} (ID: ${created.id})`, type: "text" }],
+					issueType: created
+				};
+			},
+		);
+
+		// Edit a Jira Issue Type
+		this.server.tool(
+			"editJiraIssueType",
+			"Edit an existing Jira issue type. Parameters: issueTypeId (required), name (optional), description (optional), avatarId (optional)",
+			{
+				issueTypeId: z.string().describe("[REQUIRED] ID of the issue type to edit."),
+				name: z.string().optional().describe("[OPTIONAL] New name for the issue type."),
+				description: z.string().optional().describe("[OPTIONAL] New description."),
+				avatarId: z.number().optional().describe("[OPTIONAL] New avatar ID.")
+			},
+			async ({ issueTypeId, name, description, avatarId }) => {
+				const payload: any = {};
+				if (name) payload.name = name;
+				if (description) payload.description = description;
+				if (avatarId !== undefined) payload.avatarId = avatarId;
+				const updated = await this.jiraClient.issueTypes.updateIssueType(issueTypeId, payload);
+				return {
+					content: [{ text: `Updated issue type: ${updated.name} (ID: ${updated.id})`, type: "text" }],
+					issueType: updated
+				};
+			},
+		);
+
+		// Delete a Jira Issue Type
+		this.server.tool(
+			"deleteJiraIssueType",
+			"Delete a Jira issue type. Parameters: issueTypeId (required), alternativeIssueTypeId (optional: to replace issues of deleted type)",
+			{
+				issueTypeId: z.string().describe("[REQUIRED] ID of the issue type to delete."),
+				alternativeIssueTypeId: z.string().optional().describe("[OPTIONAL] ID of an alternative issue type to replace the deleted type.")
+			},
+			async ({ issueTypeId, alternativeIssueTypeId }) => {
+				await this.jiraClient.issueTypes.deleteIssueType(issueTypeId, alternativeIssueTypeId);
+				return {
+					content: [{ text: `Deleted issue type ${issueTypeId}.`, type: "text" }],
+				};
+			},
+		);
+
+
 
 		// Use the upstream access token to facilitate tools
 		this.server.tool(
