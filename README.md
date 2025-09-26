@@ -35,6 +35,25 @@ Users can connect to your deployed MCP server, and they will be prompted to sign
     npm install
     ```
 
+## React Frontend (`frontend/`)
+
+A React + Vite single-page application lives under `frontend/`. It uses the Cloudflare Vite plugin so the SPA and Worker shell run together during development.
+
+```bash
+cd frontend
+npm install    # install local dependencies before development
+npm run dev    # starts wrangler dev with the Cloudflare Vite plugin
+```
+
+For reproducible builds and deployments:
+
+```bash
+npm run build   # runs tsc + vite build
+npm run deploy  # publishes via wrangler deploy using wrangler.toml
+```
+
+`wrangler.toml` in the `frontend/` folder configures the worker entry (`dist/_worker.js`) and serves static assets from `dist/client` with single-page application routing enabled.
+
 ## Configuration and Deployment
 
 Follow these steps to configure and deploy your MCP server.
