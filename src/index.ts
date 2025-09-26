@@ -447,7 +447,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 - getLabels | addLabels | removeLabels | setLabels: manage issue labels
 - listAttachments | addAttachment | deleteAttachment: work with attachments (attachments require base64 payload)
 - listPriorities | setPriority: inspect and set issue priority
-- listIssueTypes | createIssueType | getIssueType | updateIssueType | deleteIssueType | getIssueTypeAlternatives: manage issue types.`;
+- listIssueTypes | createIssueType | getIssueType | updateIssueType | deleteIssueType | getIssueTypeAlternatives: manage issue types (set projectKey on listIssueTypes to scope results).`;
           return {
             content: [{ text: helpText, type: "text" }],
           };
@@ -745,6 +745,27 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
           }
           case "listIssueTypes": {
+          if (input.projectKey) {
+            const issueTypes = await this.jiraClient.getProjectIssueTypes(input.projectKey);
+            const standardTypes = issueTypes.filter((type: any) => type && type.subtask !== true);
+            const subtaskTypes = issueTypes.filter((type: any) => type && type.subtask === true);
+            return {
+              content: [
+                {
+                  text: `Project ${input.projectKey}: ${standardTypes.length} standard type(s), ${subtaskTypes.length} subtask type(s).`,
+                  type: "text",
+                },
+              ],
+              data: {
+                success: true,
+                projectKey: input.projectKey,
+                issueTypes,
+                standardTypes,
+                subtaskTypes,
+              },
+            };
+          }
+
             const issueTypes = await this.jiraClient.getAllIssueTypes();
             return {
               content: [{ text: `Found ${issueTypes.length} issue types.`, type: "text" }],
