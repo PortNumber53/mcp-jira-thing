@@ -263,9 +263,6 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    const hasQuery = url.search.length > 1;
-    console.log("[oauth] request", { pathname: url.pathname, method: request.method, hasQuery });
-
     if (url.pathname === "/api/auth/session" && request.method === "GET") {
       const session = await readSession(request, env);
       if (!session) {
@@ -281,12 +278,6 @@ export default {
 
       const redirectTarget = normalizeRedirectTarget(url.searchParams.get("redirect"));
       const nonce = randomToken(32);
-
-      console.log("[oauth] begin login", {
-        redirectTarget,
-        origin: url.origin,
-        hasClientId: Boolean(env.GITHUB_CLIENT_ID),
-      });
 
       const statePayload: StatePayload = {
         nonce,
@@ -318,7 +309,6 @@ export default {
           maxAge: STATE_TTL_SECONDS,
         }),
       );
-      console.log("[oauth] redirecting to github", authorizeUrl.toString());
       return response;
     }
 
