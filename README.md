@@ -54,7 +54,7 @@ npm run build   # runs tsc + bundles the worker + vite build
 npm run deploy  # uploads the worker and assets via wrangler deploy
 ```
 
-`wrangler.toml` configures the Worker entry (`src/worker.ts`) and serves the bundled assets from `dist`. The Worker handles SPA fallback logic while keeping `/api/**` routes served by the OAuth handler. Running `npm run dev:worker` uses `wrangler dev --local`, so secrets from `.dev.vars` are automatically injected for the OAuth flow.
+`wrangler.toml` configures the Worker entry (`src/worker.ts`) and serves the bundled assets from `dist/client`. The Worker handles SPA fallback logic while keeping `/api/**` routes served by the OAuth handler. Running `npm run dev:worker` uses `wrangler dev --local`, so secrets from `.dev.vars` are automatically injected for the OAuth flow.
 
 ## Configuration and Deployment
 
