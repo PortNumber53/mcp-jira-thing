@@ -47,7 +47,7 @@ function decodeState<T = any>(encoded: string): T {
 async function importKey(secret: string): Promise<CryptoKey> {
 	if (!secret) {
 		throw new Error(
-			"COOKIE_ENCRYPTION_KEY is not defined. A secret key is required for signing cookies.",
+			"SESSION_SECRET is not defined. A secret key is required for signing cookies.",
 		);
 	}
 	const enc = new TextEncoder();

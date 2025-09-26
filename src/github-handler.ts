@@ -9,6 +9,23 @@ import {
 	renderApprovalDialog,
 } from "./workers-oauth-utils";
 
+let emittedSessionSecretWarning = false;
+
+function getSessionSecret(): string {
+	const secret = env.SESSION_SECRET ?? (env as { COOKIE_ENCRYPTION_KEY?: string }).COOKIE_ENCRYPTION_KEY;
+	if (secret) {
+		if (!env.SESSION_SECRET && !emittedSessionSecretWarning) {
+			console.warn(
+				"[oauth] COOKIE_ENCRYPTION_KEY is deprecated. Please migrate this Worker to SESSION_SECRET.",
+			);
+			emittedSessionSecretWarning = true;
+		}
+		return secret;
+	}
+
+	throw new Error("SESSION_SECRET must be configured");
+}
+
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>();
 
 app.get("/.well-known/oauth-protected-resource", (c) => {
@@ -27,7 +44,7 @@ app.get("/authorize", async (c) => {
 	}
 
 	if (
-		await clientIdAlreadyApproved(c.req.raw, oauthReqInfo.clientId, env.COOKIE_ENCRYPTION_KEY)
+		await clientIdAlreadyApproved(c.req.raw, oauthReqInfo.clientId, getSessionSecret())
 	) {
 		return redirectToGithub(c.req.raw, oauthReqInfo);
 	}
@@ -45,7 +62,7 @@ app.get("/authorize", async (c) => {
 
 app.post("/authorize", async (c) => {
 	// Validates form submission, extracts state, and generates Set-Cookie headers to skip approval dialog next time
-	const { state, headers } = await parseRedirectApproval(c.req.raw, env.COOKIE_ENCRYPTION_KEY);
+	const { state, headers } = await parseRedirectApproval(c.req.raw, getSessionSecret());
 	if (!state.oauthReqInfo) {
 		return c.text("Invalid request", 400);
 	}

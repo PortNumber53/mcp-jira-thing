@@ -38,7 +38,7 @@ export interface Env {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   COOKIE_SECRET?: string;
-  COOKIE_ENCRYPTION_KEY?: string;
+  SESSION_SECRET?: string;
 }
 
 const keyCache = new Map<string, Promise<CryptoKey>>();
@@ -168,12 +168,31 @@ function jsonResponse(data: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(data), { ...init, headers });
 }
 
+let emittedLegacySecretWarning = false;
+let emittedCookieSecretHint = false;
+
 function getCookieSecret(env: Env): string {
-  const secret = env.COOKIE_SECRET ?? env.COOKIE_ENCRYPTION_KEY;
-  if (!secret) {
-    throw new Error("COOKIE_SECRET or COOKIE_ENCRYPTION_KEY must be configured");
+  const secret = env.COOKIE_SECRET ?? env.SESSION_SECRET;
+  if (secret) {
+    if (!env.SESSION_SECRET && env.COOKIE_SECRET && !emittedCookieSecretHint) {
+      console.warn("[oauth] Using COOKIE_SECRET; consider consolidating on SESSION_SECRET for clarity.");
+      emittedCookieSecretHint = true;
+    }
+    return secret;
   }
-  return secret;
+
+  const legacySecret = (env as { COOKIE_ENCRYPTION_KEY?: string }).COOKIE_ENCRYPTION_KEY;
+  if (legacySecret) {
+    if (!emittedLegacySecretWarning) {
+      console.warn(
+        "[oauth] COOKIE_ENCRYPTION_KEY is deprecated. Please rename this secret to SESSION_SECRET to avoid confusion."
+      );
+      emittedLegacySecretWarning = true;
+    }
+    return legacySecret;
+  }
+
+  throw new Error("COOKIE_SECRET or SESSION_SECRET must be configured");
 }
 
 function randomToken(byteLength = 32): string {
@@ -246,7 +265,8 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    console.log("[oauth] request", { pathname: url.pathname, method: request.method, search: url.search });
+    const hasQuery = url.search.length > 1;
+    console.log("[oauth] request", { pathname: url.pathname, method: request.method, hasQuery });
 
     if (url.pathname === "/api/auth/session" && request.method === "GET") {
       const session = await readSession(request, env);

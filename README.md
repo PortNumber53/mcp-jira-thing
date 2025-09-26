@@ -80,18 +80,18 @@ npx wrangler secret put GITHUB_CLIENT_ID
 # Will prompt for your GitHub Client Secret
 npx wrangler secret put GITHUB_CLIENT_SECRET
 
-# Will prompt for a random string used to sign/encrypt session cookies
-npx wrangler secret put COOKIE_ENCRYPTION_KEY
+# Will prompt for a random string used to sign session cookies
+npx wrangler secret put SESSION_SECRET
 
-# Optionally, provide COOKIE_SECRET if you prefer a different signing key
+# Optionally, provide COOKIE_SECRET if you need an override for local testing
 npx wrangler secret put COOKIE_SECRET
 ```
 
-For the `COOKIE_ENCRYPTION_KEY`, you can generate a secure random string with `openssl rand -hex 32`.
+For the `SESSION_SECRET`, you can generate a secure random string with `openssl rand -hex 32`.
 
 ### 3. Session Storage
 
-OAuth state and user session data are stored in signed, HTTP-only cookies; no Cloudflare KV namespace is required. Ensure `COOKIE_ENCRYPTION_KEY` (or `COOKIE_SECRET`) is configured so the Worker can sign and validate those cookies securely.
+OAuth state and user session data are stored in signed, HTTP-only cookies; no Cloudflare KV namespace is required. Ensure `SESSION_SECRET` (or `COOKIE_SECRET`) is configured so the Worker can sign and validate those cookies securely. If you previously used `COOKIE_ENCRYPTION_KEY`, rename that secret to `SESSION_SECRET`.
 
 ### 4. Authorize Users
 
