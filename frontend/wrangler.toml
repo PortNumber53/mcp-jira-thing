@@ -1,5 +1,6 @@
 name = "mcp-jira-frontend"
 main = "src/worker.ts"
+# Using a forward-looking compatibility date so the SPA not_found_handling option stays enabled.
 compatibility_date = "2025-09-26"
 
 [assets]
