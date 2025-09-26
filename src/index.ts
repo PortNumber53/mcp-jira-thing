@@ -745,26 +745,26 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
           }
           case "listIssueTypes": {
-          if (input.projectKey) {
-            const issueTypes = await this.jiraClient.getProjectIssueTypes(input.projectKey);
-            const standardTypes = issueTypes.filter((type: any) => type && type.subtask !== true);
-            const subtaskTypes = issueTypes.filter((type: any) => type && type.subtask === true);
-            return {
-              content: [
-                {
-                  text: `Project ${input.projectKey}: ${standardTypes.length} standard type(s), ${subtaskTypes.length} subtask type(s).`,
-                  type: "text",
+            if (input.projectKey) {
+              const issueTypes = await this.jiraClient.getProjectIssueTypes(input.projectKey);
+              const standardTypes = issueTypes.filter((type: any) => type && type.subtask !== true);
+              const subtaskTypes = issueTypes.filter((type: any) => type && type.subtask === true);
+              return {
+                content: [
+                  {
+                    text: `Project ${input.projectKey}: ${standardTypes.length} standard type(s), ${subtaskTypes.length} subtask type(s).`,
+                    type: "text",
+                  },
+                ],
+                data: {
+                  success: true,
+                  projectKey: input.projectKey,
+                  issueTypes,
+                  standardTypes,
+                  subtaskTypes,
                 },
-              ],
-              data: {
-                success: true,
-                projectKey: input.projectKey,
-                issueTypes,
-                standardTypes,
-                subtaskTypes,
-              },
-            };
-          }
+              };
+            }
 
             const issueTypes = await this.jiraClient.getAllIssueTypes();
             return {
