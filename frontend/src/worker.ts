@@ -184,9 +184,7 @@ function getCookieSecret(env: Env): string {
   const legacySecret = (env as { COOKIE_ENCRYPTION_KEY?: string }).COOKIE_ENCRYPTION_KEY;
   if (legacySecret) {
     if (!emittedLegacySecretWarning) {
-      console.warn(
-        "[oauth] COOKIE_ENCRYPTION_KEY is deprecated. Please rename this secret to SESSION_SECRET to avoid confusion."
-      );
+      console.warn("[oauth] COOKIE_ENCRYPTION_KEY is deprecated. Please rename this secret to SESSION_SECRET to avoid confusion.");
       emittedLegacySecretWarning = true;
     }
     return legacySecret;

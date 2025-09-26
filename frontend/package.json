@@ -10,7 +10,7 @@
     "build:worker": "esbuild src/worker.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=dist/_worker.js",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "wrangler deploy --config wrangler.toml"
+    "deploy": "npm run build && wrangler deploy --config wrangler.toml"
   },
   "dependencies": {
     "react": "^19.1.1",
