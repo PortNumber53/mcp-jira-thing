@@ -1,0 +1,31 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/main ./cmd/server"
+  bin = "./tmp/main"
+  include_ext = ["go", "env"]
+  exclude_dir = ["tmp", "bin", "node_modules"]
+  delay = 1000
+
+[log]
+  level = "info"
+
+[color]
+  main = "cyan"
+  watcher = "yellow"
+  build = "green"
+  runner = "magenta"
+
+[dir]
+  exclude = ["tmp", "bin", "dist", "frontend/node_modules"]
+
+[watch]
+  include = [
+    "cmd",
+    "internal",
+    "*.go",
+    "go.mod",
+    "go.sum",
+    ".env"
+  ]

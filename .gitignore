@@ -115,6 +115,11 @@ out
 .nuxt
 dist
 
+# Go backend build artifacts
+backend/bin/
+backend/.env
+backend/tmp/
+
 # Gatsby files
 
 .cache/
