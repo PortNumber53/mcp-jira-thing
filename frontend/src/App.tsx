@@ -46,29 +46,36 @@ function App() {
   const [session, setSession] = useState<SessionState>({ status: "loading" });
 
   useEffect(() => {
-    let isMounted = true;
+    const controller = new AbortController();
+    const { signal } = controller;
 
     const loadSession = async () => {
       try {
-        const response = await fetch(SESSION_ENDPOINT, { credentials: "include" });
+        const response = await fetch(SESSION_ENDPOINT, { credentials: "include", signal });
         if (!response.ok) {
           throw new Error(`Request failed with status ${response.status}`);
         }
         const data: unknown = await response.json();
+
+        if (signal.aborted) {
+          return;
+        }
+
         if (!isSessionResponse(data)) {
           throw new Error("Unexpected session payload");
         }
-        if (!isMounted) {
-          return;
-        }
+
         if (data.authenticated && data.user) {
           setSession({ status: "authenticated", user: data.user });
         } else {
           setSession({ status: "unauthenticated" });
         }
       } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
         console.error("Failed to fetch session", error);
-        if (isMounted) {
+        if (!signal.aborted) {
           setSession({ status: "error", message: "Unable to verify your session. Please try again." });
         }
       }
@@ -77,7 +84,7 @@ function App() {
     void loadSession();
 
     return () => {
-      isMounted = false;
+      controller.abort();
     };
   }, []);
 
