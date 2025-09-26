@@ -44,15 +44,17 @@ A React + Vite single-page application lives under `frontend/`. This scaffold ru
 cd frontend
 npm install    # install local dependencies before development
 npm run dev    # starts the Vite development server with HMR
+npm run dev:worker  # serves the built assets via wrangler dev
 ```
 
-For reproducible builds:
+For reproducible builds and deployment:
 
 ```bash
 npm run build   # runs tsc + vite build
+npm run deploy  # uploads the worker and assets via wrangler deploy
 ```
 
-Deployment wiring into Workers will be handled in a follow-up task.
+`wrangler.toml` configures the Worker entry (`src/worker.ts`) and serves the bundled assets from `dist` with SPA routing enabled.
 
 ## Configuration and Deployment
 
