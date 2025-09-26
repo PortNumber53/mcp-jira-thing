@@ -1,12 +1,11 @@
 name = "mcp-jira-frontend"
-main = "src/worker.ts"
+main = "dist/_worker.js"
 # Using a forward-looking compatibility date so the SPA not_found_handling option stays enabled.
 compatibility_date = "2025-09-26"
 
 [assets]
 directory = "dist"
 binding = "ASSETS"
-not_found_handling = "single-page-application"
 
 [build]
 command = "npm run build"

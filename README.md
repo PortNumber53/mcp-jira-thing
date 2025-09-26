@@ -38,23 +38,23 @@ Users can connect to your deployed MCP server, and they will be prompted to sign
 
 ## React Frontend (`frontend/`)
 
-A React + Vite single-page application lives under `frontend/`. This scaffold runs with the standard Vite dev server.
+A React + Vite single-page application lives under `frontend/`. It provides the GitHub sign-in flow for users and can be developed with the standard Vite server.
 
 ```bash
 cd frontend
 npm install    # install local dependencies before development
-npm run dev    # starts the Vite development server with HMR
-npm run dev:worker  # serves the built assets via wrangler dev
+npm run dev          # starts the Vite development server with HMR
+npm run dev:worker   # runs wrangler dev locally (builds first via wrangler.toml)
 ```
 
 For reproducible builds and deployment:
 
 ```bash
-npm run build   # runs tsc + vite build
+npm run build   # runs tsc + bundles the worker + vite build
 npm run deploy  # uploads the worker and assets via wrangler deploy
 ```
 
-`wrangler.toml` configures the Worker entry (`src/worker.ts`) and serves the bundled assets from `dist` with SPA routing enabled.
+`wrangler.toml` configures the Worker entry (`src/worker.ts`) and serves the bundled assets from `dist`. The Worker handles SPA fallback logic while keeping `/api/**` routes served by the OAuth handler. Running `npm run dev:worker` uses `wrangler dev --local`, so secrets from `.dev.vars` are automatically injected for the OAuth flow.
 
 ## Configuration and Deployment
 
@@ -80,29 +80,18 @@ npx wrangler secret put GITHUB_CLIENT_ID
 # Will prompt for your GitHub Client Secret
 npx wrangler secret put GITHUB_CLIENT_SECRET
 
-# Will prompt for a random string to encrypt cookies
+# Will prompt for a random string used to sign/encrypt session cookies
 npx wrangler secret put COOKIE_ENCRYPTION_KEY
+
+# Optionally, provide COOKIE_SECRET if you prefer a different signing key
+npx wrangler secret put COOKIE_SECRET
 ```
 
 For the `COOKIE_ENCRYPTION_KEY`, you can generate a secure random string with `openssl rand -hex 32`.
 
-### 3. Set up a KV Namespace
+### 3. Session Storage
 
-This project uses a KV namespace to store OAuth-related data.
-
-1.  **Create the KV namespace:**
-    ```bash
-    npx wrangler kv:namespace create "OAUTH_KV"
-    ```
-2.  **Update `wrangler.jsonc`:** Wrangler will output a binding and an ID. Add the `kv_namespaces` configuration to your `wrangler.jsonc` file, replacing the `id` with the one you received:
-    ```json
-    "kv_namespaces": [
-        {
-            "binding": "OAUTH_KV",
-            "id": "your-kv-namespace-id-here"
-        }
-    ]
-    ```
+OAuth state and user session data are stored in signed, HTTP-only cookies; no Cloudflare KV namespace is required. Ensure `COOKIE_ENCRYPTION_KEY` (or `COOKIE_SECRET`) is configured so the Worker can sign and validate those cookies securely.
 
 ### 4. Authorize Users
 
