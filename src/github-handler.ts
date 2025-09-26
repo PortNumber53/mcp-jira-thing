@@ -87,26 +87,17 @@ async function redirectToGithub(request: Request, oauthReqInfo: AuthRequest, hea
  * down to the client. It ends by redirecting the client back to _its_ callback URL
  */
 app.get("/callback", async (c) => {
-  console.log("[CALLBACK] Incoming request", {
-    query: Object.fromEntries(new URL(c.req.url).searchParams),
-    headers: Object.fromEntries(c.req.raw.headers),
-  });
   try {
-    // Get the oathReqInfo out of KV
     const stateParam = c.req.query("state");
-    console.log("[CALLBACK] Decoding state param", { stateParam });
-    const oauthReqInfo = JSON.parse(atob(stateParam as string)) as AuthRequest;
-    console.log("[CALLBACK] Decoded oauthReqInfo", { oauthReqInfo });
-    if (!oauthReqInfo.clientId) {
-      console.error("[CALLBACK] Invalid state: missing clientId", { oauthReqInfo });
+    if (typeof stateParam !== "string" || !stateParam) {
       return c.text("Invalid state", 400);
     }
 
-    // Exchange the code for an access token
-    console.log("[CALLBACK] Exchanging code for access token", {
-      client_id: c.env.GITHUB_CLIENT_ID,
-      code: c.req.query("code"),
-    });
+    const oauthReqInfo = JSON.parse(atob(stateParam)) as AuthRequest;
+    if (!oauthReqInfo.clientId) {
+      return c.text("Invalid state", 400);
+    }
+
     const [accessToken, errResponse] = await fetchUpstreamAuthToken({
       client_id: c.env.GITHUB_CLIENT_ID,
       client_secret: c.env.GITHUB_CLIENT_SECRET,
@@ -115,23 +106,12 @@ app.get("/callback", async (c) => {
       upstream_url: "https://github.com/login/oauth/access_token",
     });
     if (errResponse) {
-      console.error("[CALLBACK] Error fetching access token", { errResponse });
       return errResponse;
     }
 
-    // Fetch the user info from GitHub
-    console.log("[CALLBACK] Fetching user info from GitHub", { accessToken: !!accessToken });
     const user = await new Octokit({ auth: accessToken }).rest.users.getAuthenticated();
-    console.log("[CALLBACK] GitHub user fetched", { user: user.data });
     const { login, name, email } = user.data;
 
-    // Return back to the MCP client a new token
-    console.log("[CALLBACK] Completing authorization with OAUTH_PROVIDER", { login, name, email });
-    console.log("[CALLBACK] About to call completeAuthorization", {
-      query: Object.fromEntries(new URL(c.req.url).searchParams),
-      headers: Object.fromEntries(c.req.raw.headers),
-      oauthReqInfo,
-    });
     const result = await c.env.OAUTH_PROVIDER.completeAuthorization({
       metadata: {
         label: name,
@@ -147,12 +127,8 @@ app.get("/callback", async (c) => {
       scope: oauthReqInfo.scope,
       userId: login,
     });
-    const { redirectTo } = result;
-    console.log("[CALLBACK] completeAuthorization result", { result });
-    console.log("[CALLBACK] Redirecting to MCP client", { redirectTo });
-    return Response.redirect(redirectTo);
+    return Response.redirect(result.redirectTo);
   } catch (err) {
-    console.error("[CALLBACK] Uncaught error in /callback handler", { error: err });
     return new Response("Internal Server Error", { status: 500 });
   }
 });
