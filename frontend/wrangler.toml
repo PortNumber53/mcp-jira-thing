@@ -1,4 +1,4 @@
-name = "mcp-jira-frontend"
+name = "mcp-jira-thing-frontend"
 main = "dist/_worker.js"
 # Using a forward-looking compatibility date so the SPA not_found_handling option stays enabled.
 compatibility_date = "2025-09-26"
