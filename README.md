@@ -9,8 +9,8 @@ Users can connect to your deployed MCP server, and they will be prompted to sign
 - **GitHub OAuth Integration**: Securely authenticates users via GitHub, acting as an OAuth client to GitHub and an OAuth server to the MCP client.
 - **Dynamic Tool Loading**: Demonstrates how to conditionally expose tools based on the authenticated user's identity.
 - **Example Tools**: Includes two sample tools:
-    - A public `add` tool available to all authenticated users.
-    - A restricted `generateImage` tool that is only available to a predefined list of authorized users.
+  - A public `add` tool available to all authenticated users.
+  - A restricted `generateImage` tool that is only available to a predefined list of authorized users.
 - **Serverless Deployment**: Built on Cloudflare Workers for a scalable, low-maintenance, serverless architecture.
 - **Secure Secret Management**: Uses Wrangler secrets to manage sensitive credentials, avoiding hard-coded values in the source code.
 
@@ -25,6 +25,7 @@ Users can connect to your deployed MCP server, and they will be prompted to sign
 ### Installation
 
 1.  **Clone the repository:**
+
     ```bash
     git clone https://github.com/PortNumber53/mcp-jira-thing.git
     cd mcp-jira-thing
@@ -35,6 +36,26 @@ Users can connect to your deployed MCP server, and they will be prompted to sign
     npm install
     ```
 
+## React Frontend (`frontend/`)
+
+A React + Vite single-page application lives under `frontend/`. This scaffold runs with the standard Vite dev server.
+
+```bash
+cd frontend
+npm install    # install local dependencies before development
+npm run dev    # starts the Vite development server with HMR
+npm run dev:worker  # serves the built assets via wrangler dev
+```
+
+For reproducible builds and deployment:
+
+```bash
+npm run build   # runs tsc + vite build
+npm run deploy  # uploads the worker and assets via wrangler deploy
+```
+
+`wrangler.toml` configures the Worker entry (`src/worker.ts`) and serves the bundled assets from `dist` with SPA routing enabled.
+
 ## Configuration and Deployment
 
 Follow these steps to configure and deploy your MCP server.
@@ -43,8 +64,8 @@ Follow these steps to configure and deploy your MCP server.
 
 First, you need to create a [GitHub OAuth App](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app) to get your client credentials.
 
--   **Homepage URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev`
--   **Authorization callback URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev/callback`
+- **Homepage URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev`
+- **Authorization callback URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev/callback`
 
 Once the app is created, note the **Client ID** and generate a new **Client secret**.
 
@@ -90,8 +111,8 @@ To grant access to restricted tools like `generateImage`, you must add the GitHu
 ```typescript
 // src/index.ts
 const ALLOWED_USERNAMES = new Set<string>([
-	'PortNumber53',
-	// Add other authorized GitHub usernames here
+  "PortNumber53",
+  // Add other authorized GitHub usernames here
 ]);
 ```
 
@@ -107,15 +128,16 @@ npx wrangler deploy
 
 This MCP server exposes the following tools:
 
--   **`add`**
-    -   **Description**: Adds two numbers.
-    -   **Access**: Public (available to all authenticated users).
-    -   **Parameters**: `a` (number), `b` (number).
+- **`add`**
 
--   **`generateImage`**
-    -   **Description**: Generates an image using the `@cf/black-forest-labs/flux-1-schnell` model.
-    -   **Access**: Restricted (only available to users in `ALLOWED_USERNAMES`).
-    -   **Parameters**: `prompt` (string), `steps` (number, 4-8).
+  - **Description**: Adds two numbers.
+  - **Access**: Public (available to all authenticated users).
+  - **Parameters**: `a` (number), `b` (number).
+
+- **`generateImage`**
+  - **Description**: Generates an image using the `@cf/black-forest-labs/flux-1-schnell` model.
+  - **Access**: Restricted (only available to users in `ALLOWED_USERNAMES`).
+  - **Parameters**: `prompt` (string), `steps` (number, 4-8).
 
 ## Usage
 
@@ -131,11 +153,11 @@ Enter your worker's SSE URL (`https://<your-worker-name>.<your-subdomain>.worker
 
 ## Project Structure
 
--   `src/index.ts`: The main entry point for the Cloudflare Worker. Defines the MCP server, its tools, and the logic for conditional tool access.
--   `src/github-handler.ts`: Contains the logic for handling the GitHub OAuth flow.
--   `src/workers-oauth-utils.ts`: Provides utility functions for the OAuth process, adapted from the `workers-oauth-provider` library.
--   `wrangler.jsonc`: The configuration file for the Cloudflare Worker.
--   `package.json`: Defines project scripts and dependencies.
+- `src/index.ts`: The main entry point for the Cloudflare Worker. Defines the MCP server, its tools, and the logic for conditional tool access.
+- `src/github-handler.ts`: Contains the logic for handling the GitHub OAuth flow.
+- `src/workers-oauth-utils.ts`: Provides utility functions for the OAuth process, adapted from the `workers-oauth-provider` library.
+- `wrangler.jsonc`: The configuration file for the Cloudflare Worker.
+- `package.json`: Defines project scripts and dependencies.
 
 You now have a remote MCP server deployed!
 
@@ -147,10 +169,7 @@ The "generateImage" tool is restricted to specific GitHub users listed in the `A
 
 ```typescript
 // Add GitHub usernames for image generation access
-const ALLOWED_USERNAMES = new Set([
-  'yourusername',
-  'teammate1'
-]);
+const ALLOWED_USERNAMES = new Set(["yourusername", "teammate1"]);
 ```
 
 ### Access the remote MCP server from Claude Desktop
@@ -176,17 +195,21 @@ Replace the content with the following configuration. Once you restart Claude De
 Once the Tools (under 🔨) show up in the interface, you can ask Claude to use them. For example: "Could you use the math tool to add 23 and 19?". Claude should invoke the tool and show the result generated by the MCP server.
 
 ### For Local Development
+
 If you'd like to iterate and test your MCP server, you can do so in local development. This will require you to create another OAuth App on GitHub:
+
 - For the Homepage URL, specify `http://localhost:8788`
 - For the Authorization callback URL, specify `http://localhost:8788/callback`
 - Note your Client ID and generate a Client secret.
 - Create a `.dev.vars` file in your project root with:
+
 ```
 GITHUB_CLIENT_ID=your_development_github_client_id
 GITHUB_CLIENT_SECRET=your_development_github_client_secret
 ```
 
 #### Develop & Test
+
 Run the server locally to make it available at `http://localhost:8788`
 `wrangler dev`
 
@@ -207,6 +230,7 @@ You can connect your MCP server to other MCP clients like Windsurf by opening th
 ## How does it work?
 
 #### OAuth Provider
+
 The OAuth Provider library serves as a complete OAuth 2.1 server implementation for Cloudflare Workers. It handles the complexities of the OAuth flow, including token issuance, validation, and management. In this project, it plays the dual role of:
 
 - Authenticating MCP clients that connect to your server
@@ -214,14 +238,18 @@ The OAuth Provider library serves as a complete OAuth 2.1 server implementation 
 - Securely storing tokens and authentication state in KV storage
 
 #### Durable MCP
+
 Durable MCP extends the base MCP functionality with Cloudflare's Durable Objects, providing:
+
 - Persistent state management for your MCP server
 - Secure storage of authentication context between requests
 - Access to authenticated user information via `this.props`
 - Support for conditional tool availability based on user identity
 
 #### MCP Remote
+
 The MCP Remote library enables your server to expose tools that can be invoked by MCP clients like the Inspector. It:
+
 - Defines the protocol for communication between clients and your server
 - Provides a structured way to define tools
 - Handles serialization and deserialization of requests and responses
