@@ -29,12 +29,54 @@ export interface JiraIssue {
   // ... other properties from Jira issue response
 }
 
+export type JiraDocument = {
+  type: "doc";
+  version: number;
+  content: Array<any>;
+};
+
 export interface JiraIssueSearchResult {
   expand: string;
   startAt: number;
   maxResults: number;
   total: number;
   issues: JiraIssue[];
+}
+
+export interface JiraComment {
+  id: string;
+  self: string;
+  body: JiraDocument;
+  renderedBody?: string;
+  author?: {
+    accountId: string;
+    displayName: string;
+  };
+  created: string;
+  updated: string;
+}
+
+export interface JiraCommentPage {
+  comments: JiraComment[];
+  maxResults?: number;
+  total?: number;
+}
+
+export interface JiraAttachment {
+  id: string;
+  filename: string;
+  size: number;
+  mimeType?: string;
+  content: string;
+  thumbnail?: string;
+}
+
+export interface JiraPriority {
+  id: string;
+  name: string;
+  description?: string;
+  iconUrl?: string;
+  statusColor?: string;
 }
 
 export interface JiraIssueType {
@@ -59,7 +101,7 @@ export interface JiraIssueType {
 export interface CreateIssueTypePayload {
   name: string;
   description?: string;
-  type?: 'standard' | 'subtask';
+  type?: "standard" | "subtask";
   hierarchyLevel?: number;
 }
 
@@ -97,7 +139,7 @@ export interface JiraUser {
 export interface JiraSprint {
   id: number;
   self: string;
-  state: 'future' | 'active' | 'closed';
+  state: "future" | "active" | "closed";
   name: string;
   startDate?: string;
   endDate?: string;
@@ -119,7 +161,7 @@ export interface UpdateSprintPayload {
   name?: string;
   startDate?: string;
   endDate?: string;
-  state?: 'future' | 'active' | 'closed';
+  state?: "future" | "active" | "closed";
   goal?: string;
   completeDate?: string;
 }

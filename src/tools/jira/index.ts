@@ -1,24 +1,29 @@
-import { 
-  JiraIssueFields, 
-  JiraIssue, 
-  JiraIssueSearchResult, 
-  CreateUserPayload, 
-  JiraUser, 
-  JiraSprint, 
-  CreateSprintPayload, 
+import {
+  JiraIssueFields,
+  JiraIssue,
+  JiraIssueSearchResult,
+  CreateUserPayload,
+  JiraUser,
+  JiraSprint,
+  CreateSprintPayload,
   UpdateSprintPayload,
   JiraIssueType,
   CreateIssueTypePayload,
-  UpdateIssueTypePayload
-} from './interfaces';
-import { JiraClientCore } from './client/core';
-import { JiraIssues } from './client/issues';
-import { JiraSprints } from './client/sprints';
-import { JiraProjects, JiraProjectCreatePayload } from './client/projects';
-import { JiraUsers } from './client/users';
-import { JiraIssueTypes } from './client/issuetypes';
-import { JiraProject } from './interfaces';
-import { parseLabels } from './utils';
+  UpdateIssueTypePayload,
+  JiraComment,
+  JiraCommentPage,
+  JiraAttachment,
+  JiraPriority,
+  JiraDocument,
+} from "./interfaces";
+import { JiraClientCore } from "./client/core";
+import { JiraIssues } from "./client/issues";
+import { JiraSprints } from "./client/sprints";
+import { JiraProjects, JiraProjectCreatePayload } from "./client/projects";
+import { JiraUsers } from "./client/users";
+import { JiraIssueTypes } from "./client/issuetypes";
+import { JiraProject } from "./interfaces";
+import { parseLabels } from "./utils";
 
 export class JiraClient extends JiraClientCore {
   public async getUsers(): Promise<JiraUser[]> {
@@ -44,8 +49,10 @@ export class JiraClient extends JiraClientCore {
     const fields: JiraIssueFields = {
       project: { key: projectKey },
       summary: summary,
-      issuetype: { name: 'Epic' }, // Assuming 'Epic' is the issue type name for Epics
-      description: description ? { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] } : undefined,
+      issuetype: { name: "Epic" }, // Assuming 'Epic' is the issue type name for Epics
+      description: description
+        ? { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: description }] }] }
+        : undefined,
     };
     return this.issues.createIssue(fields);
   }
@@ -55,14 +62,15 @@ export class JiraClient extends JiraClientCore {
   }
 
   public async getProjects(): Promise<JiraProject[]> {
-    console.log('inside getProjects function');
+    console.log("inside getProjects function");
     return this.projects.getProjects();
   }
 
   public async updateEpic(issueIdOrKey: string, summary?: string, description?: string): Promise<void> {
     const fields: Partial<JiraIssueFields> = {};
     if (summary) fields.summary = summary;
-    if (description) fields.description = { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] };
+    if (description)
+      fields.description = { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: description }] }] };
     return this.issues.updateIssue(issueIdOrKey, fields);
   }
 
@@ -75,10 +83,20 @@ export class JiraClient extends JiraClientCore {
     const fields: JiraIssueFields = {
       project: { key: projectKey },
       summary: summary,
-      issuetype: { name: 'Task' }, // Assuming 'Task' is the issue type name for Tasks
-      description: description ? { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] } : undefined,
+      issuetype: { name: "Task" }, // Assuming 'Task' is the issue type name for Tasks
+      description: description
+        ? { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: description }] }] }
+        : undefined,
     };
     return this.issues.createIssue(fields);
+  }
+
+  public async createIssue(fields: Record<string, any>): Promise<JiraIssue> {
+    const normalizedFields: any = { ...fields };
+    if (typeof normalizedFields.description === "string") {
+      normalizedFields.description = this.createDocumentFromString(normalizedFields.description);
+    }
+    return this.issues.createIssue(normalizedFields as JiraIssueFields);
   }
 
   public async getTask(issueIdOrKey: string): Promise<JiraIssue> {
@@ -88,7 +106,8 @@ export class JiraClient extends JiraClientCore {
   public async updateTask(issueIdOrKey: string, summary?: string, description?: string): Promise<void> {
     const fields: Partial<JiraIssueFields> = {};
     if (summary) fields.summary = summary;
-    if (description) fields.description = { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] };
+    if (description)
+      fields.description = { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: description }] }] };
     return this.issues.updateIssue(issueIdOrKey, fields);
   }
 
@@ -97,31 +116,37 @@ export class JiraClient extends JiraClientCore {
   }
 
   // Subtask CRUD operations
-  public async createSubtask(parentIssueKey: string, projectKey: string, summary: string, description?: string, issueType?: string): Promise<JiraIssue> {
+  public async createSubtask(
+    parentIssueKey: string,
+    projectKey: string,
+    summary: string,
+    description?: string,
+    issueType?: string,
+  ): Promise<JiraIssue> {
     try {
       // Validate parent issue exists first
-      const parentIssue = await this.issues.getIssue(parentIssueKey).catch(error => {
-        throw new Error(`Invalid parent issue key: ${parentIssueKey}. ${error.message || 'Parent issue not found.'}`); 
+      const parentIssue = await this.issues.getIssue(parentIssueKey).catch((error) => {
+        throw new Error(`Invalid parent issue key: ${parentIssueKey}. ${error.message || "Parent issue not found."}`);
       });
-      
+
       // Get the parent issue's project key if available - this is more reliable than the provided projectKey
       const parentProjectKey = parentIssue.fields?.project?.key || projectKey;
       if (parentProjectKey !== projectKey) {
         console.warn(`Parent issue ${parentIssueKey} belongs to project ${parentProjectKey}, not ${projectKey}. Using parent's project.`);
       }
-      
+
       // Get available issue types with a focus on subtask types
       const issueTypes = await this.projects.getProjectIssueTypes(parentProjectKey).catch((error) => {
-        console.warn(`Could not get issue types: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.warn(`Could not get issue types: ${error instanceof Error ? error.message : "Unknown error"}`);
         return [];
       });
-      
+
       // Define a type that can have either id or name
       type IssueTypeIdentifier = { id: string } | { name: string };
-      
+
       // Try multiple approaches to find a valid subtask type
       let subtaskType: IssueTypeIdentifier;
-      
+
       // If issueType is provided, use it directly
       if (issueType) {
         // Check if it's an ID (numeric) or a name
@@ -136,16 +161,15 @@ export class JiraClient extends JiraClientCore {
       // Otherwise use automatic detection
       else {
         // Approach 1: Look for a type with subtask=true
-        const subtaskIssueType = issueTypes.find(type => type && type.subtask === true);
+        const subtaskIssueType = issueTypes.find((type) => type && type.subtask === true);
         if (subtaskIssueType && subtaskIssueType.id) {
           subtaskType = { id: subtaskIssueType.id };
-          console.log(`Using subtask type ID: ${subtaskIssueType.id} (${subtaskIssueType.name || 'unnamed'})`);
-        } 
+          console.log(`Using subtask type ID: ${subtaskIssueType.id} (${subtaskIssueType.name || "unnamed"})`);
+        }
         // Approach 2: Look for a type with 'subtask' in the name (case insensitive)
         else {
-          const subtaskByName = issueTypes.find(type => 
-            type && type.name && type.name.toLowerCase().includes('subtask'));
-            
+          const subtaskByName = issueTypes.find((type) => type && type.name && type.name.toLowerCase().includes("subtask"));
+
           if (subtaskByName && subtaskByName.id) {
             subtaskType = { id: subtaskByName.id };
             console.log(`Using subtask type by name: ${subtaskByName.id} (${subtaskByName.name})`);
@@ -153,43 +177,47 @@ export class JiraClient extends JiraClientCore {
           // Approach 3: Fall back to the default name 'Sub-task' (common in many Jira instances)
           else {
             // Try both 'Subtask' and 'Sub-task' as these are common in different Jira versions
-            subtaskType = { name: 'Sub-task' };
+            subtaskType = { name: "Sub-task" };
             console.warn(`No subtask type found. Trying with name 'Sub-task'.`);
           }
         }
       }
-      
+
       // Create fields object for the new subtask
       const fields: any = {
         project: { key: parentProjectKey }, // Always use the parent's project
         summary: summary,
         issuetype: subtaskType,
         parent: { key: parentIssueKey },
-        description: description ? { 
-          type: 'doc', 
-          version: 1, 
-          content: [{ 
-            type: 'paragraph', 
-            content: [{ type: 'text', text: description }] 
-          }] 
-        } : undefined,
+        description: description
+          ? {
+              type: "doc",
+              version: 1,
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: description }],
+                },
+              ],
+            }
+          : undefined,
       };
-      
+
       // Create the subtask
       return this.issues.createIssue(fields);
     } catch (error: any) {
       // Enhance error message with more helpful information
-      const errorMsg = error?.message || 'Unknown error creating subtask';
-      
-      if (errorMsg.includes('issuetype')) {
+      const errorMsg = error?.message || "Unknown error creating subtask";
+
+      if (errorMsg.includes("issuetype")) {
         throw new Error(
           `Issue type error: The project may not support subtasks or the subtask type name may be different in your Jira instance. ` +
-          `Common subtask type names are 'Subtask', 'Sub-task', or 'Sub Task'. ` +
-          `Original error: ${errorMsg}`
+            `Common subtask type names are 'Subtask', 'Sub-task', or 'Sub Task'. ` +
+            `Original error: ${errorMsg}`,
         );
-      } else if (errorMsg.includes('parent')) {
+      } else if (errorMsg.includes("parent")) {
         throw new Error(`Parent issue error: ${errorMsg}. Ensure the parent issue exists and can have subtasks.`);
-      } else if (errorMsg.includes('project')) {
+      } else if (errorMsg.includes("project")) {
         throw new Error(`Project error: ${errorMsg}. Ensure the project exists and supports subtasks.`);
       } else {
         throw new Error(`Error creating subtask: ${errorMsg}`);
@@ -204,7 +232,8 @@ export class JiraClient extends JiraClientCore {
   public async updateSubtask(issueIdOrKey: string, summary?: string, description?: string): Promise<void> {
     const fields: Partial<JiraIssueFields> = {};
     if (summary) fields.summary = summary;
-    if (description) fields.description = { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] };
+    if (description)
+      fields.description = { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: description }] }] };
     return this.issues.updateIssue(issueIdOrKey, fields);
   }
 
@@ -216,7 +245,7 @@ export class JiraClient extends JiraClientCore {
   public async addLabels(issueIdOrKey: string, labelsToAdd: string[]): Promise<void> {
     // Parse and sanitize labels to ensure we're not adding brackets or quotes
     const sanitizedLabels = parseLabels(labelsToAdd);
-    
+
     const issue = await this.issues.getIssue(issueIdOrKey);
     const currentLabels = issue.fields.labels || [];
     const newLabels = Array.from(new Set([...currentLabels, ...sanitizedLabels]));
@@ -226,10 +255,10 @@ export class JiraClient extends JiraClientCore {
   public async removeLabels(issueIdOrKey: string, labelsToRemove: string[]): Promise<void> {
     // Parse and sanitize labels to ensure we're removing the right labels
     const sanitizedLabels = parseLabels(labelsToRemove);
-    
+
     const issue = await this.issues.getIssue(issueIdOrKey);
     const currentLabels = issue.fields.labels || [];
-    const newLabels = currentLabels.filter(label => !sanitizedLabels.includes(label));
+    const newLabels = currentLabels.filter((label) => !sanitizedLabels.includes(label));
     return this.issues.updateIssue(issueIdOrKey, { labels: newLabels });
   }
 
@@ -253,6 +282,10 @@ export class JiraClient extends JiraClientCore {
     return this.issues.getIssue(issueIdOrKey);
   }
 
+  public async deleteIssue(issueIdOrKey: string): Promise<void> {
+    return this.issues.deleteIssue(issueIdOrKey);
+  }
+
   /**
    * Update any field on a Jira issue
    * @param issueIdOrKey The ID or key of the issue to update
@@ -261,26 +294,103 @@ export class JiraClient extends JiraClientCore {
    */
   public async updateIssue(issueIdOrKey: string, fields: Record<string, any>): Promise<void> {
     // Convert simple text description to Jira's document format if needed
-    if (fields.description && typeof fields.description === 'string') {
-      fields.description = { 
-        type: 'doc', 
-        version: 1, 
-        content: [{ 
-          type: 'paragraph', 
-          content: [{ type: 'text', text: fields.description }] 
-        }] 
-      };
+    if (fields.description && typeof fields.description === "string") {
+      fields.description = this.createDocumentFromString(fields.description);
     }
-    
+
     // Format the fields object as expected by the Jira API
     const formattedFields: Partial<JiraIssueFields> = {};
-    
+
     // Use type assertion to handle dynamic field assignment
-    Object.keys(fields).forEach(key => {
+    Object.keys(fields).forEach((key) => {
       (formattedFields as any)[key] = fields[key];
     });
-    
+
     return this.issues.updateIssue(issueIdOrKey, formattedFields);
+  }
+
+  private createDocumentFromString(text: string): JiraDocument {
+    return {
+      type: "doc",
+      version: 1,
+      content: [
+        {
+          type: "paragraph",
+          content: text
+            .split(/\n+/)
+            .map((line) => ({ type: "text", text: line }))
+            .reduce((acc: any[], segment, index, arr) => {
+              acc.push(segment);
+              if (index < arr.length - 1) {
+                acc.push({ type: "hardBreak" });
+              }
+              return acc;
+            }, []),
+        },
+      ],
+    };
+  }
+
+  private normalizeDocument(input: string | JiraDocument): JiraDocument {
+    if (typeof input === "string") {
+      return this.createDocumentFromString(input);
+    }
+
+    if (input && input.type === "doc") {
+      return input;
+    }
+
+    throw new Error("Comment body must be a string or Jira document structure.");
+  }
+
+  private base64ToArrayBuffer(base64: string): ArrayBuffer {
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  public async listIssueComments(issueIdOrKey: string): Promise<JiraCommentPage> {
+    return this.issues.listComments(issueIdOrKey);
+  }
+
+  public async addIssueComment(issueIdOrKey: string, body: string | JiraDocument): Promise<JiraComment> {
+    const document = this.normalizeDocument(body);
+    return this.issues.addComment(issueIdOrKey, document);
+  }
+
+  public async updateIssueComment(issueIdOrKey: string, commentId: string, body: string | JiraDocument): Promise<JiraComment> {
+    const document = this.normalizeDocument(body);
+    return this.issues.updateComment(issueIdOrKey, commentId, document);
+  }
+
+  public async deleteIssueComment(issueIdOrKey: string, commentId: string): Promise<void> {
+    return this.issues.deleteComment(issueIdOrKey, commentId);
+  }
+
+  public async getIssueAttachments(issueIdOrKey: string): Promise<JiraAttachment[]> {
+    return this.issues.getAttachments(issueIdOrKey);
+  }
+
+  public async addIssueAttachment(
+    issueIdOrKey: string,
+    filename: string,
+    base64Data: string,
+    contentType?: string,
+  ): Promise<JiraAttachment[]> {
+    const buffer = this.base64ToArrayBuffer(base64Data);
+    return this.issues.addAttachment(issueIdOrKey, { filename, data: buffer, contentType });
+  }
+
+  public async deleteIssueAttachment(attachmentId: string): Promise<void> {
+    return this.issues.deleteAttachment(attachmentId);
+  }
+
+  public async listPriorities(): Promise<JiraPriority[]> {
+    return this.makeRequest<JiraPriority[]>("/rest/api/3/priority");
   }
 
   // User management operations
@@ -349,7 +459,7 @@ export class JiraClient extends JiraClientCore {
   public async getProject(projectIdOrKey: string, expand?: string): Promise<JiraProject> {
     return this.projects.getProject(projectIdOrKey, expand);
   }
-  
+
   public async getProjectIssueTypes(projectIdOrKey: string): Promise<any[]> {
     return this.projects.getProjectIssueTypes(projectIdOrKey);
   }
@@ -360,7 +470,7 @@ export class JiraClient extends JiraClientCore {
    * @returns Array of user objects with account IDs
    */
   public async searchUsers(query: string): Promise<any[]> {
-    return this.makeRequest<any[]>(`/rest/api/3/user/search?query=${encodeURIComponent(query)}`, 'GET');
+    return this.makeRequest<any[]>(`/rest/api/3/user/search?query=${encodeURIComponent(query)}`, "GET");
   }
 
   /**
@@ -455,12 +565,7 @@ export class JiraClient extends JiraClientCore {
    * @param filename The filename of the avatar
    * @returns Promise resolving to the response from the avatar upload
    */
-  public async loadIssueTypeAvatar(
-    issueTypeId: string, 
-    size: number, 
-    avatarData: string, 
-    filename: string
-  ): Promise<any> {
+  public async loadIssueTypeAvatar(issueTypeId: string, size: number, avatarData: string, filename: string): Promise<any> {
     return this.issueTypes.loadIssueTypeAvatar(issueTypeId, size, avatarData, filename);
   }
 }

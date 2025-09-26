@@ -9,31 +9,43 @@ export class JiraClientCore {
     this.email = env.JIRA_EMAIL;
 
     if (!this.apiKey) {
-      throw new Error('ATLASSIAN_API_KEY environment variable is not set.');
+      throw new Error("ATLASSIAN_API_KEY environment variable is not set.");
     }
     if (!this.baseUrl) {
-      throw new Error('JIRA_BASE_URL environment variable is not set.');
+      throw new Error("JIRA_BASE_URL environment variable is not set.");
     }
     if (!this.email) {
-      throw new Error('JIRA_EMAIL environment variable is not set.');
+      throw new Error("JIRA_EMAIL environment variable is not set.");
     }
   }
 
-  protected async makeRequest<T>(endpoint: string, method: string = 'GET', data?: any): Promise<T> {
+  protected async makeRequest<T>(
+    endpoint: string,
+    method: string = "GET",
+    data?: any,
+    config: {
+      headers?: HeadersInit;
+      rawBody?: BodyInit;
+      accept?: string;
+    } = {},
+  ): Promise<T> {
     const auth = `Basic ${btoa(`${this.email}:${this.apiKey}`)}`;
 
-    const headers: HeadersInit = {
-      'Authorization': auth,
-      'Accept': 'application/json',
-    };
+    const headers = new Headers(config.headers);
+    headers.set("Authorization", auth);
+    headers.set("Accept", config.accept || headers.get("Accept") || "application/json");
 
     const requestOptions: RequestInit = {
-      method: method,
-      headers: headers,
+      method,
+      headers,
     };
 
-    if (data) {
-      headers['Content-Type'] = 'application/json';
+    if (config.rawBody !== undefined) {
+      requestOptions.body = config.rawBody;
+    } else if (data !== undefined) {
+      if (!headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
       requestOptions.body = JSON.stringify(data);
     }
 

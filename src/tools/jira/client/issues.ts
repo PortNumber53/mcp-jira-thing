@@ -1,5 +1,13 @@
-import { JiraClientCore } from './core';
-import { JiraIssueFields, JiraIssue, JiraIssueSearchResult } from '../interfaces';
+import { JiraClientCore } from "./core";
+import {
+  JiraIssueFields,
+  JiraIssue,
+  JiraIssueSearchResult,
+  JiraCommentPage,
+  JiraComment,
+  JiraAttachment,
+  JiraDocument,
+} from "../interfaces";
 
 interface JiraTransition {
   id: string;
@@ -26,7 +34,7 @@ interface JiraTransitionsResponse {
 
 export class JiraIssues extends JiraClientCore {
   public async createIssue(fields: JiraIssueFields): Promise<JiraIssue> {
-    return this.makeRequest<JiraIssue>('/rest/api/3/issue', 'POST', { fields });
+    return this.makeRequest<JiraIssue>("/rest/api/3/issue", "POST", { fields });
   }
 
   public async getIssue(issueIdOrKey: string): Promise<JiraIssue> {
@@ -34,11 +42,11 @@ export class JiraIssues extends JiraClientCore {
   }
 
   public async updateIssue(issueIdOrKey: string, fields: Partial<JiraIssueFields>): Promise<void> {
-    return this.makeRequest<void>(`/rest/api/3/issue/${issueIdOrKey}`, 'PUT', { fields });
+    return this.makeRequest<void>(`/rest/api/3/issue/${issueIdOrKey}`, "PUT", { fields });
   }
 
   public async deleteIssue(issueIdOrKey: string): Promise<void> {
-    return this.makeRequest<void>(`/rest/api/3/issue/${issueIdOrKey}`, 'DELETE');
+    return this.makeRequest<void>(`/rest/api/3/issue/${issueIdOrKey}`, "DELETE");
   }
 
   public async searchIssues(jql: string, maxResults: number = 50): Promise<JiraIssueSearchResult> {
@@ -51,35 +59,78 @@ export class JiraIssues extends JiraClientCore {
 
   public async doTransition(issueIdOrKey: string, transitionId: string, comment?: string): Promise<void> {
     const payload: any = {
-      transition: { id: transitionId }
+      transition: { id: transitionId },
     };
-    
+
     if (comment) {
       payload.update = {
         comment: [
           {
             add: {
               body: {
-                type: 'doc',
+                type: "doc",
                 version: 1,
                 content: [
                   {
-                    type: 'paragraph',
+                    type: "paragraph",
                     content: [
                       {
-                        type: 'text',
-                        text: comment
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-          }
-        ]
+                        type: "text",
+                        text: comment,
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        ],
       };
     }
-    
-    return this.makeRequest<void>(`/rest/api/3/issue/${issueIdOrKey}/transitions`, 'POST', payload);
+
+    return this.makeRequest<void>(`/rest/api/3/issue/${issueIdOrKey}/transitions`, "POST", payload);
+  }
+
+  public async listComments(issueIdOrKey: string): Promise<JiraCommentPage> {
+    return this.makeRequest<JiraCommentPage>(`/rest/api/3/issue/${issueIdOrKey}/comment`);
+  }
+
+  public async addComment(issueIdOrKey: string, body: JiraDocument): Promise<JiraComment> {
+    return this.makeRequest<JiraComment>(`/rest/api/3/issue/${issueIdOrKey}/comment`, "POST", { body });
+  }
+
+  public async updateComment(issueIdOrKey: string, commentId: string, body: JiraDocument): Promise<JiraComment> {
+    return this.makeRequest<JiraComment>(`/rest/api/3/issue/${issueIdOrKey}/comment/${commentId}`, "PUT", { body });
+  }
+
+  public async deleteComment(issueIdOrKey: string, commentId: string): Promise<void> {
+    return this.makeRequest<void>(`/rest/api/3/issue/${issueIdOrKey}/comment/${commentId}`, "DELETE");
+  }
+
+  public async getAttachments(issueIdOrKey: string): Promise<JiraAttachment[]> {
+    const response = await this.makeRequest<{ fields: { attachment?: JiraAttachment[] } }>(
+      `/rest/api/3/issue/${issueIdOrKey}?fields=attachment`,
+    );
+    return response.fields?.attachment || [];
+  }
+
+  public async addAttachment(
+    issueIdOrKey: string,
+    file: { filename: string; data: ArrayBuffer; contentType?: string },
+  ): Promise<JiraAttachment[]> {
+    const formData = new FormData();
+    const blob = new Blob([file.data], { type: file.contentType || "application/octet-stream" });
+    formData.append("file", blob, file.filename);
+
+    return this.makeRequest<JiraAttachment[]>(`/rest/api/3/issue/${issueIdOrKey}/attachments`, "POST", undefined, {
+      headers: {
+        "X-Atlassian-Token": "no-check",
+      },
+      rawBody: formData,
+    });
+  }
+
+  public async deleteAttachment(attachmentId: string): Promise<void> {
+    return this.makeRequest<void>(`/rest/api/3/attachment/${attachmentId}`, "DELETE");
   }
 }
