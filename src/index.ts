@@ -412,7 +412,12 @@ export class MyMCP extends McpAgent<Env, Props> {
           .optional()
           .describe("Issue type reference for createIssue. Accepts a name, ID, or object with id/name."),
         description: z.string().optional().describe("Plain text description. Automatically converted to Atlassian document format."),
-        fields: z.record(z.any()).optional().describe("Arbitrary field map for createIssue or updateIssue actions."),
+        fields: z
+          .union([z.record(z.any()), z.string(), z.array(z.string())])
+          .optional()
+          .describe(
+            "For create/update actions, provide a field map object. For read operations (getIssue, searchIssues), supply a comma-separated string or array of field keys.",
+          ),
         additionalFields: z.record(z.any()).optional().describe("Optional object merged into generated fields during createIssue."),
         jql: z.string().optional().describe("JQL query for searchIssues."),
         maxResults: z.number().optional().describe("Maximum results for searchIssues (defaults to Jira API)."),
@@ -432,7 +437,17 @@ export class MyMCP extends McpAgent<Env, Props> {
         issueTypeId: z.string().optional().describe("Issue type ID for type-specific actions."),
         issueTypePayload: z.record(z.any()).optional().describe("Payload for createIssueType or updateIssueType."),
         alternativeIssueTypeId: z.string().optional().describe("Replacement issue type ID when deleting an issue type."),
-        expand: z.string().optional().describe("Additional expand options when retrieving issues."),
+        expand: z
+          .union([z.string(), z.array(z.string())])
+          .optional()
+          .describe("Field expansions accepted by Jira (e.g., 'renderedFields', 'changelog')."),
+        properties: z
+          .union([z.string(), z.array(z.string())])
+          .optional()
+          .describe("Issue properties to include when fetching issues."),
+        fieldsByKeys: z.boolean().optional().describe("Treat provided field identifiers as keys instead of IDs when fetching issues."),
+        updateHistory: z.boolean().optional().describe("Set true to update the issue history index when fetching an issue."),
+        startAt: z.number().optional().describe("Index of the first search result to return (used with searchIssues)."),
       },
       async (input) => {
         if (input.action === "/help") {
@@ -507,9 +522,26 @@ export class MyMCP extends McpAgent<Env, Props> {
           }
         };
 
+        const extractFieldMapInput = () => {
+          if (!input.fields || typeof input.fields === "string" || Array.isArray(input.fields)) {
+            return undefined;
+          }
+          return input.fields as Record<string, any>;
+        };
+
+        const extractFieldSelection = () => {
+          if (!input.fields) {
+            return undefined;
+          }
+          if (typeof input.fields === "string" || Array.isArray(input.fields)) {
+            return input.fields;
+          }
+          return undefined;
+        };
+
         switch (action) {
           case "createIssue": {
-            let fields: Record<string, any> | undefined = input.fields || undefined;
+            let fields: Record<string, any> | undefined = extractFieldMapInput();
             if (!fields) {
               if (!input.projectKey) {
                 throw new Error("projectKey is required when fields are not provided.");
@@ -538,15 +570,59 @@ export class MyMCP extends McpAgent<Env, Props> {
           }
           case "getIssue": {
             const issueIdOrKey = ensureIssue();
-            const issue = await this.jiraClient.getIssue(issueIdOrKey);
+            const requestedFields = extractFieldSelection();
+            const defaultFields = [
+              "summary",
+              "status",
+              "description",
+              "assignee",
+              "priority",
+              "issuetype",
+              "reporter",
+              "labels",
+              "created",
+              "updated",
+            ];
+            const fieldsForRequest = requestedFields ?? defaultFields;
+            const issue = await this.jiraClient.getIssue(issueIdOrKey, {
+              fields: fieldsForRequest,
+              expand: input.expand,
+              properties: input.properties,
+              fieldsByKeys: input.fieldsByKeys,
+              updateHistory: input.updateHistory,
+            });
+            const summary = issue.fields?.summary ?? "(no summary)";
+            const status = issue.fields?.status?.name ?? "Unknown";
+            const statusCategory = issue.fields?.status?.statusCategory?.name ?? undefined;
+            const priority = issue.fields?.priority?.name ?? "Unspecified";
+            const assignee = issue.fields?.assignee?.displayName ?? "Unassigned";
+            const reporter = issue.fields?.reporter?.displayName ?? undefined;
+            const issueType = issue.fields?.issuetype?.name ?? undefined;
+            const descriptionText = this.jiraClient.documentToPlainText(issue.fields?.description) ?? "No description provided.";
+            const labels = Array.isArray(issue.fields?.labels) && issue.fields.labels.length > 0 ? issue.fields.labels.join(", ") : "None";
+            const responseData = {
+              key: issue.key,
+              summary,
+              status,
+              statusCategory,
+              priority,
+              assignee,
+              reporter,
+              issueType,
+              labels: labels === "None" ? [] : (issue.fields?.labels ?? []),
+              description: descriptionText,
+              created: issue.fields?.created,
+              updated: issue.fields?.updated,
+              raw: issue,
+            };
             return {
-              content: [{ text: `Issue ${issue.key}: ${issue.fields.summary}`, type: "text" }],
+              content: [{ text: JSON.stringify(responseData, null, 2), type: "text" }],
               data: { success: true, issue },
             };
           }
           case "updateIssue": {
             const issueIdOrKey = ensureIssue();
-            const fields = { ...(input.fields || {}) };
+            const fields = { ...(extractFieldMapInput() || {}) };
             if (input.summary !== undefined) {
               fields.summary = input.summary;
             }
@@ -574,7 +650,14 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.jql) {
               throw new Error("searchIssues requires a JQL query.");
             }
-            const results = await this.jiraClient.searchIssues(input.jql, input.maxResults);
+            const results = await this.jiraClient.searchIssues(input.jql, {
+              maxResults: input.maxResults,
+              startAt: input.startAt,
+              fields: extractFieldSelection(),
+              expand: input.expand,
+              properties: input.properties,
+              fieldsByKeys: input.fieldsByKeys,
+            });
             return {
               content: [
                 {
@@ -1177,8 +1260,8 @@ export class MyMCP extends McpAgent<Env, Props> {
 
 export default new OAuthProvider({
   apiHandlers: {
-    "/sse": MyMCP.serveSSE("/sse"),
-    "/mcp": MyMCP.serve("/mcp"),
+    "/sse": MyMCP.serveSSE("/sse") as any,
+    "/mcp": MyMCP.serve("/mcp") as any,
   },
   authorizeEndpoint: "/authorize",
   clientRegistrationEndpoint: "/register",

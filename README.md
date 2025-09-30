@@ -56,6 +56,107 @@ npm run deploy  # uploads the worker and assets via wrangler deploy
 
 `wrangler.toml` configures the Worker entry (`src/worker.ts`) and serves the bundled assets from `dist/client`. The Worker handles SPA fallback logic while keeping `/api/**` routes served by the OAuth handler. Running `npm run dev:worker` uses `wrangler dev --local`, so secrets from `.dev.vars` are automatically injected for the OAuth flow.
 
+## Go Backend (`backend/`)
+
+The Go backend exposes REST endpoints that read from our Xata database and serve the data to the frontend (or other consumers). The initial implementation ships with:
+
+- `GET /healthz` — simple health probe for load balancers and Jenkins smoke checks.
+- `GET /api/users?limit=50` — returns a paginated list of NextAuth users pulled from Xata.
+
+### Environment variables
+
+Create a copy of `backend/.env.example` and provide the required values:
+
+| Variable                       | Required | Description                                                   |
+| ------------------------------ | -------- | ------------------------------------------------------------- |
+| `BACKEND_ADDR`                 | optional | Address the HTTP server listens on. Defaults to `:8080`.      |
+| `XATA_API_KEY`                 | ✅       | Xata API key with read access to the `dbjirathing` database.  |
+| `XATA_WORKSPACE`               | ✅       | Workspace slug (e.g. `acme-labs`).                            |
+| `XATA_DATABASE`                | ✅       | Database name (`dbjirathing`).                                |
+| `XATA_BRANCH`                  | optional | Database branch, defaults to `main`.                          |
+| `XATA_REGION`                  | optional | Workspace region (e.g. `us-east-1`); defaults to `us-east-1`. |
+| `BACKEND_HTTP_TIMEOUT_SECONDS` | optional | Outbound request timeout, defaults to 15 seconds.             |
+
+If you already have a PostgreSQL-style `DATABASE_URL` from Xata (e.g. `postgresql://workspace:<API_KEY>@us-east-1.sql.xata.sh/dbjirathing:main?sslmode=require`) you can simply set that single environment variable—the backend will parse it automatically and populate the individual settings.
+
+To populate `.env` manually from the URL you can parse it with a small helper script:
+
+```bash
+# Example DATABASE_URL
+database_url='postgresql://workspace:<API_KEY>@us-east-1.sql.xata.sh/dbjirathing:main?sslmode=require'
+
+python3 - <<'PY'
+import os
+import urllib.parse
+
+url = urllib.parse.urlparse(os.environ.get('database_url') or os.environ.get('DATABASE_URL'))
+if not url.username or not url.password:
+    raise SystemExit("DATABASE_URL must include username (workspace) and password (API key)")
+
+database, _, branch = url.path.lstrip('/').partition(':')
+branch = branch or 'main'
+
+print(f"export XATA_WORKSPACE={url.username}")
+print(f"export XATA_API_KEY={url.password}")
+print(f"export XATA_DATABASE={database}")
+print(f"export XATA_BRANCH={branch}")
+PY
+```
+
+`go test` and the runtime code expect the environment variables to be present. When running locally you can export them or use a dotenv loader (`direnv`, `dotenvx`, etc.).
+
+### Local development
+
+```bash
+cd backend
+cp .env.example .env   # edit with your credentials (or export env vars)
+go test ./...
+go run ./cmd/server
+
+# or via make
+make test
+make run
+```
+
+#### Hot reload with Air
+
+[Air](https://github.com/air-verse/air) offers live-reload for Go applications so changes rebuild and restart automatically during development, shrinking feedback loops [^air].
+
+```bash
+# install once (requires Go 1.25+)
+go install github.com/air-verse/air@latest
+
+# start the watcher from the backend directory
+cd backend
+make dev  # runs `air -c .air.toml`
+```
+
+Air uses the configuration at `backend/.air.toml` to rebuild `./tmp/main` whenever Go or environment files change, then restarts the server transparently. Ensure your `.env` values are present before launching the watcher.
+
+### Deployment workflow
+
+- **Build/Test:** `make build` compiles a Linux static binary at `backend/bin/mcp-backend`. `make test` runs the unit tests. Both commands are orchestrated by the Jenkins pipeline (see below).
+- **Artifact:** Jenkins compresses the binary to `backend/bin/mcp-backend.tar.gz` and publishes it as a build artifact.
+- **Deploy script:** `scripts/deploy-backend.sh` cross-compiles the Linux binary, uploads it via `scp`, unpacks it under `$DEPLOY_PATH`, and optionally restarts a systemd service when `SERVICE_NAME` is provided.
+
+### Jenkins pipeline
+
+This repository now contains a top-level `Jenkinsfile` that performs the following stages:
+
+1. **Checkout** — pulls the repository for the current build.
+2. **Go Test** — runs `go test ./...` inside `backend/`.
+3. **Build Backend** — executes `make build` to generate the `mcp-backend` binary.
+4. **Archive Artifact** — tars the binary and archives it for later retrieval.
+5. **Deploy (master only)** — executes `scripts/deploy-backend.sh`, which expects the following environment variables to be supplied by Jenkins credentials or job configuration:
+   - `DEPLOY_HOST`: Production server host/IP (Arch Linux).
+   - `DEPLOY_USER`: SSH user with permission to write into `DEPLOY_PATH` **and** run `sudo systemctl restart` on the target service.
+   - `DEPLOY_PATH`: Target directory on the server (e.g. `/opt/mcp-backend`).
+   - `SERVICE_NAME` (optional): systemd unit name to restart after deployment.
+
+The deploy stage only runs for builds on the `master` branch, so feature branches remain test-only. Jenkins must provide SSH access, typically via an SSH key credential associated with the `DEPLOY_USER` account. Review `scripts/deploy-backend.sh` for additional details or customization points.
+
+[^air]: Air is an open-source live reload utility for Go apps that watches source code, rebuilds, and reruns the compiled binary automatically to streamline development [air-verse/air](https://github.com/air-verse/air).
+
 ## Configuration and Deployment
 
 Follow these steps to configure and deploy your MCP server.
