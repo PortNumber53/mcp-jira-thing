@@ -1,9 +1,12 @@
 BINARY ?= bin/mcp-backend
+GOOS ?= linux
+GOARCH ?= amd64
+CGO_ENABLED ?= 0
 
 .PHONY: build test run dev clean
 
 build:
-	go build -o $(BINARY) ./cmd/server
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) go build -o $(BINARY) ./cmd/server
 
 test:
 	go test ./...

@@ -149,7 +149,7 @@ This repository now contains a top-level `Jenkinsfile` that performs the followi
 4. **Archive Artifact** — tars the binary and archives it for later retrieval.
 5. **Deploy (master only)** — executes `scripts/deploy-backend.sh`, which expects the following environment variables to be supplied by Jenkins credentials or job configuration:
    - `DEPLOY_HOST`: Production server host/IP (Arch Linux).
-   - `DEPLOY_USER`: SSH user with permission to write into `DEPLOY_PATH`.
+   - `DEPLOY_USER`: SSH user with permission to write into `DEPLOY_PATH` **and** run `sudo systemctl restart` on the target service.
    - `DEPLOY_PATH`: Target directory on the server (e.g. `/opt/mcp-backend`).
    - `SERVICE_NAME` (optional): systemd unit name to restart after deployment.
 

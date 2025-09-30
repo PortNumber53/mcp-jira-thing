@@ -9,7 +9,10 @@ import (
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/models"
 )
 
-const defaultPageSize = 200
+const (
+	defaultPageSize    = 200
+	nextAuthUsersTable = "public.nextauth_users"
+)
 
 // Store provides database-backed accessors for application data.
 type Store struct {
@@ -30,20 +33,20 @@ func (s *Store) ListUsers(ctx context.Context, limit int) ([]models.User, error)
 		limit = defaultPageSize
 	}
 
-	query := `
+	query := fmt.Sprintf(`
 SELECT
   COALESCE(xata_id, '') AS id,
   email,
   name,
   image
-FROM public.nextauth_users
+FROM %s
 ORDER BY xata_createdat DESC
 LIMIT $1
-`
+`, nextAuthUsersTable)
 
 	rows, err := s.db.QueryContext(ctx, query, limit)
 	if err != nil {
-		return nil, fmt.Errorf("query nextauth_users: %w", err)
+		return nil, fmt.Errorf("query %s: %w", nextAuthUsersTable, err)
 	}
 	defer rows.Close()
 
@@ -57,7 +60,7 @@ LIMIT $1
 		)
 
 		if err := rows.Scan(&id, &email, &name, &image); err != nil {
-			return nil, fmt.Errorf("scan nextauth_users: %w", err)
+			return nil, fmt.Errorf("scan %s: %w", nextAuthUsersTable, err)
 		}
 
 		users = append(users, models.User{
@@ -69,7 +72,7 @@ LIMIT $1
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate nextauth_users: %w", err)
+		return nil, fmt.Errorf("iterate %s: %w", nextAuthUsersTable, err)
 	}
 
 	return users, nil

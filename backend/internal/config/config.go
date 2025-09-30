@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
-	"time"
 )
 
 // Config captures runtime configuration values used by the backend service.
@@ -32,70 +30,59 @@ type Config struct {
 	// DatabaseURL is the Postgres DSN used by database/sql. Either supplied directly
 	// or constructed from the Xata* values above.
 	DatabaseURL string
-
-	// HTTPClientTimeout defines the timeout applied to outbound Postgres queries.
-	HTTPClientTimeout time.Duration
 }
 
 const (
-	defaultServerAddress  = ":8080"
-	defaultXataBranch     = "main"
-	defaultXataRegion     = "us-east-1"
-	defaultHTTPTimeoutSec = 15
-	envServerAddress      = "BACKEND_ADDR"
-	envXataAPIKey         = "XATA_API_KEY"
-	envXataWorkspace      = "XATA_WORKSPACE"
-	envXataDatabase       = "XATA_DATABASE"
-	envXataBranch         = "XATA_BRANCH"
-	envXataRegion         = "XATA_REGION"
-	envHTTPTimeoutSeconds = "BACKEND_HTTP_TIMEOUT_SECONDS"
-	envDatabaseURL        = "DATABASE_URL"
+	defaultServerAddress = ":8080"
+	defaultXataBranch    = "main"
+	defaultXataRegion    = "us-east-1"
+	envServerAddress     = "BACKEND_ADDR"
+	envXataAPIKey        = "XATA_API_KEY"
+	envXataWorkspace     = "XATA_WORKSPACE"
+	envXataDatabase      = "XATA_DATABASE"
+	envXataBranch        = "XATA_BRANCH"
+	envXataRegion        = "XATA_REGION"
+	envDatabaseURL       = "DATABASE_URL"
 )
 
 // Load reads configuration from environment variables, applies defaults, and returns
 // a Config structure. Required values return an error when missing.
 func Load() (Config, error) {
 	cfg := Config{
-		ServerAddress:     firstNonEmpty(os.Getenv(envServerAddress), defaultServerAddress),
-		XataBranch:        defaultXataBranch,
-		XataRegion:        defaultXataRegion,
-		DatabaseURL:       os.Getenv(envDatabaseURL),
-		HTTPClientTimeout: time.Duration(defaultHTTPTimeoutSec) * time.Second,
+		ServerAddress: firstNonEmpty(os.Getenv(envServerAddress), defaultServerAddress),
+		XataBranch:    defaultXataBranch,
+		XataRegion:    defaultXataRegion,
+		DatabaseURL:   os.Getenv(envDatabaseURL),
 	}
-
-	cfg.XataAPIKey = os.Getenv(envXataAPIKey)
-	cfg.XataWorkspace = os.Getenv(envXataWorkspace)
-	cfg.XataDatabase = os.Getenv(envXataDatabase)
-	cfg.XataBranch = firstNonEmpty(os.Getenv(envXataBranch), cfg.XataBranch)
-	cfg.XataRegion = firstNonEmpty(os.Getenv(envXataRegion), cfg.XataRegion)
 
 	if cfg.DatabaseURL != "" {
 		parsed, err := parseDatabaseURL(cfg.DatabaseURL)
 		if err != nil {
 			return Config{}, fmt.Errorf("invalid %s: %w", envDatabaseURL, err)
 		}
-		if cfg.XataAPIKey == "" {
-			cfg.XataAPIKey = parsed.APIKey
-		}
-		if cfg.XataWorkspace == "" {
-			cfg.XataWorkspace = parsed.Workspace
-		}
-		if cfg.XataDatabase == "" {
-			cfg.XataDatabase = parsed.Database
-		}
-		if cfg.XataBranch == "" {
-			cfg.XataBranch = parsed.Branch
-		}
-		if cfg.XataRegion == "" || cfg.XataRegion == defaultXataRegion {
-			cfg.XataRegion = parsed.Region
-		}
+
+		cfg.XataAPIKey = parsed.APIKey
+		cfg.XataWorkspace = parsed.Workspace
+		cfg.XataDatabase = parsed.Database
+		cfg.XataBranch = parsed.Branch
+		cfg.XataRegion = parsed.Region
 	}
 
-	cfg.XataWorkspace = firstNonEmpty(os.Getenv(envXataWorkspace), cfg.XataWorkspace)
-	cfg.XataDatabase = firstNonEmpty(os.Getenv(envXataDatabase), cfg.XataDatabase)
-	cfg.XataBranch = firstNonEmpty(os.Getenv(envXataBranch), cfg.XataBranch)
-	cfg.XataRegion = firstNonEmpty(os.Getenv(envXataRegion), cfg.XataRegion)
-	cfg.XataAPIKey = firstNonEmpty(os.Getenv(envXataAPIKey), cfg.XataAPIKey)
+	if value := os.Getenv(envXataAPIKey); value != "" {
+		cfg.XataAPIKey = value
+	}
+	if value := os.Getenv(envXataWorkspace); value != "" {
+		cfg.XataWorkspace = value
+	}
+	if value := os.Getenv(envXataDatabase); value != "" {
+		cfg.XataDatabase = value
+	}
+	if value := os.Getenv(envXataBranch); value != "" {
+		cfg.XataBranch = value
+	}
+	if value := os.Getenv(envXataRegion); value != "" {
+		cfg.XataRegion = value
+	}
 
 	if cfg.XataAPIKey == "" {
 		return Config{}, fmt.Errorf("%s is required", envXataAPIKey)
@@ -116,17 +103,6 @@ func Load() (Config, error) {
 			return Config{}, err
 		}
 		cfg.DatabaseURL = dsn
-	}
-
-	if timeoutRaw := os.Getenv(envHTTPTimeoutSeconds); timeoutRaw != "" {
-		seconds, err := strconv.Atoi(timeoutRaw)
-		if err != nil {
-			return Config{}, fmt.Errorf("invalid %s value %q: %w", envHTTPTimeoutSeconds, timeoutRaw, err)
-		}
-		if seconds <= 0 {
-			return Config{}, fmt.Errorf("%s must be > 0", envHTTPTimeoutSeconds)
-		}
-		cfg.HTTPClientTimeout = time.Duration(seconds) * time.Second
 	}
 
 	return cfg, nil

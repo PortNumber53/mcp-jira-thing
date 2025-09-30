@@ -18,6 +18,20 @@ export interface JiraIssueFields {
       name: string;
     };
   };
+  priority?: {
+    id: string;
+    name: string;
+  };
+  assignee?: {
+    accountId: string;
+    displayName: string;
+  } | null;
+  reporter?: {
+    accountId: string;
+    displayName: string;
+  } | null;
+  created?: string;
+  updated?: string;
   // Add other common fields as needed
 }
 

@@ -35,11 +35,10 @@ func main() {
 	db.SetMaxIdleConns(5)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
-		cancel()
 		log.Fatalf("failed to ping database: %v", err)
 	}
-	cancel()
 
 	store, err := store.New(db)
 	if err != nil {

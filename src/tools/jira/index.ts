@@ -17,7 +17,7 @@ import {
   JiraDocument,
 } from "./interfaces";
 import { JiraClientCore } from "./client/core";
-import { JiraIssues } from "./client/issues";
+import { JiraIssues, JiraGetIssueOptions, JiraSearchIssuesOptions } from "./client/issues";
 import { JiraSprints } from "./client/sprints";
 import { JiraProjects, JiraProjectCreatePayload } from "./client/projects";
 import { JiraUsers } from "./client/users";
@@ -278,8 +278,8 @@ export class JiraClient extends JiraClientCore {
    * @param issueIdOrKey The ID or key of the issue to retrieve
    * @returns Promise resolving to the issue details
    */
-  public async getIssue(issueIdOrKey: string): Promise<JiraIssue> {
-    return this.issues.getIssue(issueIdOrKey);
+  public async getIssue(issueIdOrKey: string, options?: JiraGetIssueOptions): Promise<JiraIssue> {
+    return this.issues.getIssue(issueIdOrKey, options);
   }
 
   public async deleteIssue(issueIdOrKey: string): Promise<void> {
@@ -341,6 +341,45 @@ export class JiraClient extends JiraClientCore {
     }
 
     throw new Error("Comment body must be a string or Jira document structure.");
+  }
+
+  public documentToPlainText(input: unknown): string | undefined {
+    if (!input) {
+      return undefined;
+    }
+
+    if (typeof input === "string") {
+      return input.trim() || undefined;
+    }
+
+    const document = input as JiraDocument & { content?: any[] };
+    if (!document || document.type !== "doc" || !Array.isArray(document.content)) {
+      return undefined;
+    }
+
+    const parts: string[] = [];
+
+    const walk = (nodes: any[]) => {
+      for (const node of nodes) {
+        if (!node) continue;
+
+        if (node.type === "text" && typeof node.text === "string") {
+          parts.push(node.text);
+        } else if (node.type === "hardBreak") {
+          parts.push("\n");
+        }
+
+        if (Array.isArray(node.content)) {
+          walk(node.content);
+        }
+      }
+    };
+
+    walk(document.content);
+
+    const joined = parts.join("");
+    const trimmed = joined.replace(/\n{3,}/g, "\n\n").trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 
   private base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -419,8 +458,8 @@ export class JiraClient extends JiraClientCore {
     return this.sprints.updateSprint(sprintId, payload);
   }
 
-  public async searchIssues(jql: string, maxResults: number = 50): Promise<JiraIssueSearchResult> {
-    return this.issues.searchIssues(jql, maxResults);
+  public async searchIssues(jql: string, options?: JiraSearchIssuesOptions): Promise<JiraIssueSearchResult> {
+    return this.issues.searchIssues(jql, options);
   }
 
   public async deleteSprint(sprintId: number): Promise<void> {
@@ -569,3 +608,5 @@ export class JiraClient extends JiraClientCore {
     return this.issueTypes.loadIssueTypeAvatar(issueTypeId, size, avatarData, filename);
   }
 }
+
+export type { JiraGetIssueOptions, JiraSearchIssuesOptions };

@@ -13,20 +13,19 @@ ARCHIVE_NAME="$BINARY_NAME.tar.gz"
 
 mkdir -p "$BUILD_DIR"
 
-echo "[deploy] Building linux/amd64 binary..."
-(
-  cd "$BACKEND_DIR"
-  GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$BUILD_DIR/$BINARY_NAME" ./cmd/server
-)
+if [[ ! -f "$BUILD_DIR/$BINARY_NAME" ]]; then
+  echo "[deploy] Expected prebuilt binary at $BUILD_DIR/$BINARY_NAME (build it in the pipeline before calling this script)." >&2
+  exit 1
+fi
 
-echo "[deploy] Creating archive..."
+echo "[deploy] Creating archive from prebuilt binary..."
 tar -C "$BUILD_DIR" -czf "$BUILD_DIR/$ARCHIVE_NAME" "$BINARY_NAME"
 
 echo "[deploy] Uploading archive to $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH"
 scp "$BUILD_DIR/$ARCHIVE_NAME" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
 
 echo "[deploy] Extracting archive on remote host"
-ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; mkdir -p '$DEPLOY_PATH'; cd '$DEPLOY_PATH'; tar -xzf '$ARCHIVE_NAME'; mv '$BINARY_NAME' backend; rm -f '$ARCHIVE_NAME'"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; mkdir -p '$DEPLOY_PATH'; cd '$DEPLOY_PATH'; tar -xzf '$ARCHIVE_NAME'; rm -f '$ARCHIVE_NAME'"
 
 if [[ -n "${SERVICE_NAME:-}" ]]; then
   echo "[deploy] Restarting systemd service $SERVICE_NAME"

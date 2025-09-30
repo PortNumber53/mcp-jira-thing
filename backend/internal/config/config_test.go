@@ -3,7 +3,6 @@ package config
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestLoadDefaults(t *testing.T) {
@@ -28,10 +27,6 @@ func TestLoadDefaults(t *testing.T) {
 
 	if cfg.XataRegion != "eu-west-1" {
 		t.Fatalf("expected region %q, got %q", "eu-west-1", cfg.XataRegion)
-	}
-
-	if cfg.HTTPClientTimeout != time.Duration(defaultHTTPTimeoutSec)*time.Second {
-		t.Fatalf("unexpected timeout: %v", cfg.HTTPClientTimeout)
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -73,19 +68,6 @@ func TestLoadMissingRequired(t *testing.T) {
 	}
 	if cfg.XataRegion != defaultXataRegion {
 		t.Fatalf("expected default region %q, got %q", defaultXataRegion, cfg.XataRegion)
-	}
-}
-
-func TestLoadInvalidTimeout(t *testing.T) {
-	t.Setenv(envDatabaseURL, "")
-	t.Setenv(envXataAPIKey, "key")
-	t.Setenv(envXataWorkspace, "workspace")
-	t.Setenv(envXataDatabase, "database")
-	t.Setenv(envXataRegion, "us-east-1")
-	t.Setenv(envHTTPTimeoutSeconds, "0")
-
-	if _, err := Load(); err == nil {
-		t.Fatal("expected error for non-positive timeout")
 	}
 }
 

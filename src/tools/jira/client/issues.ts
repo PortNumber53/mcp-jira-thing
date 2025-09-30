@@ -9,6 +9,36 @@ import {
   JiraDocument,
 } from "../interfaces";
 
+export interface JiraGetIssueOptions {
+  fields?: string | string[];
+  expand?: string | string[];
+  properties?: string | string[];
+  fieldsByKeys?: boolean;
+  updateHistory?: boolean;
+}
+
+export interface JiraSearchIssuesOptions {
+  maxResults?: number;
+  startAt?: number;
+  fields?: string | string[];
+  expand?: string | string[];
+  properties?: string | string[];
+  fieldsByKeys?: boolean;
+}
+
+function normalizeList(value?: string | string[]): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => item?.trim())
+      .filter((item): item is string => Boolean(item) && item.length > 0)
+      .join(",");
+  }
+  return value;
+}
+
 interface JiraTransition {
   id: string;
   name: string;
@@ -37,8 +67,22 @@ export class JiraIssues extends JiraClientCore {
     return this.makeRequest<JiraIssue>("/rest/api/3/issue", "POST", { fields });
   }
 
-  public async getIssue(issueIdOrKey: string): Promise<JiraIssue> {
-    return this.makeRequest<JiraIssue>(`/rest/api/3/issue/${issueIdOrKey}`);
+  public async getIssue(issueIdOrKey: string, options: JiraGetIssueOptions = {}): Promise<JiraIssue> {
+    const params = new URLSearchParams();
+    const fields = normalizeList(options.fields);
+    const expand = normalizeList(options.expand);
+    const properties = normalizeList(options.properties);
+
+    if (fields) params.set("fields", fields);
+    if (expand) params.set("expand", expand);
+    if (properties) params.set("properties", properties);
+    if (options.fieldsByKeys !== undefined) params.set("fieldsByKeys", String(options.fieldsByKeys));
+    if (options.updateHistory !== undefined) params.set("updateHistory", String(options.updateHistory));
+
+    const query = params.toString();
+    const suffix = query ? `?${query}` : "";
+
+    return this.makeRequest<JiraIssue>(`/rest/api/3/issue/${issueIdOrKey}${suffix}`);
   }
 
   public async updateIssue(issueIdOrKey: string, fields: Partial<JiraIssueFields>): Promise<void> {
@@ -49,8 +93,22 @@ export class JiraIssues extends JiraClientCore {
     return this.makeRequest<void>(`/rest/api/3/issue/${issueIdOrKey}`, "DELETE");
   }
 
-  public async searchIssues(jql: string, maxResults: number = 50): Promise<JiraIssueSearchResult> {
-    return this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}`);
+  public async searchIssues(jql: string, options: JiraSearchIssuesOptions = {}): Promise<JiraIssueSearchResult> {
+    const params = new URLSearchParams();
+    const fields = normalizeList(options.fields);
+    const expand = normalizeList(options.expand);
+    const properties = normalizeList(options.properties);
+
+    params.set("jql", jql);
+    params.set("maxResults", String(options.maxResults ?? 50));
+
+    if (options.startAt !== undefined) params.set("startAt", String(options.startAt));
+    if (fields) params.set("fields", fields);
+    if (expand) params.set("expand", expand);
+    if (properties) params.set("properties", properties);
+    if (options.fieldsByKeys !== undefined) params.set("fieldsByKeys", String(options.fieldsByKeys));
+
+    return this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search?${params.toString()}`);
   }
 
   public async getTransitions(issueIdOrKey: string): Promise<JiraTransitionsResponse> {
