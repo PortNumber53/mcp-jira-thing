@@ -108,7 +108,7 @@ export class JiraIssues extends JiraClientCore {
     if (properties) params.set("properties", properties);
     if (options.fieldsByKeys !== undefined) params.set("fieldsByKeys", String(options.fieldsByKeys));
 
-    return this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search?${params.toString()}`);
+    return this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search/jql?${params.toString()}`);
   }
 
   public async getTransitions(issueIdOrKey: string): Promise<JiraTransitionsResponse> {

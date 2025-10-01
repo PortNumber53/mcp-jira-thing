@@ -1,4 +1,4 @@
-import { JiraClientCore } from './core';
+import { JiraClientCore } from "./core";
 
 interface JiraPaginatedProjectsResponse {
   values: any[];
@@ -36,6 +36,14 @@ export interface JiraIssueType {
   iconUrl?: string;
   /** Whether this is the default issue type */
   default?: boolean;
+  /** Optional scope returned by createMeta (team-managed projects) */
+  scope?: {
+    type: string;
+    project?: {
+      id: string;
+      key: string;
+    };
+  };
 }
 
 export interface JiraProjectCreatePayload {
@@ -71,14 +79,16 @@ export interface JiraProjectCreatePayload {
 
 export class JiraProjects extends JiraClientCore {
   public async getProjects(): Promise<any[]> {
-    console.log('about to call Jira API for all paginated projects');
+    console.log("about to call Jira API for all paginated projects");
     let allProjects: any[] = [];
     let startAt = 0;
     const maxResults = 50; // Jira API default/max is often 50 or 100
     let isLastPage = false;
 
     while (!isLastPage) {
-      const result: JiraPaginatedProjectsResponse = await this.makeRequest(`/rest/api/3/project/search?startAt=${startAt}&maxResults=${maxResults}`);
+      const result: JiraPaginatedProjectsResponse = await this.makeRequest(
+        `/rest/api/3/project/search?startAt=${startAt}&maxResults=${maxResults}`,
+      );
       console.log(`Raw paginated result (startAt: ${startAt}):`, result);
 
       if (result && Array.isArray(result.values)) {
@@ -104,8 +114,8 @@ export class JiraProjects extends JiraClientCore {
    * @returns The created project data
    */
   public async createProject(payload: JiraProjectCreatePayload): Promise<any> {
-    console.log('Creating new Jira project:', payload.name);
-    return this.makeRequest('/rest/api/3/project', 'POST', payload);
+    console.log("Creating new Jira project:", payload.name);
+    return this.makeRequest("/rest/api/3/project", "POST", payload);
   }
 
   /**
@@ -115,7 +125,7 @@ export class JiraProjects extends JiraClientCore {
    * @returns The project data
    */
   public async getProject(projectIdOrKey: string, expand?: string): Promise<any> {
-    const endpoint = `/rest/api/3/project/${projectIdOrKey}${expand ? `?expand=${expand}` : ''}`;
+    const endpoint = `/rest/api/3/project/${projectIdOrKey}${expand ? `?expand=${expand}` : ""}`;
     return this.makeRequest(endpoint);
   }
 
@@ -126,23 +136,27 @@ export class JiraProjects extends JiraClientCore {
    */
   public async getProjectIssueTypes(projectIdOrKey: string): Promise<JiraIssueType[]> {
     try {
-      // Get all issue types - Jira doesn't have a reliable project-specific issue types endpoint
-      // in all versions of their API, so we'll get all issue types and filter if needed
-      const allIssueTypes = await this.makeRequest('/rest/api/3/issuetype');
+      const response = (await this.makeRequest(
+        `/rest/api/3/issue/createmeta?projectKeys=${encodeURIComponent(projectIdOrKey)}&expand=projects.issuetypes`,
+      )) as any;
 
-      if (!Array.isArray(allIssueTypes)) {
-        console.warn('Issue types endpoint did not return an array');
-        return [];
-      }
+      const projects = Array.isArray(response?.projects) ? response.projects : [];
+      const projectMeta = projects.find((project: any) => project && (project.key === projectIdOrKey || project.id === projectIdOrKey));
+      const issueTypes = Array.isArray(projectMeta?.issuetypes) ? projectMeta.issuetypes : [];
 
-      // Filter for subtask issue types
-      const subtaskTypes = allIssueTypes.filter(type => type && type.subtask === true);
-
-      // If we found subtask types, return them, otherwise return all types
-      // so the caller can decide what to do
-      return subtaskTypes.length > 0 ? subtaskTypes : allIssueTypes;
+      return issueTypes.map((type: any) => ({
+        id: type.id,
+        name: type.name,
+        subtask: Boolean(type.subtask),
+        description: type.description,
+        iconUrl: type.iconUrl,
+        default: Boolean(type.isDefault || type.default),
+        scope: type.scope,
+      }));
     } catch (error) {
-      console.error(`Error fetching issue types: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error(
+        `Error fetching project issue types for ${projectIdOrKey}: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
       return [];
     }
   }
