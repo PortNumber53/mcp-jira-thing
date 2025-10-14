@@ -66,6 +66,15 @@ export interface JiraComment {
     accountId: string;
     displayName: string;
   };
+  updateAuthor?: {
+    accountId: string;
+    displayName: string;
+  };
+  visibility?: {
+    type: "group" | "role";
+    value?: string;
+    identifier?: string;
+  };
   created: string;
   updated: string;
 }
@@ -74,6 +83,38 @@ export interface JiraCommentPage {
   comments: JiraComment[];
   maxResults?: number;
   total?: number;
+  startAt?: number;
+}
+
+// PageBean returned by POST /rest/api/3/comment/list
+export interface JiraCommentPageBean {
+  isLast: boolean;
+  maxResults: number;
+  startAt: number;
+  total: number;
+  values: JiraComment[];
+}
+
+// Options for listing comments on an issue
+export interface JiraCommentListOptions {
+  startAt?: number;
+  maxResults?: number;
+  orderBy?: string; // created | updated (Jira may accept other forms like createdDate)
+  expand?: string | string[];
+}
+
+// Extra properties when creating/updating a comment
+export interface JiraCommentWriteOptions {
+  visibility?: {
+    type: "group" | "role";
+    value?: string;
+    identifier?: string;
+  };
+  properties?: any[];
+  // update-specific query flags
+  notifyUsers?: boolean;
+  overrideEditableFlag?: boolean;
+  expand?: string | string[];
 }
 
 export interface JiraAttachment {

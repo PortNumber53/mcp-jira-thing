@@ -12,6 +12,9 @@ import {
   UpdateIssueTypePayload,
   JiraComment,
   JiraCommentPage,
+  JiraCommentListOptions,
+  JiraCommentWriteOptions,
+  JiraCommentPageBean,
   JiraAttachment,
   JiraPriority,
   JiraDocument,
@@ -392,22 +395,39 @@ export class JiraClient extends JiraClientCore {
     return bytes.buffer;
   }
 
-  public async listIssueComments(issueIdOrKey: string): Promise<JiraCommentPage> {
-    return this.issues.listComments(issueIdOrKey);
+  public async listIssueComments(issueIdOrKey: string, options: JiraCommentListOptions = {}): Promise<JiraCommentPage> {
+    return this.issues.listComments(issueIdOrKey, options);
   }
 
-  public async addIssueComment(issueIdOrKey: string, body: string | JiraDocument): Promise<JiraComment> {
+  public async addIssueComment(
+    issueIdOrKey: string,
+    body: string | JiraDocument,
+    options: JiraCommentWriteOptions = {},
+  ): Promise<JiraComment> {
     const document = this.normalizeDocument(body);
-    return this.issues.addComment(issueIdOrKey, document);
+    return this.issues.addComment(issueIdOrKey, document, options);
   }
 
-  public async updateIssueComment(issueIdOrKey: string, commentId: string, body: string | JiraDocument): Promise<JiraComment> {
+  public async updateIssueComment(
+    issueIdOrKey: string,
+    commentId: string,
+    body: string | JiraDocument,
+    options: JiraCommentWriteOptions = {},
+  ): Promise<JiraComment> {
     const document = this.normalizeDocument(body);
-    return this.issues.updateComment(issueIdOrKey, commentId, document);
+    return this.issues.updateComment(issueIdOrKey, commentId, document, options);
   }
 
   public async deleteIssueComment(issueIdOrKey: string, commentId: string): Promise<void> {
     return this.issues.deleteComment(issueIdOrKey, commentId);
+  }
+
+  public async getIssueComment(issueIdOrKey: string, commentId: string): Promise<JiraComment> {
+    return this.issues.getComment(issueIdOrKey, commentId);
+  }
+
+  public async getIssueCommentsByIds(ids: (string | number)[], expand?: string | string[]): Promise<JiraCommentPageBean> {
+    return this.issues.getCommentsByIds(ids, expand);
   }
 
   public async getIssueAttachments(issueIdOrKey: string): Promise<JiraAttachment[]> {

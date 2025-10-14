@@ -60,9 +60,12 @@ export class MyMCP extends McpAgent<Env, Props> {
       "deleteIssue",
       "searchIssues",
       "listComments",
+      "listCommentsFull",
       "addComment",
       "updateComment",
       "deleteComment",
+      "getComment",
+      "getCommentsByIds",
       "getTransitions",
       "transitionIssue",
       "getLabels",
@@ -426,6 +429,27 @@ export class MyMCP extends McpAgent<Env, Props> {
           .union([z.string(), z.record(z.any())])
           .optional()
           .describe("Comment text or Atlassian document body."),
+        // Comment list and retrieval
+        orderBy: z
+          .string()
+          .optional()
+          .describe("Order comments by 'created' or 'updated' (Jira may also accept createdDate/updatedDate)."),
+        ids: z.array(z.union([z.string(), z.number()])).optional().describe("List of comment IDs for getCommentsByIds."),
+        // Comment write options
+        visibility: z
+          .object({
+            type: z.union([z.literal("group"), z.literal("role")]),
+            value: z.string().optional(),
+            identifier: z.string().optional(),
+          })
+          .optional()
+          .describe("Visibility restrictions for the comment."),
+        commentProperties: z.array(z.any()).optional().describe("Arbitrary properties to attach to the comment."),
+        notifyUsers: z.boolean().optional().describe("Notify users when updating a comment."),
+        overrideEditableFlag: z
+          .boolean()
+          .optional()
+          .describe("Override editable flag when updating a comment (admin use)."),
         labels: z.array(z.string()).optional().describe("Labels for label actions."),
         filename: z.string().optional().describe("Filename when uploading an attachment."),
         fileBase64: z.string().optional().describe("Base64-encoded file contents for addAttachment."),
@@ -457,7 +481,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 - updateIssue: update specific fields on an issue
 - deleteIssue: remove an issue
 - searchIssues: run a JQL search
-- listComments | addComment | updateComment | deleteComment: manage issue comments
+- listComments | listCommentsFull | addComment | updateComment | deleteComment | getComment | getCommentsByIds: manage issue comments
 - getTransitions | transitionIssue: inspect or execute workflow transitions
 - getLabels | addLabels | removeLabels | setLabels: manage issue labels
 - listAttachments | addAttachment | deleteAttachment: work with attachments (attachments require base64 payload)
@@ -672,10 +696,41 @@ export class MyMCP extends McpAgent<Env, Props> {
           }
           case "listComments": {
             const issueIdOrKey = ensureIssue();
-            const comments = await this.jiraClient.listIssueComments(issueIdOrKey);
+            const comments = await this.jiraClient.listIssueComments(issueIdOrKey, {
+              startAt: input.startAt,
+              maxResults: input.maxResults,
+              orderBy: input.orderBy,
+              expand: input.expand,
+            });
             return {
               content: [{ text: `Found ${comments.comments.length} comments`, type: "text" }],
               data: { success: true, ...comments },
+            };
+          }
+          case "listCommentsFull": {
+            const issueIdOrKey = ensureIssue();
+            const commentsPage = await this.jiraClient.listIssueComments(issueIdOrKey, {
+              startAt: input.startAt,
+              maxResults: input.maxResults,
+              orderBy: input.orderBy,
+              // include renderedBody just in case callers want it
+              expand: input.expand ?? "renderedBody",
+            });
+            const comments = commentsPage.comments || [];
+            const plainTexts = comments.map((c: any) => this.jiraClient.documentToPlainText(c.body) || "");
+            const result = {
+              success: true,
+              count: comments.length,
+              ids: comments.map((c: any) => c.id),
+              texts: plainTexts,
+              comments,
+              startAt: (commentsPage as any).startAt ?? 0,
+              maxResults: (commentsPage as any).maxResults,
+              total: (commentsPage as any).total,
+            };
+            return {
+              content: [{ text: `Found ${comments.length} comments (full)`, type: "text" }],
+              data: result,
             };
           }
           case "addComment": {
@@ -683,7 +738,11 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.commentBody) {
               throw new Error("addComment requires commentBody.");
             }
-            const comment = await this.jiraClient.addIssueComment(issueIdOrKey, input.commentBody as any);
+            const comment = await this.jiraClient.addIssueComment(issueIdOrKey, input.commentBody as any, {
+              visibility: input.visibility as any,
+              properties: input.commentProperties,
+              expand: input.expand,
+            });
             return {
               content: [{ text: `Comment ${comment.id} added to ${issueIdOrKey}.`, type: "text" }],
               data: { success: true, comment },
@@ -697,7 +756,13 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.commentBody) {
               throw new Error("updateComment requires commentBody.");
             }
-            const comment = await this.jiraClient.updateIssueComment(issueIdOrKey, input.commentId, input.commentBody as any);
+            const comment = await this.jiraClient.updateIssueComment(issueIdOrKey, input.commentId, input.commentBody as any, {
+              visibility: input.visibility as any,
+              properties: input.commentProperties,
+              notifyUsers: input.notifyUsers,
+              overrideEditableFlag: input.overrideEditableFlag,
+              expand: input.expand,
+            });
             return {
               content: [{ text: `Comment ${comment.id} updated.`, type: "text" }],
               data: { success: true, comment },
@@ -712,6 +777,27 @@ export class MyMCP extends McpAgent<Env, Props> {
             return {
               content: [{ text: `Comment ${input.commentId} deleted.`, type: "text" }],
               data: { success: true, commentId: input.commentId },
+            };
+          }
+          case "getComment": {
+            const issueIdOrKey = ensureIssue();
+            if (!input.commentId) {
+              throw new Error("getComment requires commentId.");
+            }
+            const comment = await this.jiraClient.getIssueComment(issueIdOrKey, input.commentId);
+            return {
+              content: [{ text: JSON.stringify(comment, null, 2), type: "text" }],
+              data: { success: true, comment },
+            };
+          }
+          case "getCommentsByIds": {
+            if (!input.ids || input.ids.length === 0) {
+              throw new Error("getCommentsByIds requires 'ids' array.");
+            }
+            const page = await this.jiraClient.getIssueCommentsByIds(input.ids, input.expand);
+            return {
+              content: [{ text: `Fetched ${page.values.length} comments by IDs.`, type: "text" }],
+              data: { success: true, ...page },
             };
           }
           case "getTransitions": {

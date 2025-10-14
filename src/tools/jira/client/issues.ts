@@ -7,6 +7,9 @@ import {
   JiraComment,
   JiraAttachment,
   JiraDocument,
+  JiraCommentListOptions,
+  JiraCommentWriteOptions,
+  JiraCommentPageBean,
 } from "../interfaces";
 
 export interface JiraGetIssueOptions {
@@ -149,20 +152,67 @@ export class JiraIssues extends JiraClientCore {
     return this.makeRequest<void>(`/rest/api/3/issue/${issueIdOrKey}/transitions`, "POST", payload);
   }
 
-  public async listComments(issueIdOrKey: string): Promise<JiraCommentPage> {
-    return this.makeRequest<JiraCommentPage>(`/rest/api/3/issue/${issueIdOrKey}/comment`);
+  public async listComments(issueIdOrKey: string, options: JiraCommentListOptions = {}): Promise<JiraCommentPage> {
+    const params = new URLSearchParams();
+    if (options.startAt !== undefined) params.set("startAt", String(options.startAt));
+    if (options.maxResults !== undefined) params.set("maxResults", String(options.maxResults));
+    if (options.orderBy) params.set("orderBy", options.orderBy);
+    const expand = normalizeList(options.expand);
+    if (expand) params.set("expand", expand);
+    const query = params.toString();
+    const suffix = query ? `?${query}` : "";
+    return this.makeRequest<JiraCommentPage>(`/rest/api/3/issue/${issueIdOrKey}/comment${suffix}`);
   }
 
-  public async addComment(issueIdOrKey: string, body: JiraDocument): Promise<JiraComment> {
-    return this.makeRequest<JiraComment>(`/rest/api/3/issue/${issueIdOrKey}/comment`, "POST", { body });
+  public async addComment(issueIdOrKey: string, body: JiraDocument, options: JiraCommentWriteOptions = {}): Promise<JiraComment> {
+    const payload: any = { body };
+    if (options.visibility) payload.visibility = options.visibility;
+    if (options.properties) payload.properties = options.properties;
+    const params = new URLSearchParams();
+    const expand = normalizeList(options.expand);
+    if (expand) params.set("expand", expand);
+    const query = params.toString();
+    const suffix = query ? `?${query}` : "";
+    return this.makeRequest<JiraComment>(`/rest/api/3/issue/${issueIdOrKey}/comment${suffix}`, "POST", payload);
   }
 
-  public async updateComment(issueIdOrKey: string, commentId: string, body: JiraDocument): Promise<JiraComment> {
-    return this.makeRequest<JiraComment>(`/rest/api/3/issue/${issueIdOrKey}/comment/${commentId}`, "PUT", { body });
+  public async updateComment(
+    issueIdOrKey: string,
+    commentId: string,
+    body: JiraDocument,
+    options: JiraCommentWriteOptions = {},
+  ): Promise<JiraComment> {
+    const payload: any = { body };
+    if (options.visibility) payload.visibility = options.visibility;
+    if (options.properties) payload.properties = options.properties;
+    const params = new URLSearchParams();
+    if (options.notifyUsers !== undefined) params.set("notifyUsers", String(options.notifyUsers));
+    if (options.overrideEditableFlag !== undefined)
+      params.set("overrideEditableFlag", String(options.overrideEditableFlag));
+    const expand = normalizeList(options.expand);
+    if (expand) params.set("expand", expand);
+    const query = params.toString();
+    const suffix = query ? `?${query}` : "";
+    return this.makeRequest<JiraComment>(`/rest/api/3/issue/${issueIdOrKey}/comment/${commentId}${suffix}`, "PUT", payload);
   }
 
   public async deleteComment(issueIdOrKey: string, commentId: string): Promise<void> {
     return this.makeRequest<void>(`/rest/api/3/issue/${issueIdOrKey}/comment/${commentId}`, "DELETE");
+  }
+
+  public async getComment(issueIdOrKey: string, commentId: string): Promise<JiraComment> {
+    return this.makeRequest<JiraComment>(`/rest/api/3/issue/${issueIdOrKey}/comment/${commentId}`);
+  }
+
+  public async getCommentsByIds(ids: (string | number)[], expand?: string | string[]): Promise<JiraCommentPageBean> {
+    const params = new URLSearchParams();
+    const expandStr = normalizeList(expand);
+    if (expandStr) params.set("expand", expandStr);
+    const query = params.toString();
+    const suffix = query ? `?${query}` : "";
+    return this.makeRequest<JiraCommentPageBean>(`/rest/api/3/comment/list${suffix}`, "POST", {
+      ids: ids,
+    });
   }
 
   public async getAttachments(issueIdOrKey: string): Promise<JiraAttachment[]> {
