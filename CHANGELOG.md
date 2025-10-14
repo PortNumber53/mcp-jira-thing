@@ -26,3 +26,8 @@
 
 ### Notes
 - A pre-existing lint warning remains regarding `Env` in `src/index.ts` (missing `COOKIE_ENCRYPTION_KEY`). This was not introduced by this change. Consider updating the `Env` type or configuration accordingly.
+
+- fix(jira): Correct search endpoint in `JiraIssues.searchIssues` (`src/tools/jira/client/issues.ts`).
+  - Changed from `/rest/api/3/search/jql` to `/rest/api/3/search`.
+  - Rationale: Jira REST API expects `jql` as a query parameter, not a path segment. This resolves MCP search errors.
+
