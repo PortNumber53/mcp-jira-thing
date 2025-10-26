@@ -22,6 +22,7 @@ import {
 import { JiraClientCore } from "./client/core";
 import { JiraIssues, JiraGetIssueOptions, JiraSearchIssuesOptions } from "./client/issues";
 import { JiraSprints } from "./client/sprints";
+import { JiraDashboards } from "./client/dashboards";
 import { JiraProjects, JiraProjectCreatePayload } from "./client/projects";
 import { JiraUsers } from "./client/users";
 import { JiraIssueTypes } from "./client/issuetypes";
@@ -35,6 +36,7 @@ export class JiraClient extends JiraClientCore {
   private issues: JiraIssues;
   private sprints: JiraSprints;
   private projects: JiraProjects;
+  private dashboards: JiraDashboards;
   private users: JiraUsers;
   public issueTypes: JiraIssueTypes;
 
@@ -45,6 +47,7 @@ export class JiraClient extends JiraClientCore {
     this.projects = new JiraProjects(env);
     this.users = new JiraUsers(env);
     this.issueTypes = new JiraIssueTypes(env);
+    this.dashboards = new JiraDashboards(env);
   }
 
   // Epic CRUD operations
@@ -452,6 +455,80 @@ export class JiraClient extends JiraClientCore {
     return this.makeRequest<JiraPriority[]>("/rest/api/3/priority");
   }
 
+  // Dashboard operations
+  public async listDashboards(params: { filter?: string; startAt?: number; maxResults?: number } = {}): Promise<any> {
+    return this.dashboards.listDashboards(params);
+  }
+
+  public async getDashboard(id: string): Promise<any> {
+    return this.dashboards.getDashboard(id);
+  }
+
+  public async createDashboard(payload: Record<string, any>): Promise<any> {
+    return this.dashboards.createDashboard(payload);
+  }
+
+  public async updateDashboard(id: string, payload: Record<string, any>): Promise<any> {
+    return this.dashboards.updateDashboard(id, payload);
+  }
+
+  public async deleteDashboard(id: string): Promise<void> {
+    return this.dashboards.deleteDashboard(id);
+  }
+
+  public async searchDashboards(params: { filter?: string; startAt?: number; maxResults?: number } = {}): Promise<any> {
+    return this.dashboards.searchDashboards(params);
+  }
+
+  public async getAvailableGadgets(): Promise<any> {
+    return this.dashboards.getAvailableGadgets();
+  }
+
+  public async getGadgets(dashboardId: string): Promise<any> {
+    return this.dashboards.getGadgets(dashboardId);
+  }
+
+  public async addGadget(dashboardId: string, payload: Record<string, any>): Promise<any> {
+    return this.dashboards.addGadget(dashboardId, payload);
+  }
+
+  public async updateGadget(dashboardId: string, gadgetId: string, payload: Record<string, any>): Promise<any> {
+    return this.dashboards.updateGadget(dashboardId, gadgetId, payload);
+  }
+
+  public async removeGadget(dashboardId: string, gadgetId: string): Promise<void> {
+    return this.dashboards.removeGadget(dashboardId, gadgetId);
+  }
+
+  public async getDashboardItemPropertyKeys(dashboardId: string, itemId: string): Promise<any> {
+    return this.dashboards.getDashboardItemPropertyKeys(dashboardId, itemId);
+  }
+
+  public async getDashboardItemProperty(dashboardId: string, itemId: string, propertyKey: string): Promise<any> {
+    return this.dashboards.getDashboardItemProperty(dashboardId, itemId, propertyKey);
+  }
+
+  public async setDashboardItemProperty(
+    dashboardId: string,
+    itemId: string,
+    propertyKey: string,
+    value: Record<string, any>,
+  ): Promise<any> {
+    return this.dashboards.setDashboardItemProperty(dashboardId, itemId, propertyKey, value);
+  }
+
+  public async deleteDashboardItemProperty(dashboardId: string, itemId: string, propertyKey: string): Promise<void> {
+    return this.dashboards.deleteDashboardItemProperty(dashboardId, itemId, propertyKey);
+  }
+
+  public async copyDashboard(
+    id: string,
+    payload: Record<string, any>,
+    extendAdminPermissions?: boolean,
+  ): Promise<any> {
+    return this.dashboards.copyDashboard(id, payload, extendAdminPermissions);
+  }
+
   // User management operations
   public async getUser(accountId: string): Promise<JiraUser> {
     return this.users.getUser(accountId);
@@ -486,12 +563,18 @@ export class JiraClient extends JiraClientCore {
     return this.sprints.deleteSprint(sprintId);
   }
 
-  public async startSprint(sprintId: number): Promise<JiraSprint> {
-    return this.sprints.startSprint(sprintId);
+  public async startSprint(
+    sprintId: number,
+    overrides: Partial<UpdateSprintPayload> = {},
+  ): Promise<JiraSprint> {
+    return this.sprints.startSprint(sprintId, overrides);
   }
 
-  public async completeSprint(sprintId: number): Promise<JiraSprint> {
-    return this.sprints.completeSprint(sprintId);
+  public async completeSprint(
+    sprintId: number,
+    overrides: Partial<UpdateSprintPayload> = {},
+  ): Promise<JiraSprint> {
+    return this.sprints.completeSprint(sprintId, overrides);
   }
 
   public async getSprintsForBoard(boardId: number): Promise<JiraSprint[]> {

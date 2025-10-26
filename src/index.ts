@@ -22,16 +22,28 @@ const ALLOWED_USERNAMES = new Set<string>([
   // For example: 'yourusername', 'coworkerusername'
 ]);
 
-interface Env {
-  ATLASSIAN_API_KEY: string;
-  JIRA_BASE_URL: string;
-  JIRA_EMAIL: string;
-  OAUTH_KV: KVNamespace;
-  GITHUB_CLIENT_ID: string;
-  GITHUB_CLIENT_SECRET: string;
-  SESSION_SECRET: string;
-  AI: any; // Assuming 'AI' is a Cloudflare Workers AI binding
+type Env = Cloudflare.Env & {
+  // Optional session secret (legacy compatibility handled elsewhere)
+  SESSION_SECRET?: string;
+  // Additional bindings used by this Worker
+  AI: any;
   MCP_OBJECT: DurableObjectNamespace<MyMCP>;
+};
+
+function extractFirstAppLocation(error: unknown): string | undefined {
+  const stack = (error as any)?.stack;
+  if (typeof stack !== "string" || stack.length === 0) return undefined;
+  try {
+    const lines = stack.split("\n");
+    // Prefer frames from our project under /src/
+    const candidate = lines.find((l) => l.includes("/src/")) || lines[1] || lines[0];
+    if (!candidate) return undefined;
+    // Extract file:line:column from stack frame
+    const match = candidate.match(/(\/[^\s)]+:\d+:\d+)/);
+    return match?.[1];
+  } catch {
+    return undefined;
+  }
 }
 
 export class MyMCP extends McpAgent<Env, Props> {
@@ -179,6 +191,7 @@ export class MyMCP extends McpAgent<Env, Props> {
           // Type error as any to access error.message
           // Provide helpful error message
           let errorMessage = `Error creating project: ${error?.message || "Unknown error"}`;
+          const location = extractFirstAppLocation(error);
           let errorType = "unknown";
 
           // Add specific guidance for common errors
@@ -201,6 +214,7 @@ export class MyMCP extends McpAgent<Env, Props> {
             errorType: errorType,
             message: error?.message || "Unknown error",
             payload: payload,
+            location,
           };
 
           // Create JSON string for machine parsing
@@ -208,7 +222,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 
           return {
             content: [
-              { text: errorMessage, type: "text" },
+              { text: location ? `${errorMessage} (at ${location})` : errorMessage, type: "text" },
               { text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" },
             ],
           };
@@ -273,12 +287,14 @@ export class MyMCP extends McpAgent<Env, Props> {
             ],
           };
         } catch (error: any) {
+          const location = extractFirstAppLocation(error);
           const errorMessage = `Error retrieving project: ${error?.message || "Unknown error"}`;
           const errorJson = JSON.stringify(
             {
               success: false,
               message: error?.message || "Unknown error",
               projectIdOrKey: projectIdOrKey,
+              location,
             },
             null,
             2,
@@ -286,7 +302,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 
           return {
             content: [
-              { text: errorMessage, type: "text" },
+              { text: location ? `${errorMessage} (at ${location})` : errorMessage, type: "text" },
               { text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" },
             ],
           };
@@ -376,12 +392,14 @@ export class MyMCP extends McpAgent<Env, Props> {
             data: responseData,
           };
         } catch (error: any) {
+          const location = extractFirstAppLocation(error);
           const errorMessage = `Error retrieving issue types: ${error?.message || "Unknown error"}`;
           const errorJson = JSON.stringify(
             {
               success: false,
               error: errorMessage,
               projectKey: projectIdOrKey,
+              location,
             },
             null,
             2,
@@ -389,7 +407,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 
           return {
             content: [
-              { text: errorMessage, type: "text" },
+              { text: location ? `${errorMessage} (at ${location})` : errorMessage, type: "text" },
               { text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" },
             ],
             data: {
@@ -444,7 +462,10 @@ export class MyMCP extends McpAgent<Env, Props> {
           })
           .optional()
           .describe("Visibility restrictions for the comment."),
-        commentProperties: z.array(z.any()).optional().describe("Arbitrary properties to attach to the comment."),
+        commentProperties: z
+          .array(z.record(z.any()))
+          .optional()
+          .describe("Arbitrary properties to attach to the comment."),
         notifyUsers: z.boolean().optional().describe("Notify users when updating a comment."),
         overrideEditableFlag: z
           .boolean()
@@ -1061,12 +1082,14 @@ export class MyMCP extends McpAgent<Env, Props> {
             ],
           };
         } catch (error: any) {
+          const location = extractFirstAppLocation(error);
           const errorMessage = `Error searching for users: ${error?.message || "Unknown error"}`;
           const errorJson = JSON.stringify(
             {
               error: true,
               message: error?.message || "Unknown error",
               query: query,
+              location,
             },
             null,
             2,
@@ -1074,10 +1097,210 @@ export class MyMCP extends McpAgent<Env, Props> {
 
           return {
             content: [
-              { text: errorMessage, type: "text" },
+              { text: location ? `${errorMessage} (at ${location})` : errorMessage, type: "text" },
               { text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" },
             ],
           };
+        }
+      },
+    );
+
+    // Jira Dashboards unified tool
+    const DashboardActionEnum = z.enum([
+      "listDashboards",
+      "getDashboard",
+      "createDashboard",
+      "updateDashboard",
+      "deleteDashboard",
+      "searchDashboards",
+      "getAvailableGadgets",
+      "getGadgets",
+      "addGadget",
+      "updateGadget",
+      "removeGadget",
+      "getDashboardItemPropertyKeys",
+      "getDashboardItemProperty",
+      "setDashboardItemProperty",
+      "deleteDashboardItemProperty",
+      "copyDashboard",
+    ]);
+    const DashboardActionSchema = z.union([z.literal("/help"), DashboardActionEnum]);
+
+    this.server.tool(
+      "jiraDashboardToolkit",
+      "Manage Jira dashboards, gadgets, and item properties. Pass action='/help' for usage.",
+      {
+        action: DashboardActionSchema,
+        // common identifiers
+        id: z.string().optional().describe("Dashboard ID"),
+        dashboardId: z.string().optional().describe("Dashboard ID (alias)"),
+        gadgetId: z.string().optional().describe("Gadget ID"),
+        itemId: z.string().optional().describe("Dashboard item ID"),
+        propertyKey: z.string().optional().describe("Dashboard item property key"),
+        // paging/filter
+        filter: z.string().optional().describe("Filter string for dashboard list/search"),
+        startAt: z.number().optional().describe("Pagination start index"),
+        maxResults: z.number().optional().describe("Pagination max results"),
+        // dashboard payload fields
+        name: z.string().optional().describe("Dashboard name"),
+        description: z.string().optional().describe("Dashboard description"),
+        sharePermissions: z.array(z.record(z.any())).optional().describe("Share permissions array"),
+        editPermissions: z.array(z.record(z.any())).optional().describe("Edit permissions array"),
+        dashboardPayload: z.record(z.any()).optional().describe("Raw dashboard payload override"),
+        // gadgets
+        gadgetPayload: z.record(z.any()).optional().describe("Gadget payload for add/update"),
+        // properties
+        propertyValue: z.record(z.any()).optional().describe("Value for dashboard item property"),
+        // copy options
+        extendAdminPermissions: z.boolean().optional(),
+      },
+      async (input) => {
+        if (input.action === "/help") {
+          const helpText = `Supported dashboard actions:\n\n` +
+            `- listDashboards | searchDashboards [filter,startAt,maxResults]\n` +
+            `- getDashboard (id)\n` +
+            `- createDashboard (name, description?, sharePermissions[], editPermissions[])\n` +
+            `- updateDashboard (id, name/description/permissions or dashboardPayload)\n` +
+            `- deleteDashboard (id)\n` +
+            `- getAvailableGadgets\n` +
+            `- getGadgets (dashboardId)\n` +
+            `- addGadget (dashboardId, gadgetPayload)\n` +
+            `- updateGadget (dashboardId, gadgetId, gadgetPayload)\n` +
+            `- removeGadget (dashboardId, gadgetId)\n` +
+            `- getDashboardItemPropertyKeys (dashboardId, itemId)\n` +
+            `- getDashboardItemProperty (dashboardId, itemId, propertyKey)\n` +
+            `- setDashboardItemProperty (dashboardId, itemId, propertyKey, propertyValue)\n` +
+            `- deleteDashboardItemProperty (dashboardId, itemId, propertyKey)\n` +
+            `- copyDashboard (id, dashboardPayload, extendAdminPermissions?)`;
+          return { content: [{ type: "text", text: helpText }] };
+        }
+
+        const action = input.action as z.infer<typeof DashboardActionEnum>;
+        const getDashId = () => (input.id || input.dashboardId) as string;
+
+        switch (action) {
+          case "listDashboards": {
+            const page = await this.jiraClient.listDashboards({ filter: input.filter, startAt: input.startAt, maxResults: input.maxResults });
+            return { content: [{ type: "text", text: `Found ${page.total ?? page.dashboards?.length ?? 0} dashboards.` }], data: page };
+          }
+          case "searchDashboards": {
+            const page = await this.jiraClient.searchDashboards({ filter: input.filter, startAt: input.startAt, maxResults: input.maxResults });
+            return { content: [{ type: "text", text: `Search returned ${page.total ?? page.dashboards?.length ?? 0} dashboards.` }], data: page };
+          }
+          case "getDashboard": {
+            const id = getDashId();
+            if (!id) throw new Error("getDashboard requires id");
+            const dash = await this.jiraClient.getDashboard(id);
+            return { content: [{ type: "text", text: `Dashboard: ${dash.name} (${dash.id})` }], data: dash };
+          }
+          case "createDashboard": {
+            const payload = input.dashboardPayload ?? {
+              name: input.name,
+              description: input.description,
+              sharePermissions: input.sharePermissions,
+              editPermissions: input.editPermissions,
+            };
+            // Sanitize shares: remove public/global entries that Jira may reject
+            if (Array.isArray((payload as any).sharePermissions)) {
+              (payload as any).sharePermissions = (payload as any).sharePermissions.filter((p: any) => {
+                const t = String(p?.type || '').toLowerCase();
+                return t !== 'global' && t !== 'public';
+              });
+            }
+            if (!payload.name) throw new Error("createDashboard requires name");
+            const created = await this.jiraClient.createDashboard(payload);
+            return { content: [{ type: "text", text: `Dashboard created: ${created.name} (${created.id})` }], data: created };
+          }
+          case "updateDashboard": {
+            const id = getDashId();
+            if (!id) throw new Error("updateDashboard requires id");
+            const payload = input.dashboardPayload ?? {
+              name: input.name,
+              description: input.description,
+              sharePermissions: input.sharePermissions,
+              editPermissions: input.editPermissions,
+            };
+            if (Array.isArray((payload as any).sharePermissions)) {
+              (payload as any).sharePermissions = (payload as any).sharePermissions.filter((p: any) => {
+                const t = String(p?.type || '').toLowerCase();
+                return t !== 'global' && t !== 'public';
+              });
+            }
+            const updated = await this.jiraClient.updateDashboard(id, payload);
+            return { content: [{ type: "text", text: `Dashboard updated: ${updated.name} (${updated.id})` }], data: updated };
+          }
+          case "deleteDashboard": {
+            const id = getDashId();
+            if (!id) throw new Error("deleteDashboard requires id");
+            await this.jiraClient.deleteDashboard(id);
+            return { content: [{ type: "text", text: `Dashboard ${id} deleted.` }] };
+          }
+          case "getAvailableGadgets": {
+            const gadgets = await this.jiraClient.getAvailableGadgets();
+            return { content: [{ type: "text", text: `Available gadgets: ${Array.isArray(gadgets) ? gadgets.length : "(see data)"}` }], data: gadgets };
+          }
+          case "getGadgets": {
+            const id = getDashId();
+            if (!id) throw new Error("getGadgets requires dashboardId");
+            const list = await this.jiraClient.getGadgets(id);
+            return { content: [{ type: "text", text: `Dashboard ${id} gadgets: ${Array.isArray(list) ? list.length : "(see data)"}` }], data: list };
+          }
+          case "addGadget": {
+            const id = getDashId();
+            if (!id) throw new Error("addGadget requires dashboardId");
+            if (!input.gadgetPayload) throw new Error("addGadget requires gadgetPayload");
+            const added = await this.jiraClient.addGadget(id, input.gadgetPayload);
+            return { content: [{ type: "text", text: `Gadget added to ${id}.` }], data: added };
+          }
+          case "updateGadget": {
+            const id = getDashId();
+            if (!id) throw new Error("updateGadget requires dashboardId");
+            if (!input.gadgetId) throw new Error("updateGadget requires gadgetId");
+            if (!input.gadgetPayload) throw new Error("updateGadget requires gadgetPayload");
+            const updated = await this.jiraClient.updateGadget(id, input.gadgetId, input.gadgetPayload);
+            return { content: [{ type: "text", text: `Gadget ${input.gadgetId} updated on ${id}.` }], data: updated };
+          }
+          case "removeGadget": {
+            const id = getDashId();
+            if (!id) throw new Error("removeGadget requires dashboardId");
+            if (!input.gadgetId) throw new Error("removeGadget requires gadgetId");
+            await this.jiraClient.removeGadget(id, input.gadgetId);
+            return { content: [{ type: "text", text: `Gadget ${input.gadgetId} removed from ${id}.` }] };
+          }
+          case "getDashboardItemPropertyKeys": {
+            const id = getDashId();
+            if (!id || !input.itemId) throw new Error("getDashboardItemPropertyKeys requires dashboardId and itemId");
+            const keys = await this.jiraClient.getDashboardItemPropertyKeys(id, input.itemId);
+            return { content: [{ type: "text", text: `Found ${keys.keys?.length ?? 0} property keys.` }], data: keys };
+          }
+          case "getDashboardItemProperty": {
+            const id = getDashId();
+            if (!id || !input.itemId || !input.propertyKey) throw new Error("getDashboardItemProperty requires dashboardId, itemId, propertyKey");
+            const prop = await this.jiraClient.getDashboardItemProperty(id, input.itemId, input.propertyKey);
+            return { content: [{ type: "text", text: `Property ${input.propertyKey} retrieved.` }], data: prop };
+          }
+          case "setDashboardItemProperty": {
+            const id = getDashId();
+            if (!id || !input.itemId || !input.propertyKey) throw new Error("setDashboardItemProperty requires dashboardId, itemId, propertyKey");
+            if (!input.propertyValue) throw new Error("setDashboardItemProperty requires propertyValue");
+            const result = await this.jiraClient.setDashboardItemProperty(id, input.itemId, input.propertyKey, input.propertyValue);
+            return { content: [{ type: "text", text: `Property ${input.propertyKey} set.` }], data: result };
+          }
+          case "deleteDashboardItemProperty": {
+            const id = getDashId();
+            if (!id || !input.itemId || !input.propertyKey) throw new Error("deleteDashboardItemProperty requires dashboardId, itemId, propertyKey");
+            await this.jiraClient.deleteDashboardItemProperty(id, input.itemId, input.propertyKey);
+            return { content: [{ type: "text", text: `Property ${input.propertyKey} deleted.` }] };
+          }
+          case "copyDashboard": {
+            const id = getDashId();
+            if (!id) throw new Error("copyDashboard requires id");
+            if (!input.dashboardPayload) throw new Error("copyDashboard requires dashboardPayload");
+            const copy = await this.jiraClient.copyDashboard(id, input.dashboardPayload, input.extendAdminPermissions);
+            return { content: [{ type: "text", text: `Dashboard ${id} copied to ${copy.id}.` }], data: copy };
+          }
+          default:
+            throw new Error(`Unsupported dashboard action: ${action}`);
         }
       },
     );
@@ -1122,12 +1345,23 @@ export class MyMCP extends McpAgent<Env, Props> {
 
     this.server.tool(
       "startJiraSprint",
-      "Start a Jira sprint",
+      "Start a Jira sprint. Some Jira instances require name, startDate, and endDate.",
       {
         sprintId: z.number().describe("ID of the sprint to start"),
+        name: z.string().optional().describe("Sprint name (required on some instances)"),
+        startDate: z
+          .string()
+          .optional()
+          .describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
+        endDate: z
+          .string()
+          .optional()
+          .describe(
+            "End date in ISO format (e.g., 2025-11-09T00:00:00.000Z). Required on some instances. Defaults to ~2 weeks after start if omitted.",
+          ),
       },
-      async ({ sprintId }) => {
-        await this.jiraClient.startSprint(sprintId);
+      async ({ sprintId, name, startDate, endDate }) => {
+        await this.jiraClient.startSprint(sprintId, { name, startDate, endDate });
         return {
           content: [{ text: `Sprint ${sprintId} started successfully.`, type: "text" }],
         };
@@ -1136,12 +1370,21 @@ export class MyMCP extends McpAgent<Env, Props> {
 
     this.server.tool(
       "completeJiraSprint",
-      "Complete a Jira sprint",
+      "Complete a Jira sprint. Some Jira instances require name, startDate, and endDate.",
       {
         sprintId: z.number().describe("ID of the sprint to complete"),
+        name: z.string().optional().describe("Sprint name (required on some instances)"),
+        startDate: z
+          .string()
+          .optional()
+          .describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
+        endDate: z
+          .string()
+          .optional()
+          .describe("End date in ISO format (e.g., 2025-11-09T00:00:00.000Z). Required on some instances."),
       },
-      async ({ sprintId }) => {
-        await this.jiraClient.completeSprint(sprintId);
+      async ({ sprintId, name, startDate, endDate }) => {
+        await this.jiraClient.completeSprint(sprintId, { name, startDate, endDate });
         return {
           content: [{ text: `Sprint ${sprintId} completed successfully.`, type: "text" }],
         };

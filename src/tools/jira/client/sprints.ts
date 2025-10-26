@@ -18,12 +18,42 @@ export class JiraSprints extends JiraClientCore {
     return this.makeRequest<void>(`/rest/agile/1.0/sprint/${sprintId}`, 'DELETE');
   }
 
-  public async startSprint(sprintId: number): Promise<JiraSprint> {
-    return this.updateSprint(sprintId, { state: 'active', startDate: new Date().toISOString() });
+  public async startSprint(
+    sprintId: number,
+    overrides: Partial<UpdateSprintPayload> = {},
+  ): Promise<JiraSprint> {
+    const current = await this.getSprint(sprintId);
+    const startDate = overrides.startDate || current.startDate || new Date().toISOString();
+    // Default end date to two weeks after start if not provided
+    const endDate =
+      overrides.endDate ||
+      current.endDate ||
+      new Date(new Date(startDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+    const payload: Partial<UpdateSprintPayload> = {
+      name: overrides.name || current.name,
+      state: 'active',
+      startDate,
+      endDate,
+    };
+    return this.updateSprint(sprintId, payload);
   }
 
-  public async completeSprint(sprintId: number): Promise<JiraSprint> {
-    return this.updateSprint(sprintId, { state: 'closed', completeDate: new Date().toISOString() });
+  public async completeSprint(
+    sprintId: number,
+    overrides: Partial<UpdateSprintPayload> = {},
+  ): Promise<JiraSprint> {
+    const current = await this.getSprint(sprintId);
+    const startDate = overrides.startDate || current.startDate || new Date().toISOString();
+    const endDate = overrides.endDate || current.endDate || new Date().toISOString();
+    const payload: Partial<UpdateSprintPayload> = {
+      name: overrides.name || current.name,
+      state: 'closed',
+      startDate,
+      endDate,
+      completeDate: new Date().toISOString(),
+    } as any;
+    return this.updateSprint(sprintId, payload);
   }
 
   public async getSprintsForBoard(boardId: number): Promise<JiraSprint[]> {
@@ -41,6 +71,8 @@ export class JiraSprints extends JiraClientCore {
   }
 
   public async moveIssuesToBacklog(boardId: number, issueIdsOrKeys: string[]): Promise<void> {
-    await this.makeRequest<void>(`/rest/agile/1.0/backlog/issue`, 'POST', { issues: issueIdsOrKeys, boardId: boardId });
+    await this.makeRequest<void>(`/rest/agile/1.0/backlog/issue?boardId=${encodeURIComponent(String(boardId))}`, 'POST', {
+      issues: issueIdsOrKeys,
+    });
   }
 }

@@ -97,21 +97,19 @@ export class JiraIssues extends JiraClientCore {
   }
 
   public async searchIssues(jql: string, options: JiraSearchIssuesOptions = {}): Promise<JiraIssueSearchResult> {
-    const params = new URLSearchParams();
-    const fields = normalizeList(options.fields);
-    const expand = normalizeList(options.expand);
-    const properties = normalizeList(options.properties);
+    // Use the new Jira search endpoint which requires a JSON body
+    const payload: Record<string, unknown> = {
+      jql,
+      maxResults: options.maxResults ?? 50,
+    };
 
-    params.set("jql", jql);
-    params.set("maxResults", String(options.maxResults ?? 50));
+    if (options.startAt !== undefined) payload.startAt = options.startAt;
+    if (options.fields !== undefined) payload.fields = options.fields;
+    if (options.expand !== undefined) payload.expand = options.expand;
+    if (options.properties !== undefined) payload.properties = options.properties;
+    if (options.fieldsByKeys !== undefined) payload.fieldsByKeys = options.fieldsByKeys;
 
-    if (options.startAt !== undefined) params.set("startAt", String(options.startAt));
-    if (fields) params.set("fields", fields);
-    if (expand) params.set("expand", expand);
-    if (properties) params.set("properties", properties);
-    if (options.fieldsByKeys !== undefined) params.set("fieldsByKeys", String(options.fieldsByKeys));
-
-    return this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search?${params.toString()}`);
+    return this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search/jql`, "POST", payload);
   }
 
   public async getTransitions(issueIdOrKey: string): Promise<JiraTransitionsResponse> {
