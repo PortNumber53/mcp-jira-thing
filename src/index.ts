@@ -448,11 +448,11 @@ export class MyMCP extends McpAgent<Env, Props> {
           .optional()
           .describe("Comment text or Atlassian document body."),
         // Comment list and retrieval
-        orderBy: z
-          .string()
+        orderBy: z.string().optional().describe("Order comments by 'created' or 'updated' (Jira may also accept createdDate/updatedDate)."),
+        ids: z
+          .array(z.union([z.string(), z.number()]))
           .optional()
-          .describe("Order comments by 'created' or 'updated' (Jira may also accept createdDate/updatedDate)."),
-        ids: z.array(z.union([z.string(), z.number()])).optional().describe("List of comment IDs for getCommentsByIds."),
+          .describe("List of comment IDs for getCommentsByIds."),
         // Comment write options
         visibility: z
           .object({
@@ -463,14 +463,19 @@ export class MyMCP extends McpAgent<Env, Props> {
           .optional()
           .describe("Visibility restrictions for the comment."),
         commentProperties: z
-          .array(z.record(z.any()))
+          .array(
+            z.object({
+              key: z.string().describe("Key used when storing the comment property."),
+              value: z
+                .union([z.string(), z.number(), z.boolean(), z.null(), z.record(z.unknown())])
+                .optional()
+                .describe("Optional value stored for the property key."),
+            }),
+          )
           .optional()
           .describe("Arbitrary properties to attach to the comment."),
         notifyUsers: z.boolean().optional().describe("Notify users when updating a comment."),
-        overrideEditableFlag: z
-          .boolean()
-          .optional()
-          .describe("Override editable flag when updating a comment (admin use)."),
+        overrideEditableFlag: z.boolean().optional().describe("Override editable flag when updating a comment (admin use)."),
         labels: z.array(z.string()).optional().describe("Labels for label actions."),
         filename: z.string().optional().describe("Filename when uploading an attachment."),
         fileBase64: z.string().optional().describe("Base64-encoded file contents for addAttachment."),
@@ -1575,7 +1580,7 @@ export class MyMCP extends McpAgent<Env, Props> {
         async ({ prompt, steps }) => {
           const response = await this.env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
             prompt,
-            steps,
+            num_steps: steps,
           });
 
           return {

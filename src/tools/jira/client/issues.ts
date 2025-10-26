@@ -42,6 +42,15 @@ function normalizeList(value?: string | string[]): string | undefined {
   return value;
 }
 
+function shouldFallbackToLegacySearch(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message ?? "";
+  return message.includes(" 404 ") || message.includes(" 405 ");
+}
+
 interface JiraTransition {
   id: string;
   name: string;
@@ -97,19 +106,29 @@ export class JiraIssues extends JiraClientCore {
   }
 
   public async searchIssues(jql: string, options: JiraSearchIssuesOptions = {}): Promise<JiraIssueSearchResult> {
-    // Use the new Jira search endpoint which requires a JSON body
-    const payload: Record<string, unknown> = {
-      jql,
-      maxResults: options.maxResults ?? 50,
-    };
+	    const params = new URLSearchParams();
+	    const fields = normalizeList(options.fields);
+	    const expand = normalizeList(options.expand);
+	    const properties = normalizeList(options.properties);
 
-    if (options.startAt !== undefined) payload.startAt = options.startAt;
-    if (options.fields !== undefined) payload.fields = options.fields;
-    if (options.expand !== undefined) payload.expand = options.expand;
-    if (options.properties !== undefined) payload.properties = options.properties;
-    if (options.fieldsByKeys !== undefined) payload.fieldsByKeys = options.fieldsByKeys;
+	    params.set("jql", jql);
+	    if (options.maxResults !== undefined) params.set("maxResults", String(options.maxResults));
+	    if (options.startAt !== undefined) params.set("startAt", String(options.startAt));
+	    if (fields) params.set("fields", fields);
+	    if (expand) params.set("expand", expand);
+	    if (properties) params.set("properties", properties);
+	    if (options.fieldsByKeys !== undefined) params.set("fieldsByKeys", String(options.fieldsByKeys));
 
-    return this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search/jql`, "POST", payload);
+	    const query = params.toString();
+
+	    try {
+	      return await this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search/jql?${query}`);
+	    } catch (error) {
+	      if (shouldFallbackToLegacySearch(error)) {
+	        return this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search?${query}`);
+	      }
+	      throw error;
+	    }
   }
 
   public async getTransitions(issueIdOrKey: string): Promise<JiraTransitionsResponse> {
@@ -185,8 +204,7 @@ export class JiraIssues extends JiraClientCore {
     if (options.properties) payload.properties = options.properties;
     const params = new URLSearchParams();
     if (options.notifyUsers !== undefined) params.set("notifyUsers", String(options.notifyUsers));
-    if (options.overrideEditableFlag !== undefined)
-      params.set("overrideEditableFlag", String(options.overrideEditableFlag));
+    if (options.overrideEditableFlag !== undefined) params.set("overrideEditableFlag", String(options.overrideEditableFlag));
     const expand = normalizeList(options.expand);
     if (expand) params.set("expand", expand);
     const query = params.toString();
