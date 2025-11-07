@@ -20,7 +20,7 @@ func (s *stubUserClient) UpsertGitHubUser(ctx context.Context, user models.GitHu
 	return nil
 }
 
-func (s *stubUserClient) UpsertUserSettings(ctx context.Context, email, baseURL, apiKey string) error {
+func (s *stubUserClient) UpsertUserSettings(ctx context.Context, userEmail, baseURL, jiraEmail, apiKey string) error {
 	return nil
 }
 

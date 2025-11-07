@@ -309,9 +309,10 @@ func (s *Store) UpsertGoogleUser(ctx context.Context, user models.GoogleAuthUser
 }
 
 // UpsertUserSettings ensures that a Jira settings row exists for the given
-// email address and base URL. It will create or update the record in the
-// users_settings table identified by (user_id, jira_base_url).
-func (s *Store) UpsertUserSettings(ctx context.Context, email, baseURL, apiKey string) error {
+// owning user email address and base URL. JiraEmail may differ from userEmail
+// and is stored as-is in users_settings. It will create or update the record
+// in the users_settings table identified by (user_id, jira_base_url).
+func (s *Store) UpsertUserSettings(ctx context.Context, userEmail, baseURL, jiraEmail, apiKey string) error {
 	if s == nil || s.db == nil {
 		return errors.New("store: db cannot be nil")
 	}
@@ -320,10 +321,10 @@ func (s *Store) UpsertUserSettings(ctx context.Context, email, baseURL, apiKey s
 	if err := s.db.QueryRowContext(
 		ctx,
 		`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
-		email,
+		userEmail,
 	).Scan(&userID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("store: no local user found for email=%s", email)
+			return fmt.Errorf("store: no local user found for email=%s", userEmail)
 		}
 		return fmt.Errorf("store: lookup user by email: %w", err)
 	}
@@ -338,7 +339,7 @@ func (s *Store) UpsertUserSettings(ctx context.Context, email, baseURL, apiKey s
 		     updated_at = now()`,
 		userID,
 		baseURL,
-		email,
+		jiraEmail,
 		apiKey,
 	); err != nil {
 		return fmt.Errorf("store: upsert users_settings: %w", err)

@@ -383,16 +383,22 @@ export default {
           return jsonResponse({ error: "Missing required fields" }, { status: 400 });
         }
 
+        const payload: Record<string, unknown> = {
+          jira_base_url: body.jira_base_url,
+          jira_email: body.jira_email,
+          atlassian_api_key: body.atlassian_api_key,
+        };
+
+        if (session.email) {
+          payload.user_email = session.email;
+        }
+
         const upstreamResp = await fetch(backendUrl.toString(), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            jira_base_url: body.jira_base_url,
-            jira_email: body.jira_email,
-            atlassian_api_key: body.atlassian_api_key,
-          }),
+          body: JSON.stringify(payload),
         });
 
         const text = await upstreamResp.text();

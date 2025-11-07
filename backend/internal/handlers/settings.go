@@ -13,7 +13,7 @@ import (
 // UserSettingsStore defines the behaviour required from the storage client
 // backing the Jira user settings handler.
 type UserSettingsStore interface {
-	UpsertUserSettings(ctx context.Context, email, baseURL, apiKey string) error
+	UpsertUserSettings(ctx context.Context, userEmail, baseURL, jiraEmail, apiKey string) error
 	ListUserSettings(ctx context.Context, email string) ([]models.JiraUserSettings, error)
 }
 
@@ -21,6 +21,7 @@ type jiraSettingsPayload struct {
 	JiraBaseURL     string `json:"jira_base_url"`
 	JiraEmail       string `json:"jira_email"`
 	AtlassianAPIKey string `json:"atlassian_api_key"`
+	UserEmail       string `json:"user_email,omitempty"`
 }
 
 // UserSettings creates an HTTP handler that upserts Jira settings for a user.
@@ -37,15 +38,21 @@ func UserSettings(store UserSettingsStore) http.HandlerFunc {
 				return
 			}
 
-			if payload.JiraBaseURL == "" || payload.JiraEmail == "" || payload.AtlassianAPIKey == "" {
-				log.Printf("UserSettings: missing required fields (base_url=%q, email=%q, api_key_empty=%t)",
-					payload.JiraBaseURL, payload.JiraEmail, payload.AtlassianAPIKey == "")
+			// userEmail identifies the owning user (from session, not the Jira email).
+			userEmail := strings.TrimSpace(payload.UserEmail)
+			if userEmail == "" {
+				userEmail = strings.TrimSpace(payload.JiraEmail)
+			}
+
+			if payload.JiraBaseURL == "" || userEmail == "" || payload.JiraEmail == "" || payload.AtlassianAPIKey == "" {
+				log.Printf("UserSettings: missing required fields (base_url=%q, user_email=%q, jira_email=%q, api_key_empty=%t)",
+					payload.JiraBaseURL, userEmail, payload.JiraEmail, payload.AtlassianAPIKey == "")
 				http.Error(w, "missing required fields", http.StatusBadRequest)
 				return
 			}
 
-			if err := store.UpsertUserSettings(r.Context(), payload.JiraEmail, payload.JiraBaseURL, payload.AtlassianAPIKey); err != nil {
-				log.Printf("UserSettings: failed to persist settings for email=%s: %v", payload.JiraEmail, err)
+			if err := store.UpsertUserSettings(r.Context(), userEmail, payload.JiraBaseURL, payload.JiraEmail, payload.AtlassianAPIKey); err != nil {
+				log.Printf("UserSettings: failed to persist settings for user_email=%s jira_email=%s: %v", userEmail, payload.JiraEmail, err)
 				http.Error(w, "failed to persist Jira settings", http.StatusBadGateway)
 				return
 			}
