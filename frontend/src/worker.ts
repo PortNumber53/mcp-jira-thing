@@ -337,6 +337,8 @@ export default {
 		authorizeUrl.searchParams.set("response_type", "code");
 		authorizeUrl.searchParams.set("scope", "openid email profile");
 		authorizeUrl.searchParams.set("state", nonce);
+		// Always show the Google account chooser so you can switch accounts
+		authorizeUrl.searchParams.set("prompt", "select_account");
 
 		const response = new Response(null, {
 			status: 302,
