@@ -12,13 +12,23 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/joho/godotenv"
 
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/config"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/httpserver"
+	"github.com/PortNumber53/mcp-jira-thing/backend/internal/migrations"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/store"
 )
 
 func main() {
+	// Best-effort: load environment variables from .env-style files in local
+	// development. These calls are safe to ignore in production environments.
+	_ = godotenv.Load(
+		"../.env",
+		"../.dev.vars",
+		".env",
+	)
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load configuration: %v", err)
@@ -40,12 +50,16 @@ func main() {
 		log.Fatalf("failed to ping database: %v", err)
 	}
 
+	if err := migrations.Up(db); err != nil {
+		log.Fatalf("failed to apply database migrations: %v", err)
+	}
+
 	store, err := store.New(db)
 	if err != nil {
 		log.Fatalf("failed to create store: %v", err)
 	}
 
-	srv := httpserver.New(cfg, store)
+	srv := httpserver.New(cfg, store, store, store)
 
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

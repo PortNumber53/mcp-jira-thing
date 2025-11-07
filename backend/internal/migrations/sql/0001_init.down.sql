@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS users_settings;
+DROP TABLE IF EXISTS users_oauths;
+DROP TABLE IF EXISTS users;

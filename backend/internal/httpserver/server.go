@@ -17,8 +17,8 @@ type Server struct {
 	httpServer *http.Server
 }
 
-// New constructs an HTTP server using the provided configuration and user client.
-func New(cfg config.Config, userClient handlers.UserLister) *Server {
+// New constructs an HTTP server using the provided configuration and storage clients.
+func New(cfg config.Config, userClient handlers.UserLister, authStore handlers.GitHubAuthStore, settingsStore handlers.UserSettingsStore) *Server {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
@@ -27,6 +27,8 @@ func New(cfg config.Config, userClient handlers.UserLister) *Server {
 
 	router.Get("/healthz", handlers.Health)
 	router.Get("/api/users", handlers.Users(userClient))
+	router.Post("/api/auth/github", handlers.GitHubAuth(authStore))
+	router.Post("/api/settings/jira", handlers.UserSettings(settingsStore))
 
 	srv := &http.Server{
 		Addr:         cfg.ServerAddress,

@@ -9,3 +9,8 @@ binding = "ASSETS"
 
 [build]
 command = "npm run build"
+
+[vars]
+# Base URL of the Go backend that manages the multi-tenant Xata database.
+# Override this per-environment as needed (e.g. via Wrangler environments or secrets).
+BACKEND_BASE_URL = "http://localhost:8080"

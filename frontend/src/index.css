@@ -16,6 +16,7 @@
   --app-card-border: rgba(148, 163, 184, 0.35);
   --app-accent-color: #2563eb;
   --app-accent-color-hover: #1d4ed8;
+  --app-shell-border: rgba(148, 163, 184, 0.45);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -32,9 +33,9 @@ body {
 }
 
 #root {
-  max-width: 960px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 3rem 2rem 4rem;
+  padding: 0 1.75rem;
 }
 
 a {
@@ -48,6 +49,7 @@ a {
     --app-muted-color: #475569;
     --app-card-bg: rgba(255, 255, 255, 0.9);
     --app-card-border: rgba(148, 163, 184, 0.35);
+    --app-shell-border: rgba(148, 163, 184, 0.35);
   }
 
   body {

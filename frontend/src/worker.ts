@@ -39,6 +39,7 @@ export interface Env {
   GITHUB_CLIENT_SECRET: string;
   COOKIE_SECRET?: string;
   SESSION_SECRET?: string;
+  BACKEND_BASE_URL?: string;
 }
 
 const keyCache = new Map<string, Promise<CryptoKey>>();
@@ -312,6 +313,64 @@ export default {
       return response;
     }
 
+    if (url.pathname === "/api/settings/jira" && request.method === "POST") {
+      const session = await readSession(request, env);
+      if (!session) {
+        return jsonResponse({ error: "Not authenticated" }, { status: 401 });
+      }
+
+      if (!env.BACKEND_BASE_URL) {
+        return jsonResponse({ error: "Backend is not configured" }, { status: 500 });
+      }
+
+      let body: { jira_base_url?: string; jira_email?: string; atlassian_api_key?: string };
+      try {
+        body = (await request.json()) as typeof body;
+      } catch (error) {
+        console.error("Failed to parse Jira settings payload", error);
+        return jsonResponse({ error: "Invalid JSON payload" }, { status: 400 });
+      }
+
+      if (!body.jira_base_url || !body.jira_email || !body.atlassian_api_key) {
+        return jsonResponse({ error: "Missing required fields" }, { status: 400 });
+      }
+
+      const backendUrl = new URL("/api/settings/jira", env.BACKEND_BASE_URL);
+      const upstreamResp = await fetch(backendUrl.toString(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          github_id: session.id,
+          jira_base_url: body.jira_base_url,
+          jira_email: body.jira_email,
+          atlassian_api_key: body.atlassian_api_key,
+        }),
+      });
+
+      const text = await upstreamResp.text();
+      if (!upstreamResp.ok) {
+        console.error("Backend Jira settings save failed", {
+          status: upstreamResp.status,
+          body: text,
+        });
+        return new Response(text || "Failed to persist Jira settings", {
+          status: upstreamResp.status,
+          headers: {
+            "Content-Type": upstreamResp.headers.get("Content-Type") || "text/plain",
+          },
+        });
+      }
+
+      return new Response(text, {
+        status: upstreamResp.status,
+        headers: {
+          "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json; charset=utf-8",
+        },
+      });
+    }
+
     if (url.pathname === "/api/auth/logout" && request.method === "POST") {
       const response = jsonResponse({ ok: true });
       response.headers.append(
@@ -441,6 +500,41 @@ export default {
 
       const sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
       const redirectTarget = normalizeRedirectTarget(parsedState.redirect) || "/";
+
+      // Best-effort: synchronise the authenticated GitHub user into the backend
+      // multi-tenant database. Failures here should not block login.
+      if (env.BACKEND_BASE_URL && tokenPayload.access_token) {
+        const backendUrl = new URL("/api/auth/github", env.BACKEND_BASE_URL);
+        const scope = tokenPayload.scope ?? "";
+        const body = JSON.stringify({
+          github_id: userData.id,
+          login: userData.login,
+          name: userData.name ?? null,
+          email: primaryEmail ?? null,
+          avatar_url: userData.avatar_url ?? null,
+          access_token: tokenPayload.access_token,
+          scope: scope.length > 0 ? scope : undefined,
+        });
+
+        try {
+          const backendResponse = await fetch(backendUrl.toString(), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body,
+          });
+          if (!backendResponse.ok) {
+            const text = await backendResponse.text();
+            console.error("Backend GitHub auth sync failed", {
+              status: backendResponse.status,
+              body: text,
+            });
+          }
+        } catch (error) {
+          console.error("Failed to sync GitHub user to backend", error);
+        }
+      }
 
       const response = new Response(null, {
         status: 303,

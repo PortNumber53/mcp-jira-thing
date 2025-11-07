@@ -16,9 +16,13 @@ func (s *stubUserClient) ListUsers(ctx context.Context, limit int) ([]models.Use
 	return []models.User{{ID: "rec1"}}, nil
 }
 
+func (s *stubUserClient) UpsertGitHubUser(ctx context.Context, user models.GitHubAuthUser) error {
+	return nil
+}
+
 func TestHealthRoute(t *testing.T) {
 	cfg := config.Config{ServerAddress: ":0"}
-	server := New(cfg, &stubUserClient{})
+	server := New(cfg, &stubUserClient{}, &stubUserClient{})
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rr := httptest.NewRecorder()
