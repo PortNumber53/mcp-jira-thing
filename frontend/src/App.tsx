@@ -123,8 +123,14 @@ function App() {
     setRoute(path);
   };
 
-  const beginLogin = () => {
+  const beginLoginWithGitHub = () => {
     const loginUrl = new URL(LOGIN_ENDPOINT, window.location.origin);
+    loginUrl.searchParams.set("redirect", "/dashboard");
+    window.location.href = loginUrl.toString();
+  };
+
+  const beginLoginWithGoogle = () => {
+    const loginUrl = new URL("/api/auth/google/login", window.location.origin);
     loginUrl.searchParams.set("redirect", "/dashboard");
     window.location.href = loginUrl.toString();
   };
@@ -161,20 +167,30 @@ function App() {
       if (route === "/dashboard" || route === "/settings") {
         return (
           <div className="card card--center">
-            <p>You need to sign in with GitHub to access this page.</p>
-            <button type="button" className="button button--primary" onClick={beginLogin}>
-              Sign in with GitHub
-            </button>
+            <p>You need to sign in to access this page.</p>
+            <div className="login-buttons">
+              <button type="button" className="button button--primary" onClick={beginLoginWithGitHub}>
+                Sign in with GitHub
+              </button>
+              <button type="button" className="button" onClick={beginLoginWithGoogle}>
+                Sign in with Google
+              </button>
+            </div>
           </div>
         );
       }
 
       return (
         <div className="card card--center">
-          <p>Connect your GitHub account to manage your multi-tenant Jira instances.</p>
-          <button type="button" className="button button--primary" onClick={beginLogin}>
-            Sign in with GitHub
-          </button>
+          <p>Connect your account to manage your multi-tenant Jira instances.</p>
+          <div className="login-buttons">
+            <button type="button" className="button button--primary" onClick={beginLoginWithGitHub}>
+              Sign in with GitHub
+            </button>
+            <button type="button" className="button" onClick={beginLoginWithGoogle}>
+              Sign in with Google
+            </button>
+          </div>
         </div>
       );
     }
@@ -352,9 +368,14 @@ function App() {
             {session.status === "loading" && <span className="app-shell__status-pill">Checking session…</span>}
             {session.status === "error" && <span className="app-shell__status-pill app-shell__status-pill--error">Session error</span>}
             {session.status === "unauthenticated" && (
-              <button type="button" className="button button--primary app-shell__account-button" onClick={beginLogin}>
-                Sign in
-              </button>
+              <div className="login-buttons">
+                <button type="button" className="button button--primary app-shell__account-button" onClick={beginLoginWithGitHub}>
+                  GitHub
+                </button>
+                <button type="button" className="button app-shell__account-button" onClick={beginLoginWithGoogle}>
+                  Google
+                </button>
+              </div>
             )}
             {session.status === "authenticated" && (
               <div className="account-menu">

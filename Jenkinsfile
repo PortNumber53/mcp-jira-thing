@@ -28,6 +28,13 @@ pipeline {
       }
     }
 
+    stage('Deploy Frontend') {
+      steps {
+        // Deploy the Cloudflare Worker + SPA from the frontend directory.
+        sh 'cd frontend && npm ci && npm run deploy'
+      }
+    }
+
     stage('Archive Artifact') {
       steps {
         sh 'tar -czf backend/bin/mcp-backend.tar.gz -C backend/bin mcp-backend'
@@ -35,12 +42,19 @@ pipeline {
       }
     }
 
-    stage('Deploy') {
+    stage('Deploy Backend') {
       when {
         branch 'master'
       }
       steps {
-        sh 'scripts/deploy-backend.sh'
+        withEnv([
+          'DEPLOY_HOST=web1',
+          'DEPLOY_USER=grimlock',
+          'DEPLOY_PATH=/opt/mcp-backend',
+          'SERVICE_NAME=mcp-backend',
+        ]) {
+          sh 'scripts/deploy-backend.sh'
+        }
       }
     }
   }

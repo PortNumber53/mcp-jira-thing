@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"log"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -33,8 +34,29 @@ func Up(db *sql.DB) error {
 		return fmt.Errorf("migrations: init migrate instance: %w", err)
 	}
 
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+	// Log the current migration version before applying new ones.
+	currentVersion := uint(0)
+	if v, _, verr := m.Version(); verr == nil {
+		currentVersion = v
+		log.Printf("migrations: current database schema version: %d", v)
+	} else if verr == migrate.ErrNilVersion {
+		log.Printf("migrations: no existing migration version (fresh database)")
+	} else {
+		log.Printf("migrations: unable to determine current version: %v", verr)
+	}
+
+	if err := m.Up(); err != nil {
+		if err == migrate.ErrNoChange {
+			log.Printf("migrations: no new migrations to apply; database is up to date (version %d)", currentVersion)
+			return nil
+		}
 		return fmt.Errorf("migrations: apply: %w", err)
+	}
+
+	if v, _, err := m.Version(); err == nil {
+		log.Printf("migrations: successfully applied migrations; new schema version: %d", v)
+	} else {
+		log.Printf("migrations: applied migrations but failed to read new version: %v", err)
 	}
 
 	return nil

@@ -10,11 +10,10 @@ import (
 // UserSettingsStore defines the behaviour required from the storage client
 // backing the Jira user settings handler.
 type UserSettingsStore interface {
-	UpsertUserSettings(ctx context.Context, githubID int64, baseURL, email, apiKey string) error
+	UpsertUserSettings(ctx context.Context, email, baseURL, apiKey string) error
 }
 
 type jiraSettingsPayload struct {
-	GitHubID        int64  `json:"github_id"`
 	JiraBaseURL     string `json:"jira_base_url"`
 	JiraEmail       string `json:"jira_email"`
 	AtlassianAPIKey string `json:"atlassian_api_key"`
@@ -38,15 +37,15 @@ func UserSettings(store UserSettingsStore) http.HandlerFunc {
 			return
 		}
 
-		if payload.GitHubID == 0 || payload.JiraBaseURL == "" || payload.JiraEmail == "" || payload.AtlassianAPIKey == "" {
-			log.Printf("UserSettings: missing required fields (github_id=%d, base_url=%q, email=%q, api_key_empty=%t)",
-				payload.GitHubID, payload.JiraBaseURL, payload.JiraEmail, payload.AtlassianAPIKey == "")
+		if payload.JiraBaseURL == "" || payload.JiraEmail == "" || payload.AtlassianAPIKey == "" {
+			log.Printf("UserSettings: missing required fields (base_url=%q, email=%q, api_key_empty=%t)",
+				payload.JiraBaseURL, payload.JiraEmail, payload.AtlassianAPIKey == "")
 			http.Error(w, "missing required fields", http.StatusBadRequest)
 			return
 		}
 
-		if err := store.UpsertUserSettings(r.Context(), payload.GitHubID, payload.JiraBaseURL, payload.JiraEmail, payload.AtlassianAPIKey); err != nil {
-			log.Printf("UserSettings: failed to persist settings for github_id=%d: %v", payload.GitHubID, err)
+		if err := store.UpsertUserSettings(r.Context(), payload.JiraEmail, payload.JiraBaseURL, payload.AtlassianAPIKey); err != nil {
+			log.Printf("UserSettings: failed to persist settings for email=%s: %v", payload.JiraEmail, err)
 			http.Error(w, "failed to persist Jira settings", http.StatusBadGateway)
 			return
 		}

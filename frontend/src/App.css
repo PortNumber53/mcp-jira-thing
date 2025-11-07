@@ -421,6 +421,15 @@
   margin-top: 0.5rem;
 }
 
+/* === Login buttons ======================================================= */
+
+.login-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
 @media (max-width: 768px) {
   .app-shell__header-inner {
     gap: 0.9rem;
