@@ -14,5 +14,3 @@ BACKEND_ADDR=:18003
 #XATA_DATABASE=your_database
 #XATA_BRANCH=main
 #XATA_REGION=us-east-1
-
-
