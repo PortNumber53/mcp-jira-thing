@@ -3,7 +3,7 @@
 # your environment.
 
 # Address the backend HTTP server should bind to.
-BACKEND_ADDR=:8080
+BACKEND_ADDR=:18003
 
 # Xata Postgres connection. Either provide DATABASE_URL directly or the
 # individual XATA_* variables below. DATABASE_URL takes precedence.
