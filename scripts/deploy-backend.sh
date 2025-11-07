@@ -57,8 +57,15 @@ if [[ -f "$SYSTEMD_UNIT_LOCAL" ]]; then
   TMP_UNIT="/tmp/mcp-backend.service.$$"
   scp "$SYSTEMD_UNIT_LOCAL" "$DEPLOY_USER@$DEPLOY_HOST:$TMP_UNIT"
 
-  echo "[deploy] Installing systemd unit to /etc/systemd/system/mcp-backend.service"
-  ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mv '$TMP_UNIT' '/etc/systemd/system/mcp-backend.service'; sudo chown root:root '/etc/systemd/system/mcp-backend.service'; sudo chmod 644 '/etc/systemd/system/mcp-backend.service'; sudo systemctl daemon-reload"
+  # Use SERVICE_NAME (minus optional .service suffix) as the unit base name, defaulting to mcp-backend.
+  UNIT_BASE_NAME="${SERVICE_NAME%%.service}"
+  if [[ -z "$UNIT_BASE_NAME" ]]; then
+    UNIT_BASE_NAME="mcp-backend"
+  fi
+  UNIT_PATH="/etc/systemd/system/${UNIT_BASE_NAME}.service"
+
+  echo "[deploy] Installing systemd unit to $UNIT_PATH"
+  ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mv '$TMP_UNIT' '$UNIT_PATH'; sudo chown root:root '$UNIT_PATH'; sudo chmod 644 '$UNIT_PATH'; sudo systemctl daemon-reload"
 else
   echo "[deploy] WARNING: $SYSTEMD_UNIT_LOCAL not found; skipping systemd unit deployment" >&2
 fi
