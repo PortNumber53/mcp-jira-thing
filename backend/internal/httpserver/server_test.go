@@ -24,6 +24,14 @@ func (s *stubUserClient) UpsertUserSettings(ctx context.Context, email, baseURL,
 	return nil
 }
 
+func (s *stubUserClient) UpsertGoogleUser(ctx context.Context, user models.GoogleAuthUser) error {
+	return nil
+}
+
+func (s *stubUserClient) ListUserSettings(ctx context.Context, email string) ([]models.JiraUserSettings, error) {
+	return nil, nil
+}
+
 func TestHealthRoute(t *testing.T) {
 	cfg := config.Config{ServerAddress: ":0"}
 	stub := &stubUserClient{}

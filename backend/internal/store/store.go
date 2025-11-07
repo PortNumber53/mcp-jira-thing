@@ -195,6 +195,119 @@ func (s *Store) UpsertGitHubUser(ctx context.Context, user models.GitHubAuthUser
 	return nil
 }
 
+// UpsertGoogleUser ensures that the given Google-authenticated user exists in
+// the local users and users_oauths tables. It merges identities by email so a
+// single logical user can have multiple OAuth methods attached.
+func (s *Store) UpsertGoogleUser(ctx context.Context, user models.GoogleAuthUser) error {
+	if s == nil || s.db == nil {
+		return errors.New("store: db cannot be nil")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: begin upsert google user tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var userID int64
+	var existingEmail sql.NullString
+	var existingAvatar sql.NullString
+	var foundByEmail bool
+
+	if user.Email != nil && *user.Email != "" {
+		if err := tx.QueryRowContext(
+			ctx,
+			`SELECT id, email, avatar_url FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+			*user.Email,
+		).Scan(&userID, &existingEmail, &existingAvatar); err == nil {
+			foundByEmail = true
+		} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("store: lookup user by email: %w", err)
+		}
+	}
+
+	accountID := user.Sub
+	login := accountID
+	if user.Email != nil && *user.Email != "" {
+		login = *user.Email
+	}
+
+	if !foundByEmail {
+		// Create or update a user row keyed by (provider, provider_account_id).
+		if err := tx.QueryRowContext(
+			ctx,
+			`INSERT INTO users (login, name, email, avatar_url, provider, provider_account_id)
+			 VALUES ($1, $2, $3, $4, $5, $6)
+			 ON CONFLICT (provider, provider_account_id) DO UPDATE
+			 SET login = EXCLUDED.login,
+			     name = EXCLUDED.name,
+			     email = EXCLUDED.email,
+			     avatar_url = EXCLUDED.avatar_url,
+			     updated_at = now()
+			 RETURNING id`,
+			login,
+			user.Name,
+			user.Email,
+			user.AvatarURL,
+			"google",
+			accountID,
+		).Scan(&userID); err != nil {
+			return fmt.Errorf("store: upsert users by provider/account (google): %w", err)
+		}
+	} else {
+		// Merge into the existing user row found by email and set/refresh
+		// Google-specific fields only when canonical identity is not set.
+		if _, err := tx.ExecContext(
+			ctx,
+			`UPDATE users
+			 SET login = $1,
+			     name = $2,
+			     email = $3,
+			     avatar_url = COALESCE(avatar_url, $4),
+			     provider = CASE WHEN provider = '' THEN $5 ELSE provider END,
+			     provider_account_id = CASE WHEN provider_account_id = '' THEN $6 ELSE provider_account_id END,
+			     updated_at = now()
+			 WHERE id = $7`,
+			login,
+			user.Name,
+			user.Email,
+			user.AvatarURL,
+			"google",
+			accountID,
+			userID,
+		); err != nil {
+			return fmt.Errorf("store: update existing user by email (google): %w", err)
+		}
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO users_oauths (user_id, provider, provider_account_id, access_token, scope, avatar_url)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT (provider, provider_account_id) DO UPDATE
+		 SET access_token = EXCLUDED.access_token,
+		     scope = EXCLUDED.scope,
+		     avatar_url = EXCLUDED.avatar_url,
+		     updated_at = now()`,
+		userID,
+		"google",
+		accountID,
+		user.AccessToken,
+		"",
+		user.AvatarURL,
+	); err != nil {
+		return fmt.Errorf("store: upsert users_oauths (google): %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: commit upsert google user tx: %w", err)
+	}
+
+	return nil
+}
+
 // UpsertUserSettings ensures that a Jira settings row exists for the given
 // email address and base URL. It will create or update the record in the
 // users_settings table identified by (user_id, jira_base_url).
@@ -232,6 +345,58 @@ func (s *Store) UpsertUserSettings(ctx context.Context, email, baseURL, apiKey s
 	}
 
 	return nil
+}
+
+// ListUserSettings returns all Jira settings records associated with the given
+// email address. Sensitive fields such as jira_api_token are intentionally
+// omitted from the returned data.
+func (s *Store) ListUserSettings(ctx context.Context, email string) ([]models.JiraUserSettings, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store: db cannot be nil")
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT
+  us.jira_base_url,
+  us.jira_email,
+  us.jira_cloud_id,
+  us.is_default
+FROM users_settings us
+JOIN users u ON us.user_id = u.id
+WHERE LOWER(u.email) = LOWER($1)
+ORDER BY us.is_default DESC, us.jira_base_url ASC
+`, email)
+	if err != nil {
+		return nil, fmt.Errorf("store: list users_settings by email: %w", err)
+	}
+	defer rows.Close()
+
+	var settings []models.JiraUserSettings
+	for rows.Next() {
+		var (
+			baseURL string
+			jiraEmail string
+			cloudID sql.NullString
+			isDefault bool
+		)
+
+		if err := rows.Scan(&baseURL, &jiraEmail, &cloudID, &isDefault); err != nil {
+			return nil, fmt.Errorf("store: scan users_settings: %w", err)
+		}
+
+		settings = append(settings, models.JiraUserSettings{
+			JiraBaseURL: baseURL,
+			JiraEmail:   jiraEmail,
+			JiraCloudID: nullStringPtr(cloudID),
+			IsDefault:   isDefault,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate users_settings: %w", err)
+	}
+
+	return settings, nil
 }
 
 func nullStringPtr(value sql.NullString) *string {

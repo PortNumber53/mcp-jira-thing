@@ -358,7 +358,7 @@ export default {
 		return response;
 	}
 
-    if (url.pathname === "/api/settings/jira" && request.method === "POST") {
+    if (url.pathname === "/api/settings/jira") {
       const session = await readSession(request, env);
       if (!session) {
         return jsonResponse({ error: "Not authenticated" }, { status: 401 });
@@ -368,51 +368,88 @@ export default {
         return jsonResponse({ error: "Backend is not configured" }, { status: 500 });
       }
 
-      let body: { jira_base_url?: string; jira_email?: string; atlassian_api_key?: string };
-      try {
-        body = (await request.json()) as typeof body;
-      } catch (error) {
-        console.error("Failed to parse Jira settings payload", error);
-        return jsonResponse({ error: "Invalid JSON payload" }, { status: 400 });
-      }
-
-      if (!body.jira_base_url || !body.jira_email || !body.atlassian_api_key) {
-        return jsonResponse({ error: "Missing required fields" }, { status: 400 });
-      }
-
       const backendUrl = new URL("/api/settings/jira", env.BACKEND_BASE_URL);
-      const upstreamResp = await fetch(backendUrl.toString(), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jira_base_url: body.jira_base_url,
-          jira_email: body.jira_email,
-          atlassian_api_key: body.atlassian_api_key,
-        }),
-      });
 
-      const text = await upstreamResp.text();
-      if (!upstreamResp.ok) {
-        console.error("Backend Jira settings save failed", {
-          status: upstreamResp.status,
-          body: text,
+      if (request.method === "POST") {
+        let body: { jira_base_url?: string; jira_email?: string; atlassian_api_key?: string };
+        try {
+          body = (await request.json()) as typeof body;
+        } catch (error) {
+          console.error("Failed to parse Jira settings payload", error);
+          return jsonResponse({ error: "Invalid JSON payload" }, { status: 400 });
+        }
+
+        if (!body.jira_base_url || !body.jira_email || !body.atlassian_api_key) {
+          return jsonResponse({ error: "Missing required fields" }, { status: 400 });
+        }
+
+        const upstreamResp = await fetch(backendUrl.toString(), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            jira_base_url: body.jira_base_url,
+            jira_email: body.jira_email,
+            atlassian_api_key: body.atlassian_api_key,
+          }),
         });
-        return new Response(text || "Failed to persist Jira settings", {
+
+        const text = await upstreamResp.text();
+        if (!upstreamResp.ok) {
+          console.error("Backend Jira settings save failed", {
+            status: upstreamResp.status,
+            body: text,
+          });
+          return new Response(text || "Failed to persist Jira settings", {
+            status: upstreamResp.status,
+            headers: {
+              "Content-Type": upstreamResp.headers.get("Content-Type") || "text/plain",
+            },
+          });
+        }
+
+        return new Response(text, {
           status: upstreamResp.status,
           headers: {
-            "Content-Type": upstreamResp.headers.get("Content-Type") || "text/plain",
+            "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json; charset=utf-8",
           },
         });
       }
 
-      return new Response(text, {
-        status: upstreamResp.status,
-        headers: {
-          "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json; charset=utf-8",
-        },
-      });
+      if (request.method === "GET") {
+        const urlWithEmail = new URL(backendUrl.toString());
+        if (session.email) {
+          urlWithEmail.searchParams.set("email", session.email);
+        }
+
+        const upstreamResp = await fetch(urlWithEmail.toString(), {
+          method: "GET",
+        });
+
+        const text = await upstreamResp.text();
+        if (!upstreamResp.ok) {
+          console.error("Backend Jira settings load failed", {
+            status: upstreamResp.status,
+            body: text,
+          });
+          return new Response(text || "Failed to load Jira settings", {
+            status: upstreamResp.status,
+            headers: {
+              "Content-Type": upstreamResp.headers.get("Content-Type") || "text/plain",
+            },
+          });
+        }
+
+        return new Response(text, {
+          status: upstreamResp.status,
+          headers: {
+            "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json; charset=utf-8",
+          },
+        });
+      }
+
+      return jsonResponse({ error: "Method not allowed" }, { status: 405 });
     }
 
     if (url.pathname === "/api/auth/logout" && request.method === "POST") {

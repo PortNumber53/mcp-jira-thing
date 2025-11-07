@@ -26,6 +26,17 @@ type JiraSettingsFormState = {
   apiKey: string;
 };
 
+type JiraSettingsRecord = {
+  jira_base_url: string;
+  jira_email: string;
+  jira_cloud_id?: string | null;
+  is_default?: boolean;
+};
+
+type JiraSettingsResponse = {
+  settings?: JiraSettingsRecord[];
+};
+
 const SESSION_ENDPOINT = "/api/auth/session";
 const LOGIN_ENDPOINT = "/api/auth/login";
 const LOGOUT_ENDPOINT = "/api/auth/logout";
@@ -108,6 +119,41 @@ function App() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  // Load Jira settings when user is authenticated and navigates to /settings.
+  useEffect(() => {
+    if (session.status !== "authenticated" || route !== "/settings") {
+      return;
+    }
+
+    const loadSettings = async () => {
+      try {
+        const response = await fetch("/api/settings/jira", { method: "GET" });
+        if (!response.ok) {
+          return;
+        }
+        const data: JiraSettingsResponse = (await response.json()) as JiraSettingsResponse;
+        const records = data.settings ?? [];
+        if (records.length === 0) {
+          return;
+        }
+        const primary = records.find((item) => item.is_default) ?? records[0];
+        if (!primary) return;
+
+        setJiraSettings((prev) => ({
+          baseUrl: primary.jira_base_url,
+          email: primary.jira_email,
+          // For security reasons we do not round-trip the Atlassian API key; keep the field empty.
+          apiKey: prev.apiKey,
+        }));
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error("Failed to load Jira settings", error);
+      }
+    };
+
+    void loadSettings();
+  }, [session, route]);
 
   useEffect(() => {
     if (session.status === "authenticated" && (route === "/" || route === "")) {
