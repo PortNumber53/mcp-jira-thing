@@ -77,7 +77,7 @@ function extractFirstAppLocation(error: unknown): string | undefined {
 }
 
 export class MyMCP extends McpAgent<Env, Props> {
-	private jiraClient: JiraClient | null = null;
+  private jiraClient: JiraClient | null = null;
 
   constructor(state: DurableObjectState, env: Env) {
     super(state, env);
@@ -137,9 +137,9 @@ export class MyMCP extends McpAgent<Env, Props> {
     // Jira Tools
     this.server.tool("getProjects", "Get a list of all Jira projects", {}, async () => {
       const jiraClient = await this.getJiraClient();
-			const projects = await jiraClient.getProjects();
-			console.log("JiraProjects.getProjects raw result:", projects);
-			const projectsText = projects.map((project: any) => `${project.name} (${project.key})`).join("\n");
+      const projects = await jiraClient.getProjects();
+      console.log("JiraProjects.getProjects raw result:", projects);
+      const projectsText = projects.map((project: any) => `${project.name} (${project.key})`).join("\n");
       console.log("Formatted projectsText for tool output:", projectsText);
       return {
         content: [{ text: `Jira Projects:\n${projectsText}`, type: "text" }],
@@ -287,7 +287,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       async ({ projectIdOrKey, expand }) => {
         try {
           const jiraClient = await this.getJiraClient();
-				const project = await jiraClient.getProject(projectIdOrKey, expand);
+          const project = await jiraClient.getProject(projectIdOrKey, expand);
 
           // Create a simplified project object for machine parsing
           const projectData = {
@@ -359,7 +359,7 @@ export class MyMCP extends McpAgent<Env, Props> {
         try {
           // Get all issue types available
           const jiraClient = await this.getJiraClient();
-				const issueTypes = await jiraClient.getProjectIssueTypes(projectIdOrKey);
+          const issueTypes = await jiraClient.getProjectIssueTypes(projectIdOrKey);
 
           if (!issueTypes || issueTypes.length === 0) {
             return {
@@ -1005,7 +1005,7 @@ export class MyMCP extends McpAgent<Env, Props> {
           case "listIssueTypes": {
             if (input.projectKey) {
               const jiraClient = await this.getJiraClient();
-					const issueTypes = await jiraClient.getProjectIssueTypes(input.projectKey);
+              const issueTypes = await jiraClient.getProjectIssueTypes(input.projectKey);
               const standardTypes = issueTypes.filter((type: any) => type && type.subtask !== true);
               const subtaskTypes = issueTypes.filter((type: any) => type && type.subtask === true);
               return {
@@ -1026,7 +1026,7 @@ export class MyMCP extends McpAgent<Env, Props> {
             }
 
             const jiraClient = await this.getJiraClient();
-				const issueTypes = await jiraClient.getAllIssueTypes();
+            const issueTypes = await jiraClient.getAllIssueTypes();
             return {
               content: [{ text: `Found ${issueTypes.length} issue types.`, type: "text" }],
               data: { success: true, issueTypes },
@@ -1050,8 +1050,8 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.issueTypeId) {
               throw new Error("getIssueType requires issueTypeId.");
             }
-          const jiraClient = await this.getJiraClient();
-				const issueType = await jiraClient.getIssueType(input.issueTypeId);
+            const jiraClient = await this.getJiraClient();
+            const issueType = await jiraClient.getIssueType(input.issueTypeId);
             return {
               content: [{ text: `Issue type ${issueType.name}`, type: "text" }],
               data: { success: true, issueType },
@@ -1086,8 +1086,8 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.issueTypeId) {
               throw new Error("getIssueTypeAlternatives requires issueTypeId.");
             }
-          const jiraClient = await this.getJiraClient();
-				const alternatives = await jiraClient.getAlternativeIssueTypes(input.issueTypeId);
+            const jiraClient = await this.getJiraClient();
+            const alternatives = await jiraClient.getAlternativeIssueTypes(input.issueTypeId);
             return {
               content: [{ text: `Found ${alternatives.length} alternative issue types.`, type: "text" }],
               data: { success: true, alternatives },
@@ -1119,7 +1119,7 @@ export class MyMCP extends McpAgent<Env, Props> {
         try {
           // Use the searchUsers method to find users
           const jiraClient = await this.getJiraClient();
-				const response = await jiraClient.searchUsers(query);
+          const response = await jiraClient.searchUsers(query);
 
           if (!Array.isArray(response) || response.length === 0) {
             return {
@@ -1450,7 +1450,7 @@ export class MyMCP extends McpAgent<Env, Props> {
         if (endDate) payload.endDate = endDate;
         if (goal) payload.goal = goal;
 
-			const newSprint = await jiraClient.createSprint(payload);
+        const newSprint = await jiraClient.createSprint(payload);
         return {
           content: [{ text: `Sprint created: ${newSprint.id} - ${newSprint.name}`, type: "text" }],
         };
@@ -1473,7 +1473,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ sprintId, name, startDate, endDate }) => {
         const jiraClient = await this.getJiraClient();
-			await jiraClient.startSprint(sprintId, { name, startDate, endDate });
+        await jiraClient.startSprint(sprintId, { name, startDate, endDate });
         return {
           content: [{ text: `Sprint ${sprintId} started successfully.`, type: "text" }],
         };
@@ -1491,7 +1491,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ sprintId, name, startDate, endDate }) => {
         const jiraClient = await this.getJiraClient();
-			await jiraClient.completeSprint(sprintId, { name, startDate, endDate });
+        await jiraClient.completeSprint(sprintId, { name, startDate, endDate });
         return {
           content: [{ text: `Sprint ${sprintId} completed successfully.`, type: "text" }],
         };
@@ -1506,7 +1506,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ sprintId }) => {
         const jiraClient = await this.getJiraClient();
-			const sprint = await jiraClient.getSprint(sprintId);
+        const sprint = await jiraClient.getSprint(sprintId);
         return {
           content: [{ text: `Sprint ${sprint.name} (ID: ${sprint.id}, State: ${sprint.state})`, type: "text" }],
         };
@@ -1526,7 +1526,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ sprintId, name, startDate, endDate, state, goal }) => {
         const jiraClient = await this.getJiraClient();
-			const updatedSprint = await jiraClient.updateSprint(sprintId, { name, startDate, endDate, state, goal });
+        const updatedSprint = await jiraClient.updateSprint(sprintId, { name, startDate, endDate, state, goal });
         return {
           content: [{ text: `Sprint updated: ${updatedSprint.name} (ID: ${updatedSprint.id})`, type: "text" }],
         };
@@ -1541,7 +1541,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ sprintId }) => {
         const jiraClient = await this.getJiraClient();
-			await jiraClient.deleteSprint(sprintId);
+        await jiraClient.deleteSprint(sprintId);
         return {
           content: [{ text: `Sprint ${sprintId} deleted successfully.`, type: "text" }],
         };
@@ -1556,7 +1556,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ boardId }) => {
         const jiraClient = await this.getJiraClient();
-			const sprints = await jiraClient.getSprintsForBoard(boardId);
+        const sprints = await jiraClient.getSprintsForBoard(boardId);
         const sprintsText = sprints.map((sprint) => `${sprint.name} (ID: ${sprint.id}, State: ${sprint.state})`).join("\n");
         return {
           content: [{ text: `Sprints for board ${boardId}:\n${sprintsText}`, type: "text" }],
@@ -1572,7 +1572,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ sprintId }) => {
         const jiraClient = await this.getJiraClient();
-			const issues = await jiraClient.getIssuesForSprint(sprintId);
+        const issues = await jiraClient.getIssuesForSprint(sprintId);
         const issuesText = issues.map((issue) => `${issue.key}: ${issue.fields.summary}`).join("\n");
         return {
           content: [{ text: `Issues for sprint ${sprintId}:\n${issuesText}`, type: "text" }],
@@ -1589,7 +1589,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ sprintId, issueIdsOrKeys }) => {
         const jiraClient = await this.getJiraClient();
-			await jiraClient.moveIssuesToSprint(sprintId, issueIdsOrKeys);
+        await jiraClient.moveIssuesToSprint(sprintId, issueIdsOrKeys);
         return {
           content: [{ text: `Moved issues ${issueIdsOrKeys.join(", ")} to sprint ${sprintId}.`, type: "text" }],
         };
@@ -1605,7 +1605,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ boardId, issueIdsOrKeys }) => {
         const jiraClient = await this.getJiraClient();
-			await jiraClient.moveIssuesToBacklog(boardId, issueIdsOrKeys);
+        await jiraClient.moveIssuesToBacklog(boardId, issueIdsOrKeys);
         return {
           content: [{ text: `Moved issues ${issueIdsOrKeys.join(", ")} to backlog for board ${boardId}.`, type: "text" }],
         };
@@ -1620,7 +1620,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ accountId }) => {
         const jiraClient = await this.getJiraClient();
-			const user = await jiraClient.getUser(accountId);
+        const user = await jiraClient.getUser(accountId);
         return {
           content: [{ text: `User: ${user.displayName} (Account ID: ${user.accountId}, Email: ${user.emailAddress})`, type: "text" }],
         };
@@ -1637,7 +1637,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ emailAddress, password, displayName }) => {
         const jiraClient = await this.getJiraClient();
-			const newUser = await jiraClient.createUser({ emailAddress, password, displayName });
+        const newUser = await jiraClient.createUser({ emailAddress, password, displayName });
         return {
           content: [{ text: `User created: ${newUser.displayName} (Account ID: ${newUser.accountId})`, type: "text" }],
         };
@@ -1652,7 +1652,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ accountId }) => {
         const jiraClient = await this.getJiraClient();
-			await jiraClient.deleteUser(accountId);
+        await jiraClient.deleteUser(accountId);
         return {
           content: [{ text: `User ${accountId} deleted successfully.`, type: "text" }],
         };
