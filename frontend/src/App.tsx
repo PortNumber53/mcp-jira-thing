@@ -37,6 +37,10 @@ type JiraSettingsResponse = {
   settings?: JiraSettingsRecord[];
 };
 
+type MCPSecretResponse = {
+  mcp_secret?: string | null;
+};
+
 const SESSION_ENDPOINT = "/api/auth/session";
 const LOGIN_ENDPOINT = "/api/auth/login";
 const LOGOUT_ENDPOINT = "/api/auth/logout";
@@ -68,6 +72,7 @@ function App() {
     email: "",
     apiKey: "",
   });
+  const [mcpSecret, setMcpSecret] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -128,27 +133,32 @@ function App() {
 
     const loadSettings = async () => {
       try {
-        const response = await fetch("/api/settings/jira", { method: "GET" });
-        if (!response.ok) {
-          return;
-        }
-        const data: JiraSettingsResponse = (await response.json()) as JiraSettingsResponse;
-        const records = data.settings ?? [];
-        if (records.length === 0) {
-          return;
-        }
-        const primary = records.find((item) => item.is_default) ?? records[0];
-        if (!primary) return;
+        const [settingsResp, secretResp] = await Promise.all([
+          fetch("/api/settings/jira", { method: "GET" }),
+          fetch("/api/mcp/secret", { method: "GET" }),
+        ]);
 
-        setJiraSettings((prev) => ({
-          baseUrl: primary.jira_base_url,
-          email: primary.jira_email,
-          // For security reasons we do not round-trip the Atlassian API key; keep the field empty.
-          apiKey: prev.apiKey,
-        }));
+        if (settingsResp.ok) {
+          const data: JiraSettingsResponse = (await settingsResp.json()) as JiraSettingsResponse;
+          const records = data.settings ?? [];
+          const primary = records.find((item) => item.is_default) ?? records[0];
+          if (primary) {
+            setJiraSettings((prev) => ({
+              baseUrl: primary.jira_base_url,
+              email: primary.jira_email,
+              // For security reasons we do not round-trip the Atlassian API key; keep the field empty.
+              apiKey: prev.apiKey,
+            }));
+          }
+        }
+
+        if (secretResp.ok) {
+          const data: MCPSecretResponse = (await secretResp.json()) as MCPSecretResponse;
+          setMcpSecret(data.mcp_secret ?? null);
+        }
       } catch (error) {
         // eslint-disable-next-line no-console
-        console.error("Failed to load Jira settings", error);
+        console.error("Failed to load settings", error);
       }
     };
 
@@ -325,6 +335,51 @@ function App() {
                 </button>
               </div>
             </form>
+
+            <div className="settings-form settings-form--secondary">
+              <h3 className="app__section-title">Tenant MCP Secret</h3>
+              <p className="app__status">
+                Use this secret in your MCP client configuration to identify your tenant when
+                connecting to this Jira server.
+              </p>
+              <div className="settings-form__field">
+                <span className="settings-form__label">MCP secret</span>
+                <input
+                  type="text"
+                  readOnly
+                  className="settings-form__input"
+                  value={mcpSecret ?? "Not generated yet"}
+                />
+              </div>
+              <div className="settings-form__actions">
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    const rotate = async () => {
+                      try {
+                        const response = await fetch("/api/mcp/secret", { method: "POST" });
+                        if (!response.ok) {
+                          const text = await response.text();
+                          // eslint-disable-next-line no-console
+                          console.error("Failed to rotate MCP secret", response.status, text);
+                          return;
+                        }
+                        const data: MCPSecretResponse = (await response.json()) as MCPSecretResponse;
+                        setMcpSecret(data.mcp_secret ?? null);
+                      } catch (error) {
+                        // eslint-disable-next-line no-console
+                        console.error("Failed to rotate MCP secret", error);
+                      }
+                    };
+
+                    void rotate();
+                  }}
+                >
+                  {mcpSecret ? "Rotate secret" : "Generate secret"}
+                </button>
+              </div>
+            </div>
           </div>
         );
       }

@@ -458,6 +458,85 @@ export default {
       return jsonResponse({ error: "Method not allowed" }, { status: 405 });
     }
 
+    if (url.pathname === "/api/mcp/secret") {
+      const session = await readSession(request, env);
+      if (!session) {
+        return jsonResponse({ error: "Not authenticated" }, { status: 401 });
+      }
+
+      if (!env.BACKEND_BASE_URL) {
+        return jsonResponse({ error: "Backend is not configured" }, { status: 500 });
+      }
+
+      const backendUrl = new URL("/api/mcp/secret", env.BACKEND_BASE_URL);
+
+      if (request.method === "GET") {
+        const urlWithEmail = new URL(backendUrl.toString());
+        if (session.email) {
+          urlWithEmail.searchParams.set("email", session.email);
+        }
+
+        const upstreamResp = await fetch(urlWithEmail.toString(), { method: "GET" });
+        const text = await upstreamResp.text();
+        if (!upstreamResp.ok) {
+          console.error("Backend MCP secret load failed", {
+            status: upstreamResp.status,
+            body: text,
+          });
+          return new Response(text || "Failed to load MCP secret", {
+            status: upstreamResp.status,
+            headers: {
+              "Content-Type": upstreamResp.headers.get("Content-Type") || "text/plain",
+            },
+          });
+        }
+
+        return new Response(text, {
+          status: upstreamResp.status,
+          headers: {
+            "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json; charset=utf-8",
+          },
+        });
+      }
+
+      if (request.method === "POST") {
+        const payload: { user_email?: string } = {};
+        if (session.email) {
+          payload.user_email = session.email;
+        }
+
+        const upstreamResp = await fetch(backendUrl.toString(), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+        const text = await upstreamResp.text();
+        if (!upstreamResp.ok) {
+          console.error("Backend MCP secret rotate failed", {
+            status: upstreamResp.status,
+            body: text,
+          });
+          return new Response(text || "Failed to generate MCP secret", {
+            status: upstreamResp.status,
+            headers: {
+              "Content-Type": upstreamResp.headers.get("Content-Type") || "text/plain",
+            },
+          });
+        }
+
+        return new Response(text, {
+          status: upstreamResp.status,
+          headers: {
+            "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json; charset=utf-8",
+          },
+        });
+      }
+
+      return jsonResponse({ error: "Method not allowed" }, { status: 405 });
+    }
+
     if (url.pathname === "/api/auth/logout" && request.method === "POST") {
       const response = jsonResponse({ ok: true });
       response.headers.append(

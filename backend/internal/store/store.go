@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -405,4 +407,74 @@ func nullStringPtr(value sql.NullString) *string {
 		return nil
 	}
 	return &value.String
+}
+
+func randomHex(nBytes int) (string, error) {
+	buf := make([]byte, nBytes)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
+}
+
+// GenerateMCPSecret creates and stores a new random mcp_secret for the user
+// identified by email. The newly generated secret is returned.
+func (s *Store) GenerateMCPSecret(ctx context.Context, email string) (string, error) {
+	if s == nil || s.db == nil {
+		return "", errors.New("store: db cannot be nil")
+	}
+
+	var userID int64
+	if err := s.db.QueryRowContext(
+		ctx,
+		`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
+		email,
+	).Scan(&userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("store: no local user found for email=%s", email)
+		}
+		return "", fmt.Errorf("store: lookup user by email for mcp_secret: %w", err)
+	}
+
+	secret, err := randomHex(32)
+	if err != nil {
+		return "", fmt.Errorf("store: generate mcp_secret: %w", err)
+	}
+
+	if _, err := s.db.ExecContext(
+		ctx,
+		`UPDATE users SET mcp_secret = $1, updated_at = now() WHERE id = $2`,
+		secret,
+		userID,
+	); err != nil {
+		return "", fmt.Errorf("store: update mcp_secret: %w", err)
+	}
+
+	return secret, nil
+}
+
+// GetMCPSecret returns the existing mcp_secret for the user identified by
+// email, or nil if none has been set.
+func (s *Store) GetMCPSecret(ctx context.Context, email string) (*string, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store: db cannot be nil")
+	}
+
+	var secret sql.NullString
+	if err := s.db.QueryRowContext(
+		ctx,
+		`SELECT mcp_secret FROM users WHERE LOWER(email) = LOWER($1)`,
+		email,
+	).Scan(&secret); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("store: no local user found for email=%s", email)
+		}
+		return nil, fmt.Errorf("store: lookup mcp_secret by email: %w", err)
+	}
+
+	if !secret.Valid {
+		return nil, nil
+	}
+
+	return &secret.String, nil
 }

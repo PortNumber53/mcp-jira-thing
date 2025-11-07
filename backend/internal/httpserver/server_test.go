@@ -32,6 +32,14 @@ func (s *stubUserClient) ListUserSettings(ctx context.Context, email string) ([]
 	return nil, nil
 }
 
+func (s *stubUserClient) GenerateMCPSecret(ctx context.Context, email string) (string, error) {
+	return "dummy", nil
+}
+
+func (s *stubUserClient) GetMCPSecret(ctx context.Context, email string) (*string, error) {
+	return nil, nil
+}
+
 func TestHealthRoute(t *testing.T) {
 	cfg := config.Config{ServerAddress: ":0"}
 	stub := &stubUserClient{}
