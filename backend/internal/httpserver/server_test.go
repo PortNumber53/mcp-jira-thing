@@ -20,9 +20,14 @@ func (s *stubUserClient) UpsertGitHubUser(ctx context.Context, user models.GitHu
 	return nil
 }
 
+func (s *stubUserClient) UpsertUserSettings(ctx context.Context, email, baseURL, apiKey string) error {
+	return nil
+}
+
 func TestHealthRoute(t *testing.T) {
 	cfg := config.Config{ServerAddress: ":0"}
-	server := New(cfg, &stubUserClient{}, &stubUserClient{})
+	stub := &stubUserClient{}
+	server := New(cfg, stub, stub, stub)
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rr := httptest.NewRecorder()
