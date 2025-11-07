@@ -77,10 +77,17 @@ function extractFirstAppLocation(error: unknown): string | undefined {
 }
 
 export class MyMCP extends McpAgent<Env, Props> {
-  private jiraClient!: JiraClient;
+	private jiraClient: JiraClient | null = null;
 
   constructor(state: DurableObjectState, env: Env) {
     super(state, env);
+  }
+
+  private async getJiraClient(): Promise<JiraClient> {
+    if (this.jiraClient) return this.jiraClient;
+    const jiraEnv = await this.buildTenantJiraEnv();
+    this.jiraClient = new JiraClient(jiraEnv as any);
+    return this.jiraClient;
   }
 
   server = new McpServer({
@@ -89,10 +96,6 @@ export class MyMCP extends McpAgent<Env, Props> {
   });
 
   async init() {
-    // Resolve Jira settings for this tenant using MCP_SECRET when available.
-    const jiraEnv = await this.buildTenantJiraEnv();
-    this.jiraClient = new JiraClient(jiraEnv as any);
-
     // Hello, world!
     this.server.tool("add", "Add two numbers the way only MCP can", { a: z.number(), b: z.number() }, async ({ a, b }) => ({
       content: [{ text: String(a + b), type: "text" }],
@@ -133,9 +136,10 @@ export class MyMCP extends McpAgent<Env, Props> {
 
     // Jira Tools
     this.server.tool("getProjects", "Get a list of all Jira projects", {}, async () => {
-      const projects = await this.jiraClient.getProjects();
-      console.log("JiraProjects.getProjects raw result:", projects);
-      const projectsText = projects.map((project: any) => `${project.name} (${project.key})`).join("\n");
+      const jiraClient = await this.getJiraClient();
+			const projects = await jiraClient.getProjects();
+			console.log("JiraProjects.getProjects raw result:", projects);
+			const projectsText = projects.map((project: any) => `${project.name} (${project.key})`).join("\n");
       console.log("Formatted projectsText for tool output:", projectsText);
       return {
         content: [{ text: `Jira Projects:\n${projectsText}`, type: "text" }],
@@ -193,7 +197,8 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async (payload) => {
         try {
-          const newProject = await this.jiraClient.createProject(payload);
+          const jiraClient = await this.getJiraClient();
+          const newProject = await jiraClient.createProject(payload);
 
           // Create a simplified project object for machine parsing
           const projectData = {
@@ -281,7 +286,8 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ projectIdOrKey, expand }) => {
         try {
-          const project = await this.jiraClient.getProject(projectIdOrKey, expand);
+          const jiraClient = await this.getJiraClient();
+				const project = await jiraClient.getProject(projectIdOrKey, expand);
 
           // Create a simplified project object for machine parsing
           const projectData = {
@@ -352,7 +358,8 @@ export class MyMCP extends McpAgent<Env, Props> {
       async ({ projectIdOrKey }) => {
         try {
           // Get all issue types available
-          const issueTypes = await this.jiraClient.getProjectIssueTypes(projectIdOrKey);
+          const jiraClient = await this.getJiraClient();
+				const issueTypes = await jiraClient.getProjectIssueTypes(projectIdOrKey);
 
           if (!issueTypes || issueTypes.length === 0) {
             return {
@@ -624,6 +631,7 @@ export class MyMCP extends McpAgent<Env, Props> {
 
         switch (action) {
           case "createIssue": {
+            const jiraClient = await this.getJiraClient();
             let fields: Record<string, any> | undefined = extractFieldMapInput();
             if (!fields) {
               if (!input.projectKey) {
@@ -645,13 +653,14 @@ export class MyMCP extends McpAgent<Env, Props> {
                 fields = { ...fields, ...input.additionalFields };
               }
             }
-            const created = await this.jiraClient.createIssue(fields!);
+            const created = await jiraClient.createIssue(fields!);
             return {
               content: [{ text: `Issue created: ${created.key} (${created.id})`, type: "text" }],
               data: { success: true, issue: created },
             };
           }
           case "getIssue": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             const requestedFields = extractFieldSelection();
             const defaultFields = [
@@ -667,7 +676,7 @@ export class MyMCP extends McpAgent<Env, Props> {
               "updated",
             ];
             const fieldsForRequest = requestedFields ?? defaultFields;
-            const issue = await this.jiraClient.getIssue(issueIdOrKey, {
+            const issue = await jiraClient.getIssue(issueIdOrKey, {
               fields: fieldsForRequest,
               expand: input.expand,
               properties: input.properties,
@@ -681,7 +690,7 @@ export class MyMCP extends McpAgent<Env, Props> {
             const assignee = issue.fields?.assignee?.displayName ?? "Unassigned";
             const reporter = issue.fields?.reporter?.displayName ?? undefined;
             const issueType = issue.fields?.issuetype?.name ?? undefined;
-            const descriptionText = this.jiraClient.documentToPlainText(issue.fields?.description) ?? "No description provided.";
+            const descriptionText = jiraClient.documentToPlainText(issue.fields?.description) ?? "No description provided.";
             const labels = Array.isArray(issue.fields?.labels) && issue.fields.labels.length > 0 ? issue.fields.labels.join(", ") : "None";
             const responseData = {
               key: issue.key,
@@ -704,6 +713,7 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
           }
           case "updateIssue": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             const fields = { ...(extractFieldMapInput() || {}) };
             if (input.summary !== undefined) {
@@ -715,25 +725,27 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (Object.keys(fields).length === 0) {
               throw new Error("updateIssue requires at least one field to modify.");
             }
-            await this.jiraClient.updateIssue(issueIdOrKey, fields);
+            await jiraClient.updateIssue(issueIdOrKey, fields);
             return {
               content: [{ text: `Issue ${issueIdOrKey} updated successfully.`, type: "text" }],
               data: { success: true, issueIdOrKey, updatedFields: Object.keys(fields) },
             };
           }
           case "deleteIssue": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
-            await this.jiraClient.deleteIssue(issueIdOrKey);
+            await jiraClient.deleteIssue(issueIdOrKey);
             return {
               content: [{ text: `Issue ${issueIdOrKey} deleted.`, type: "text" }],
               data: { success: true, issueIdOrKey },
             };
           }
           case "searchIssues": {
+            const jiraClient = await this.getJiraClient();
             if (!input.jql) {
               throw new Error("searchIssues requires a JQL query.");
             }
-            const results = await this.jiraClient.searchIssues(input.jql, {
+            const results = await jiraClient.searchIssues(input.jql, {
               maxResults: input.maxResults,
               startAt: input.startAt,
               fields: extractFieldSelection(),
@@ -754,8 +766,9 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
           }
           case "listComments": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
-            const comments = await this.jiraClient.listIssueComments(issueIdOrKey, {
+            const comments = await jiraClient.listIssueComments(issueIdOrKey, {
               startAt: input.startAt,
               maxResults: input.maxResults,
               orderBy: input.orderBy,
@@ -767,8 +780,9 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
           }
           case "listCommentsFull": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
-            const commentsPage = await this.jiraClient.listIssueComments(issueIdOrKey, {
+            const commentsPage = await jiraClient.listIssueComments(issueIdOrKey, {
               startAt: input.startAt,
               maxResults: input.maxResults,
               orderBy: input.orderBy,
@@ -776,7 +790,7 @@ export class MyMCP extends McpAgent<Env, Props> {
               expand: input.expand ?? "renderedBody",
             });
             const comments = commentsPage.comments || [];
-            const plainTexts = comments.map((c: any) => this.jiraClient.documentToPlainText(c.body) || "");
+            const plainTexts = comments.map((c: any) => jiraClient.documentToPlainText(c.body) || "");
             const result = {
               success: true,
               count: comments.length,
@@ -793,11 +807,12 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
           }
           case "addComment": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             if (!input.commentBody) {
               throw new Error("addComment requires commentBody.");
             }
-            const comment = await this.jiraClient.addIssueComment(issueIdOrKey, input.commentBody as any, {
+            const comment = await jiraClient.addIssueComment(issueIdOrKey, input.commentBody as any, {
               visibility: input.visibility as any,
               properties: input.commentProperties,
               expand: input.expand,
@@ -808,6 +823,7 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
           }
           case "updateComment": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             if (!input.commentId) {
               throw new Error("updateComment requires commentId.");
@@ -815,7 +831,7 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.commentBody) {
               throw new Error("updateComment requires commentBody.");
             }
-            const comment = await this.jiraClient.updateIssueComment(issueIdOrKey, input.commentId, input.commentBody as any, {
+            const comment = await jiraClient.updateIssueComment(issueIdOrKey, input.commentId, input.commentBody as any, {
               visibility: input.visibility as any,
               properties: input.commentProperties,
               notifyUsers: input.notifyUsers,
@@ -828,40 +844,44 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
           }
           case "deleteComment": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             if (!input.commentId) {
               throw new Error("deleteComment requires commentId.");
             }
-            await this.jiraClient.deleteIssueComment(issueIdOrKey, input.commentId);
+            await jiraClient.deleteIssueComment(issueIdOrKey, input.commentId);
             return {
               content: [{ text: `Comment ${input.commentId} deleted.`, type: "text" }],
               data: { success: true, commentId: input.commentId },
             };
           }
           case "getComment": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             if (!input.commentId) {
               throw new Error("getComment requires commentId.");
             }
-            const comment = await this.jiraClient.getIssueComment(issueIdOrKey, input.commentId);
+            const comment = await jiraClient.getIssueComment(issueIdOrKey, input.commentId);
             return {
               content: [{ text: JSON.stringify(comment, null, 2), type: "text" }],
               data: { success: true, comment },
             };
           }
           case "getCommentsByIds": {
+            const jiraClient = await this.getJiraClient();
             if (!input.ids || input.ids.length === 0) {
               throw new Error("getCommentsByIds requires 'ids' array.");
             }
-            const page = await this.jiraClient.getIssueCommentsByIds(input.ids, input.expand);
+            const page = await jiraClient.getIssueCommentsByIds(input.ids, input.expand);
             return {
               content: [{ text: `Fetched ${page.values.length} comments by IDs.`, type: "text" }],
               data: { success: true, ...page },
             };
           }
           case "getTransitions": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
-            const transitions = await this.jiraClient.getTransitions(issueIdOrKey);
+            const transitions = await jiraClient.getTransitions(issueIdOrKey);
             return {
               content: [
                 {
@@ -874,61 +894,68 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
           }
           case "transitionIssue": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             if (!input.transitionId) {
               throw new Error("transitionIssue requires transitionId.");
             }
             const transitionComment = extractCommentText();
-            await this.jiraClient.doTransition(issueIdOrKey, input.transitionId, transitionComment);
+            await jiraClient.doTransition(issueIdOrKey, input.transitionId, transitionComment);
             return {
               content: [{ text: `Issue ${issueIdOrKey} transitioned using ${input.transitionId}.`, type: "text" }],
               data: { success: true, issueIdOrKey, transitionId: input.transitionId },
             };
           }
           case "getLabels": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
-            const labels = await this.jiraClient.getLabelsForIssue(issueIdOrKey);
+            const labels = await jiraClient.getLabelsForIssue(issueIdOrKey);
             return {
               content: [{ text: labels.length ? labels.join(", ") : "No labels set", type: "text" }],
               data: { success: true, labels },
             };
           }
           case "addLabels": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             const labels = ensureLabels();
-            await this.jiraClient.addLabels(issueIdOrKey, labels);
+            await jiraClient.addLabels(issueIdOrKey, labels);
             return {
               content: [{ text: `Added labels to ${issueIdOrKey}.`, type: "text" }],
               data: { success: true, issueIdOrKey, labels },
             };
           }
           case "removeLabels": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             const labels = ensureLabels();
-            await this.jiraClient.removeLabels(issueIdOrKey, labels);
+            await jiraClient.removeLabels(issueIdOrKey, labels);
             return {
               content: [{ text: `Removed labels from ${issueIdOrKey}.`, type: "text" }],
               data: { success: true, issueIdOrKey, labels },
             };
           }
           case "setLabels": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             const labels = input.labels || [];
-            await this.jiraClient.setLabels(issueIdOrKey, labels);
+            await jiraClient.setLabels(issueIdOrKey, labels);
             return {
               content: [{ text: `Labels on ${issueIdOrKey} set to [${labels.join(", ")}].`, type: "text" }],
               data: { success: true, issueIdOrKey, labels },
             };
           }
           case "listAttachments": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
-            const attachments = await this.jiraClient.getIssueAttachments(issueIdOrKey);
+            const attachments = await jiraClient.getIssueAttachments(issueIdOrKey);
             return {
               content: [{ text: `Found ${attachments.length} attachments.`, type: "text" }],
               data: { success: true, attachments },
             };
           }
           case "addAttachment": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             if (!input.filename) {
               throw new Error("addAttachment requires filename.");
@@ -937,36 +964,39 @@ export class MyMCP extends McpAgent<Env, Props> {
               throw new Error("addAttachment requires fileBase64. Provide raw base64 without the data URI prefix.");
             }
             const base64 = input.fileBase64.includes(",") ? input.fileBase64.split(",").pop()! : input.fileBase64;
-            const attachments = await this.jiraClient.addIssueAttachment(issueIdOrKey, input.filename, base64, input.contentType);
+            const attachments = await jiraClient.addIssueAttachment(issueIdOrKey, input.filename, base64, input.contentType);
             return {
               content: [{ text: `Uploaded attachment(s) to ${issueIdOrKey}.`, type: "text" }],
               data: { success: true, attachments },
             };
           }
           case "deleteAttachment": {
+            const jiraClient = await this.getJiraClient();
             if (!input.attachmentId) {
               throw new Error("deleteAttachment requires attachmentId.");
             }
-            await this.jiraClient.deleteIssueAttachment(input.attachmentId);
+            await jiraClient.deleteIssueAttachment(input.attachmentId);
             return {
               content: [{ text: `Attachment ${input.attachmentId} deleted.`, type: "text" }],
               data: { success: true, attachmentId: input.attachmentId },
             };
           }
           case "listPriorities": {
-            const priorities = await this.jiraClient.listPriorities();
+            const jiraClient = await this.getJiraClient();
+            const priorities = await jiraClient.listPriorities();
             return {
               content: [{ text: priorities.map((p) => `${p.id}: ${p.name}`).join("\n"), type: "text" }],
               data: { success: true, priorities },
             };
           }
           case "setPriority": {
+            const jiraClient = await this.getJiraClient();
             const issueIdOrKey = ensureIssue();
             if (!input.priorityId && !input.priorityName) {
               throw new Error("setPriority requires priorityId or priorityName.");
             }
             const priorityField = input.priorityId ? { id: input.priorityId } : { name: input.priorityName };
-            await this.jiraClient.updateIssue(issueIdOrKey, { priority: priorityField });
+            await jiraClient.updateIssue(issueIdOrKey, { priority: priorityField });
             return {
               content: [{ text: `Priority updated for ${issueIdOrKey}.`, type: "text" }],
               data: { success: true, issueIdOrKey, priority: priorityField },
@@ -974,7 +1004,8 @@ export class MyMCP extends McpAgent<Env, Props> {
           }
           case "listIssueTypes": {
             if (input.projectKey) {
-              const issueTypes = await this.jiraClient.getProjectIssueTypes(input.projectKey);
+              const jiraClient = await this.getJiraClient();
+					const issueTypes = await jiraClient.getProjectIssueTypes(input.projectKey);
               const standardTypes = issueTypes.filter((type: any) => type && type.subtask !== true);
               const subtaskTypes = issueTypes.filter((type: any) => type && type.subtask === true);
               return {
@@ -994,7 +1025,8 @@ export class MyMCP extends McpAgent<Env, Props> {
               };
             }
 
-            const issueTypes = await this.jiraClient.getAllIssueTypes();
+            const jiraClient = await this.getJiraClient();
+				const issueTypes = await jiraClient.getAllIssueTypes();
             return {
               content: [{ text: `Found ${issueTypes.length} issue types.`, type: "text" }],
               data: { success: true, issueTypes },
@@ -1007,7 +1039,8 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.issueTypePayload.name) {
               throw new Error("issueTypePayload.name is required.");
             }
-            const created = await this.jiraClient.createIssueType(input.issueTypePayload as CreateIssueTypePayload);
+            const jiraClient = await this.getJiraClient();
+            const created = await jiraClient.createIssueType(input.issueTypePayload as CreateIssueTypePayload);
             return {
               content: [{ text: `Issue type created: ${created.name} (${created.id})`, type: "text" }],
               data: { success: true, issueType: created },
@@ -1017,7 +1050,8 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.issueTypeId) {
               throw new Error("getIssueType requires issueTypeId.");
             }
-            const issueType = await this.jiraClient.getIssueType(input.issueTypeId);
+          const jiraClient = await this.getJiraClient();
+				const issueType = await jiraClient.getIssueType(input.issueTypeId);
             return {
               content: [{ text: `Issue type ${issueType.name}`, type: "text" }],
               data: { success: true, issueType },
@@ -1030,7 +1064,8 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.issueTypePayload || Object.keys(input.issueTypePayload).length === 0) {
               throw new Error("issueTypePayload must include fields to update.");
             }
-            const updated = await this.jiraClient.updateIssueType(input.issueTypeId, input.issueTypePayload as UpdateIssueTypePayload);
+            const jiraClient = await this.getJiraClient();
+            const updated = await jiraClient.updateIssueType(input.issueTypeId, input.issueTypePayload as UpdateIssueTypePayload);
             return {
               content: [{ text: `Issue type updated: ${updated.name}`, type: "text" }],
               data: { success: true, issueType: updated },
@@ -1040,7 +1075,8 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.issueTypeId) {
               throw new Error("deleteIssueType requires issueTypeId.");
             }
-            await this.jiraClient.deleteIssueType(input.issueTypeId, input.alternativeIssueTypeId);
+            const jiraClient = await this.getJiraClient();
+            await jiraClient.deleteIssueType(input.issueTypeId, input.alternativeIssueTypeId);
             return {
               content: [{ text: `Issue type ${input.issueTypeId} deleted.`, type: "text" }],
               data: { success: true, issueTypeId: input.issueTypeId },
@@ -1050,7 +1086,8 @@ export class MyMCP extends McpAgent<Env, Props> {
             if (!input.issueTypeId) {
               throw new Error("getIssueTypeAlternatives requires issueTypeId.");
             }
-            const alternatives = await this.jiraClient.getAlternativeIssueTypes(input.issueTypeId);
+          const jiraClient = await this.getJiraClient();
+				const alternatives = await jiraClient.getAlternativeIssueTypes(input.issueTypeId);
             return {
               content: [{ text: `Found ${alternatives.length} alternative issue types.`, type: "text" }],
               data: { success: true, alternatives },
@@ -1081,7 +1118,8 @@ export class MyMCP extends McpAgent<Env, Props> {
       async ({ query }) => {
         try {
           // Use the searchUsers method to find users
-          const response = await this.jiraClient.searchUsers(query);
+          const jiraClient = await this.getJiraClient();
+				const response = await jiraClient.searchUsers(query);
 
           if (!Array.isArray(response) || response.length === 0) {
             return {
@@ -1219,7 +1257,8 @@ export class MyMCP extends McpAgent<Env, Props> {
 
         switch (action) {
           case "listDashboards": {
-            const page = await this.jiraClient.listDashboards({
+            const jiraClient = await this.getJiraClient();
+            const page = await jiraClient.listDashboards({
               filter: input.filter,
               startAt: input.startAt,
               maxResults: input.maxResults,
@@ -1227,7 +1266,8 @@ export class MyMCP extends McpAgent<Env, Props> {
             return { content: [{ type: "text", text: `Found ${page.total ?? page.dashboards?.length ?? 0} dashboards.` }], data: page };
           }
           case "searchDashboards": {
-            const page = await this.jiraClient.searchDashboards({
+            const jiraClient = await this.getJiraClient();
+            const page = await jiraClient.searchDashboards({
               filter: input.filter,
               startAt: input.startAt,
               maxResults: input.maxResults,
@@ -1238,12 +1278,14 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
           }
           case "getDashboard": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id) throw new Error("getDashboard requires id");
-            const dash = await this.jiraClient.getDashboard(id);
+            const dash = await jiraClient.getDashboard(id);
             return { content: [{ type: "text", text: `Dashboard: ${dash.name} (${dash.id})` }], data: dash };
           }
           case "createDashboard": {
+            const jiraClient = await this.getJiraClient();
             const payload = input.dashboardPayload ?? {
               name: input.name,
               description: input.description,
@@ -1258,10 +1300,11 @@ export class MyMCP extends McpAgent<Env, Props> {
               });
             }
             if (!payload.name) throw new Error("createDashboard requires name");
-            const created = await this.jiraClient.createDashboard(payload);
+            const created = await jiraClient.createDashboard(payload);
             return { content: [{ type: "text", text: `Dashboard created: ${created.name} (${created.id})` }], data: created };
           }
           case "updateDashboard": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id) throw new Error("updateDashboard requires id");
             const payload = input.dashboardPayload ?? {
@@ -1276,86 +1319,97 @@ export class MyMCP extends McpAgent<Env, Props> {
                 return t !== "global" && t !== "public";
               });
             }
-            const updated = await this.jiraClient.updateDashboard(id, payload);
+            const updated = await jiraClient.updateDashboard(id, payload);
             return { content: [{ type: "text", text: `Dashboard updated: ${updated.name} (${updated.id})` }], data: updated };
           }
           case "deleteDashboard": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id) throw new Error("deleteDashboard requires id");
-            await this.jiraClient.deleteDashboard(id);
+            await jiraClient.deleteDashboard(id);
             return { content: [{ type: "text", text: `Dashboard ${id} deleted.` }] };
           }
           case "getAvailableGadgets": {
-            const gadgets = await this.jiraClient.getAvailableGadgets();
+            const jiraClient = await this.getJiraClient();
+            const gadgets = await jiraClient.getAvailableGadgets();
             return {
               content: [{ type: "text", text: `Available gadgets: ${Array.isArray(gadgets) ? gadgets.length : "(see data)"}` }],
               data: gadgets,
             };
           }
           case "getGadgets": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id) throw new Error("getGadgets requires dashboardId");
-            const list = await this.jiraClient.getGadgets(id);
+            const list = await jiraClient.getGadgets(id);
             return {
               content: [{ type: "text", text: `Dashboard ${id} gadgets: ${Array.isArray(list) ? list.length : "(see data)"}` }],
               data: list,
             };
           }
           case "addGadget": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id) throw new Error("addGadget requires dashboardId");
             if (!input.gadgetPayload) throw new Error("addGadget requires gadgetPayload");
-            const added = await this.jiraClient.addGadget(id, input.gadgetPayload);
+            const added = await jiraClient.addGadget(id, input.gadgetPayload);
             return { content: [{ type: "text", text: `Gadget added to ${id}.` }], data: added };
           }
           case "updateGadget": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id) throw new Error("updateGadget requires dashboardId");
             if (!input.gadgetId) throw new Error("updateGadget requires gadgetId");
             if (!input.gadgetPayload) throw new Error("updateGadget requires gadgetPayload");
-            const updated = await this.jiraClient.updateGadget(id, input.gadgetId, input.gadgetPayload);
+            const updated = await jiraClient.updateGadget(id, input.gadgetId, input.gadgetPayload);
             return { content: [{ type: "text", text: `Gadget ${input.gadgetId} updated on ${id}.` }], data: updated };
           }
           case "removeGadget": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id) throw new Error("removeGadget requires dashboardId");
             if (!input.gadgetId) throw new Error("removeGadget requires gadgetId");
-            await this.jiraClient.removeGadget(id, input.gadgetId);
+            await jiraClient.removeGadget(id, input.gadgetId);
             return { content: [{ type: "text", text: `Gadget ${input.gadgetId} removed from ${id}.` }] };
           }
           case "getDashboardItemPropertyKeys": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id || !input.itemId) throw new Error("getDashboardItemPropertyKeys requires dashboardId and itemId");
-            const keys = await this.jiraClient.getDashboardItemPropertyKeys(id, input.itemId);
+            const keys = await jiraClient.getDashboardItemPropertyKeys(id, input.itemId);
             return { content: [{ type: "text", text: `Found ${keys.keys?.length ?? 0} property keys.` }], data: keys };
           }
           case "getDashboardItemProperty": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id || !input.itemId || !input.propertyKey)
               throw new Error("getDashboardItemProperty requires dashboardId, itemId, propertyKey");
-            const prop = await this.jiraClient.getDashboardItemProperty(id, input.itemId, input.propertyKey);
+            const prop = await jiraClient.getDashboardItemProperty(id, input.itemId, input.propertyKey);
             return { content: [{ type: "text", text: `Property ${input.propertyKey} retrieved.` }], data: prop };
           }
           case "setDashboardItemProperty": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id || !input.itemId || !input.propertyKey)
               throw new Error("setDashboardItemProperty requires dashboardId, itemId, propertyKey");
             if (!input.propertyValue) throw new Error("setDashboardItemProperty requires propertyValue");
-            const result = await this.jiraClient.setDashboardItemProperty(id, input.itemId, input.propertyKey, input.propertyValue);
+            const result = await jiraClient.setDashboardItemProperty(id, input.itemId, input.propertyKey, input.propertyValue);
             return { content: [{ type: "text", text: `Property ${input.propertyKey} set.` }], data: result };
           }
           case "deleteDashboardItemProperty": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id || !input.itemId || !input.propertyKey)
               throw new Error("deleteDashboardItemProperty requires dashboardId, itemId, propertyKey");
-            await this.jiraClient.deleteDashboardItemProperty(id, input.itemId, input.propertyKey);
+            await jiraClient.deleteDashboardItemProperty(id, input.itemId, input.propertyKey);
             return { content: [{ type: "text", text: `Property ${input.propertyKey} deleted.` }] };
           }
           case "copyDashboard": {
+            const jiraClient = await this.getJiraClient();
             const id = getDashId();
             if (!id) throw new Error("copyDashboard requires id");
             if (!input.dashboardPayload) throw new Error("copyDashboard requires dashboardPayload");
-            const copy = await this.jiraClient.copyDashboard(id, input.dashboardPayload, input.extendAdminPermissions);
+            const copy = await jiraClient.copyDashboard(id, input.dashboardPayload, input.extendAdminPermissions);
             return { content: [{ type: "text", text: `Dashboard ${id} copied to ${copy.id}.` }], data: copy };
           }
           default:
@@ -1387,6 +1441,7 @@ export class MyMCP extends McpAgent<Env, Props> {
         goal: z.string().optional().describe("[OPTIONAL] Sprint goal - brief description of what the team aims to achieve in this sprint."),
       },
       async ({ name, startDate, endDate, originBoardId, goal }) => {
+        const jiraClient = await this.getJiraClient();
         // Create payload with only the provided fields
         const payload: any = { name, originBoardId };
 
@@ -1395,7 +1450,7 @@ export class MyMCP extends McpAgent<Env, Props> {
         if (endDate) payload.endDate = endDate;
         if (goal) payload.goal = goal;
 
-        const newSprint = await this.jiraClient.createSprint(payload);
+			const newSprint = await jiraClient.createSprint(payload);
         return {
           content: [{ text: `Sprint created: ${newSprint.id} - ${newSprint.name}`, type: "text" }],
         };
@@ -1417,7 +1472,8 @@ export class MyMCP extends McpAgent<Env, Props> {
           ),
       },
       async ({ sprintId, name, startDate, endDate }) => {
-        await this.jiraClient.startSprint(sprintId, { name, startDate, endDate });
+        const jiraClient = await this.getJiraClient();
+			await jiraClient.startSprint(sprintId, { name, startDate, endDate });
         return {
           content: [{ text: `Sprint ${sprintId} started successfully.`, type: "text" }],
         };
@@ -1434,7 +1490,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         endDate: z.string().optional().describe("End date in ISO format (e.g., 2025-11-09T00:00:00.000Z). Required on some instances."),
       },
       async ({ sprintId, name, startDate, endDate }) => {
-        await this.jiraClient.completeSprint(sprintId, { name, startDate, endDate });
+        const jiraClient = await this.getJiraClient();
+			await jiraClient.completeSprint(sprintId, { name, startDate, endDate });
         return {
           content: [{ text: `Sprint ${sprintId} completed successfully.`, type: "text" }],
         };
@@ -1448,7 +1505,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         sprintId: z.number().describe("ID of the sprint to retrieve"),
       },
       async ({ sprintId }) => {
-        const sprint = await this.jiraClient.getSprint(sprintId);
+        const jiraClient = await this.getJiraClient();
+			const sprint = await jiraClient.getSprint(sprintId);
         return {
           content: [{ text: `Sprint ${sprint.name} (ID: ${sprint.id}, State: ${sprint.state})`, type: "text" }],
         };
@@ -1467,7 +1525,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         goal: z.string().optional().describe("New goal for the sprint"),
       },
       async ({ sprintId, name, startDate, endDate, state, goal }) => {
-        const updatedSprint = await this.jiraClient.updateSprint(sprintId, { name, startDate, endDate, state, goal });
+        const jiraClient = await this.getJiraClient();
+			const updatedSprint = await jiraClient.updateSprint(sprintId, { name, startDate, endDate, state, goal });
         return {
           content: [{ text: `Sprint updated: ${updatedSprint.name} (ID: ${updatedSprint.id})`, type: "text" }],
         };
@@ -1481,7 +1540,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         sprintId: z.number().describe("ID of the sprint to delete"),
       },
       async ({ sprintId }) => {
-        await this.jiraClient.deleteSprint(sprintId);
+        const jiraClient = await this.getJiraClient();
+			await jiraClient.deleteSprint(sprintId);
         return {
           content: [{ text: `Sprint ${sprintId} deleted successfully.`, type: "text" }],
         };
@@ -1495,7 +1555,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         boardId: z.number().describe("ID of the Jira board"),
       },
       async ({ boardId }) => {
-        const sprints = await this.jiraClient.getSprintsForBoard(boardId);
+        const jiraClient = await this.getJiraClient();
+			const sprints = await jiraClient.getSprintsForBoard(boardId);
         const sprintsText = sprints.map((sprint) => `${sprint.name} (ID: ${sprint.id}, State: ${sprint.state})`).join("\n");
         return {
           content: [{ text: `Sprints for board ${boardId}:\n${sprintsText}`, type: "text" }],
@@ -1510,7 +1571,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         sprintId: z.number().describe("ID of the Jira sprint"),
       },
       async ({ sprintId }) => {
-        const issues = await this.jiraClient.getIssuesForSprint(sprintId);
+        const jiraClient = await this.getJiraClient();
+			const issues = await jiraClient.getIssuesForSprint(sprintId);
         const issuesText = issues.map((issue) => `${issue.key}: ${issue.fields.summary}`).join("\n");
         return {
           content: [{ text: `Issues for sprint ${sprintId}:\n${issuesText}`, type: "text" }],
@@ -1526,7 +1588,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         issueIdsOrKeys: z.array(z.string()).describe("Array of issue IDs or keys to move"),
       },
       async ({ sprintId, issueIdsOrKeys }) => {
-        await this.jiraClient.moveIssuesToSprint(sprintId, issueIdsOrKeys);
+        const jiraClient = await this.getJiraClient();
+			await jiraClient.moveIssuesToSprint(sprintId, issueIdsOrKeys);
         return {
           content: [{ text: `Moved issues ${issueIdsOrKeys.join(", ")} to sprint ${sprintId}.`, type: "text" }],
         };
@@ -1541,7 +1604,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         issueIdsOrKeys: z.array(z.string()).describe("Array of issue IDs or keys to move"),
       },
       async ({ boardId, issueIdsOrKeys }) => {
-        await this.jiraClient.moveIssuesToBacklog(boardId, issueIdsOrKeys);
+        const jiraClient = await this.getJiraClient();
+			await jiraClient.moveIssuesToBacklog(boardId, issueIdsOrKeys);
         return {
           content: [{ text: `Moved issues ${issueIdsOrKeys.join(", ")} to backlog for board ${boardId}.`, type: "text" }],
         };
@@ -1555,7 +1619,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         accountId: z.string().describe("Account ID of the user to retrieve"),
       },
       async ({ accountId }) => {
-        const user = await this.jiraClient.getUser(accountId);
+        const jiraClient = await this.getJiraClient();
+			const user = await jiraClient.getUser(accountId);
         return {
           content: [{ text: `User: ${user.displayName} (Account ID: ${user.accountId}, Email: ${user.emailAddress})`, type: "text" }],
         };
@@ -1571,7 +1636,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         displayName: z.string().describe("Display name of the new user"),
       },
       async ({ emailAddress, password, displayName }) => {
-        const newUser = await this.jiraClient.createUser({ emailAddress, password, displayName });
+        const jiraClient = await this.getJiraClient();
+			const newUser = await jiraClient.createUser({ emailAddress, password, displayName });
         return {
           content: [{ text: `User created: ${newUser.displayName} (Account ID: ${newUser.accountId})`, type: "text" }],
         };
@@ -1585,7 +1651,8 @@ export class MyMCP extends McpAgent<Env, Props> {
         accountId: z.string().describe("Account ID of the user to delete"),
       },
       async ({ accountId }) => {
-        await this.jiraClient.deleteUser(accountId);
+        const jiraClient = await this.getJiraClient();
+			await jiraClient.deleteUser(accountId);
         return {
           content: [{ text: `User ${accountId} deleted successfully.`, type: "text" }],
         };
