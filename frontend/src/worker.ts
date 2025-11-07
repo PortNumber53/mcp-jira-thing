@@ -524,7 +524,37 @@ export default {
 		const sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
 		const redirectTarget = normalizeRedirectTarget(parsedState.redirect) || "/";
 
-		// TODO: Add backend sync for Google identities similar to GitHub.
+		// Best-effort: synchronise the authenticated Google user into the backend
+		// multi-tenant database. Failures here should not block login.
+		if (env.BACKEND_BASE_URL && tokenPayload.access_token) {
+			const backendUrl = new URL("/api/auth/google", env.BACKEND_BASE_URL);
+			const body = JSON.stringify({
+				sub: userData.sub,
+				name: userData.name ?? null,
+				email,
+				avatar_url: userData.picture ?? null,
+				access_token: tokenPayload.access_token,
+			});
+
+			try {
+				const backendResponse = await fetch(backendUrl.toString(), {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body,
+				});
+				if (!backendResponse.ok) {
+					const text = await backendResponse.text();
+					console.error("Backend Google auth sync failed", {
+						status: backendResponse.status,
+						body: text,
+					});
+				}
+			} catch (error) {
+				console.error("Failed to sync Google user to backend", error);
+			}
+		}
 
 		const response = new Response(null, {
 			status: 303,
