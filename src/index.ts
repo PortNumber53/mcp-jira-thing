@@ -28,7 +28,37 @@ type Env = Cloudflare.Env & {
   // Additional bindings used by this Worker
   AI: any;
   MCP_OBJECT: DurableObjectNamespace<MyMCP>;
+  // Optional per-tenant MCP secret extracted from the incoming request
+  MCP_SECRET?: string;
+  // Base URL of the Go backend used to resolve Jira settings per tenant
+  BACKEND_BASE_URL?: string;
 };
+
+function extractMcpSecretFromRequest(request: Request): string | undefined {
+  // 1) Prefer explicit header
+  const headerSecret = request.headers.get("x-mcp-secret") || request.headers.get("X-MCP-SECRET");
+  if (headerSecret && headerSecret.trim().length > 0) {
+    return headerSecret.trim();
+  }
+
+  // 2) Fall back to Cookie header (e.g. MCP_COOKIE="MCP_SECRET=..." in the MCP client)
+  const cookieHeader = request.headers.get("cookie") || request.headers.get("Cookie");
+  if (!cookieHeader) return undefined;
+
+  const cookies = cookieHeader.split(";");
+  for (const raw of cookies) {
+    const [name, ...rest] = raw.split("=");
+    if (!name) continue;
+    if (name.trim() === "MCP_SECRET") {
+      const value = rest.join("=").trim();
+      if (value) {
+        return value;
+      }
+    }
+  }
+
+  return undefined;
+}
 
 function extractFirstAppLocation(error: unknown): string | undefined {
   const stack = (error as any)?.stack;
@@ -47,11 +77,10 @@ function extractFirstAppLocation(error: unknown): string | undefined {
 }
 
 export class MyMCP extends McpAgent<Env, Props> {
-  private jiraClient: JiraClient;
+  private jiraClient!: JiraClient;
 
   constructor(state: DurableObjectState, env: Env) {
     super(state, env);
-    this.jiraClient = new JiraClient(env);
   }
 
   server = new McpServer({
@@ -60,6 +89,10 @@ export class MyMCP extends McpAgent<Env, Props> {
   });
 
   async init() {
+    // Resolve Jira settings for this tenant using MCP_SECRET when available.
+    const jiraEnv = await this.buildTenantJiraEnv();
+    this.jiraClient = new JiraClient(jiraEnv as any);
+
     // Hello, world!
     this.server.tool("add", "Add two numbers the way only MCP can", { a: z.number(), b: z.number() }, async ({ a, b }) => ({
       content: [{ text: String(a + b), type: "text" }],
@@ -1161,7 +1194,8 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async (input) => {
         if (input.action === "/help") {
-          const helpText = `Supported dashboard actions:\n\n` +
+          const helpText =
+            `Supported dashboard actions:\n\n` +
             `- listDashboards | searchDashboards [filter,startAt,maxResults]\n` +
             `- getDashboard (id)\n` +
             `- createDashboard (name, description?, sharePermissions[], editPermissions[])\n` +
@@ -1185,12 +1219,23 @@ export class MyMCP extends McpAgent<Env, Props> {
 
         switch (action) {
           case "listDashboards": {
-            const page = await this.jiraClient.listDashboards({ filter: input.filter, startAt: input.startAt, maxResults: input.maxResults });
+            const page = await this.jiraClient.listDashboards({
+              filter: input.filter,
+              startAt: input.startAt,
+              maxResults: input.maxResults,
+            });
             return { content: [{ type: "text", text: `Found ${page.total ?? page.dashboards?.length ?? 0} dashboards.` }], data: page };
           }
           case "searchDashboards": {
-            const page = await this.jiraClient.searchDashboards({ filter: input.filter, startAt: input.startAt, maxResults: input.maxResults });
-            return { content: [{ type: "text", text: `Search returned ${page.total ?? page.dashboards?.length ?? 0} dashboards.` }], data: page };
+            const page = await this.jiraClient.searchDashboards({
+              filter: input.filter,
+              startAt: input.startAt,
+              maxResults: input.maxResults,
+            });
+            return {
+              content: [{ type: "text", text: `Search returned ${page.total ?? page.dashboards?.length ?? 0} dashboards.` }],
+              data: page,
+            };
           }
           case "getDashboard": {
             const id = getDashId();
@@ -1208,8 +1253,8 @@ export class MyMCP extends McpAgent<Env, Props> {
             // Sanitize shares: remove public/global entries that Jira may reject
             if (Array.isArray((payload as any).sharePermissions)) {
               (payload as any).sharePermissions = (payload as any).sharePermissions.filter((p: any) => {
-                const t = String(p?.type || '').toLowerCase();
-                return t !== 'global' && t !== 'public';
+                const t = String(p?.type || "").toLowerCase();
+                return t !== "global" && t !== "public";
               });
             }
             if (!payload.name) throw new Error("createDashboard requires name");
@@ -1227,8 +1272,8 @@ export class MyMCP extends McpAgent<Env, Props> {
             };
             if (Array.isArray((payload as any).sharePermissions)) {
               (payload as any).sharePermissions = (payload as any).sharePermissions.filter((p: any) => {
-                const t = String(p?.type || '').toLowerCase();
-                return t !== 'global' && t !== 'public';
+                const t = String(p?.type || "").toLowerCase();
+                return t !== "global" && t !== "public";
               });
             }
             const updated = await this.jiraClient.updateDashboard(id, payload);
@@ -1242,13 +1287,19 @@ export class MyMCP extends McpAgent<Env, Props> {
           }
           case "getAvailableGadgets": {
             const gadgets = await this.jiraClient.getAvailableGadgets();
-            return { content: [{ type: "text", text: `Available gadgets: ${Array.isArray(gadgets) ? gadgets.length : "(see data)"}` }], data: gadgets };
+            return {
+              content: [{ type: "text", text: `Available gadgets: ${Array.isArray(gadgets) ? gadgets.length : "(see data)"}` }],
+              data: gadgets,
+            };
           }
           case "getGadgets": {
             const id = getDashId();
             if (!id) throw new Error("getGadgets requires dashboardId");
             const list = await this.jiraClient.getGadgets(id);
-            return { content: [{ type: "text", text: `Dashboard ${id} gadgets: ${Array.isArray(list) ? list.length : "(see data)"}` }], data: list };
+            return {
+              content: [{ type: "text", text: `Dashboard ${id} gadgets: ${Array.isArray(list) ? list.length : "(see data)"}` }],
+              data: list,
+            };
           }
           case "addGadget": {
             const id = getDashId();
@@ -1280,20 +1331,23 @@ export class MyMCP extends McpAgent<Env, Props> {
           }
           case "getDashboardItemProperty": {
             const id = getDashId();
-            if (!id || !input.itemId || !input.propertyKey) throw new Error("getDashboardItemProperty requires dashboardId, itemId, propertyKey");
+            if (!id || !input.itemId || !input.propertyKey)
+              throw new Error("getDashboardItemProperty requires dashboardId, itemId, propertyKey");
             const prop = await this.jiraClient.getDashboardItemProperty(id, input.itemId, input.propertyKey);
             return { content: [{ type: "text", text: `Property ${input.propertyKey} retrieved.` }], data: prop };
           }
           case "setDashboardItemProperty": {
             const id = getDashId();
-            if (!id || !input.itemId || !input.propertyKey) throw new Error("setDashboardItemProperty requires dashboardId, itemId, propertyKey");
+            if (!id || !input.itemId || !input.propertyKey)
+              throw new Error("setDashboardItemProperty requires dashboardId, itemId, propertyKey");
             if (!input.propertyValue) throw new Error("setDashboardItemProperty requires propertyValue");
             const result = await this.jiraClient.setDashboardItemProperty(id, input.itemId, input.propertyKey, input.propertyValue);
             return { content: [{ type: "text", text: `Property ${input.propertyKey} set.` }], data: result };
           }
           case "deleteDashboardItemProperty": {
             const id = getDashId();
-            if (!id || !input.itemId || !input.propertyKey) throw new Error("deleteDashboardItemProperty requires dashboardId, itemId, propertyKey");
+            if (!id || !input.itemId || !input.propertyKey)
+              throw new Error("deleteDashboardItemProperty requires dashboardId, itemId, propertyKey");
             await this.jiraClient.deleteDashboardItemProperty(id, input.itemId, input.propertyKey);
             return { content: [{ type: "text", text: `Property ${input.propertyKey} deleted.` }] };
           }
@@ -1354,10 +1408,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       {
         sprintId: z.number().describe("ID of the sprint to start"),
         name: z.string().optional().describe("Sprint name (required on some instances)"),
-        startDate: z
-          .string()
-          .optional()
-          .describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
+        startDate: z.string().optional().describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
         endDate: z
           .string()
           .optional()
@@ -1379,14 +1430,8 @@ export class MyMCP extends McpAgent<Env, Props> {
       {
         sprintId: z.number().describe("ID of the sprint to complete"),
         name: z.string().optional().describe("Sprint name (required on some instances)"),
-        startDate: z
-          .string()
-          .optional()
-          .describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
-        endDate: z
-          .string()
-          .optional()
-          .describe("End date in ISO format (e.g., 2025-11-09T00:00:00.000Z). Required on some instances."),
+        startDate: z.string().optional().describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
+        endDate: z.string().optional().describe("End date in ISO format (e.g., 2025-11-09T00:00:00.000Z). Required on some instances."),
       },
       async ({ sprintId, name, startDate, endDate }) => {
         await this.jiraClient.completeSprint(sprintId, { name, startDate, endDate });
@@ -1590,12 +1635,86 @@ export class MyMCP extends McpAgent<Env, Props> {
       );
     }
   }
+
+  private async buildTenantJiraEnv(): Promise<Env> {
+    const baseEnv = this.env as Env;
+
+    const backendBase = baseEnv.BACKEND_BASE_URL;
+    const mcpSecret = baseEnv.MCP_SECRET;
+
+    if (!backendBase || !mcpSecret) {
+      // Fallback to the Worker-level Jira configuration (single-tenant mode).
+      return baseEnv;
+    }
+
+    try {
+      const url = new URL("/api/settings/jira/tenant", backendBase);
+      url.searchParams.set("mcp_secret", mcpSecret);
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        console.warn("[mcp] Failed to resolve Jira settings by MCP secret:", response.status, response.statusText);
+        return baseEnv;
+      }
+
+      const data = (await response.json()) as {
+        jira_base_url?: string;
+        jira_email?: string;
+        atlassian_api_key?: string;
+      };
+
+      if (!data.jira_base_url || !data.jira_email || !data.atlassian_api_key) {
+        console.warn("[mcp] Incomplete Jira settings resolved by MCP secret, falling back to env.");
+        return baseEnv;
+      }
+
+      return {
+        ...baseEnv,
+        JIRA_BASE_URL: data.jira_base_url,
+        JIRA_EMAIL: data.jira_email,
+        ATLASSIAN_API_KEY: data.atlassian_api_key,
+      } as Env;
+    } catch (error) {
+      console.error("[mcp] Error resolving Jira settings by MCP secret:", error);
+      return baseEnv;
+    }
+  }
+}
+
+const sseHandler = MyMCP.serveSSE("/sse") as any;
+const mcpHandler = MyMCP.serve("/mcp") as any;
+
+function withMcpSecret(handler: any): any {
+  return {
+    async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+      const mcpSecret = extractMcpSecretFromRequest(request);
+      if (mcpSecret) {
+        // Attach to env so downstream logic can resolve the current tenant.
+        (env as Env).MCP_SECRET = mcpSecret;
+      }
+
+      if (typeof handler === "function") {
+        return handler(request, env, ctx);
+      }
+      if (handler && typeof handler.fetch === "function") {
+        return handler.fetch(request, env, ctx);
+      }
+
+      return new Response("Not Found", { status: 404 });
+    },
+  };
 }
 
 export default new OAuthProvider({
   apiHandlers: {
-    "/sse": MyMCP.serveSSE("/sse") as any,
-    "/mcp": MyMCP.serve("/mcp") as any,
+    "/sse": withMcpSecret(sseHandler),
+    "/mcp": withMcpSecret(mcpHandler),
   },
   authorizeEndpoint: "/authorize",
   clientRegistrationEndpoint: "/register",

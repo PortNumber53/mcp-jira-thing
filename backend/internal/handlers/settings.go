@@ -17,6 +17,7 @@ type UserSettingsStore interface {
 	ListUserSettings(ctx context.Context, email string) ([]models.JiraUserSettings, error)
 	GenerateMCPSecret(ctx context.Context, email string) (string, error)
 	GetMCPSecret(ctx context.Context, email string) (*string, error)
+	GetUserSettingsByMCPSecret(ctx context.Context, secret string) (*models.JiraUserSettingsWithSecret, error)
 }
 
 type jiraSettingsPayload struct {
@@ -86,6 +87,39 @@ func UserSettings(store UserSettingsStore) http.HandlerFunc {
 		default:
 			w.Header().Set("Allow", strings.Join([]string{http.MethodGet, http.MethodPost}, ", "))
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+// TenantJiraSettings exposes a backend-only API that allows trusted callers
+// (such as the MCP Worker) to resolve Jira credentials for a tenant using the
+// per-tenant mcp_secret. This endpoint returns the Atlassian API key and
+// therefore MUST NOT be called from the public frontend.
+func TenantJiraSettings(store UserSettingsStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		secret := strings.TrimSpace(r.URL.Query().Get("mcp_secret"))
+		if secret == "" {
+			http.Error(w, "mcp_secret query parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		settings, err := store.GetUserSettingsByMCPSecret(r.Context(), secret)
+		if err != nil {
+			log.Printf("TenantJiraSettings: failed to resolve settings by mcp_secret: %v", err)
+			http.Error(w, "failed to resolve Jira settings", http.StatusBadGateway)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(settings); err != nil {
+			http.Error(w, "failed to encode response", http.StatusInternalServerError)
+			return
 		}
 	}
 }

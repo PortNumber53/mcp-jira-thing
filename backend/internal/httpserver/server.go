@@ -31,6 +31,7 @@ func New(cfg config.Config, userClient handlers.UserLister, authStore handlers.O
 	router.Post("/api/auth/google", handlers.GoogleAuth(authStore))
 	router.Post("/api/settings/jira", handlers.UserSettings(settingsStore))
 	router.Get("/api/settings/jira", handlers.UserSettings(settingsStore))
+	router.Get("/api/settings/jira/tenant", handlers.TenantJiraSettings(settingsStore))
 	router.Get("/api/mcp/secret", handlers.MCPSecret(settingsStore))
 	router.Post("/api/mcp/secret", handlers.MCPSecret(settingsStore))
 

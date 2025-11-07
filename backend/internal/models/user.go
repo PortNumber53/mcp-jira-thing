@@ -38,3 +38,15 @@ type JiraUserSettings struct {
 	JiraCloudID *string `json:"jira_cloud_id,omitempty"`
 	IsDefault   bool    `json:"is_default"`
 }
+
+// JiraUserSettingsWithSecret is the internal representation of Jira settings
+// that includes the sensitive Atlassian API token. This should only be
+// returned to trusted server-side callers (e.g. the MCP Worker) and never to
+// the public frontend.
+type JiraUserSettingsWithSecret struct {
+	JiraBaseURL      string  `json:"jira_base_url"`
+	JiraEmail        string  `json:"jira_email"`
+	JiraCloudID      *string `json:"jira_cloud_id,omitempty"`
+	IsDefault        bool    `json:"is_default"`
+	AtlassianAPIToken string `json:"atlassian_api_key"`
+}

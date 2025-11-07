@@ -402,6 +402,53 @@ ORDER BY us.is_default DESC, us.jira_base_url ASC
 	return settings, nil
 }
 
+// GetUserSettingsByMCPSecret looks up the most appropriate Jira settings row
+// for the user identified by the given mcp_secret. It prefers the row marked
+// as is_default, but will fall back to any available settings if none are
+// marked as default.
+func (s *Store) GetUserSettingsByMCPSecret(ctx context.Context, secret string) (*models.JiraUserSettingsWithSecret, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store: db cannot be nil")
+	}
+
+	row := s.db.QueryRowContext(ctx, `
+SELECT
+  us.jira_base_url,
+  us.jira_email,
+  us.jira_cloud_id,
+  us.is_default,
+  us.jira_api_token
+FROM users_settings us
+JOIN users u ON us.user_id = u.id
+WHERE u.mcp_secret = $1
+ORDER BY us.is_default DESC, us.jira_base_url ASC
+LIMIT 1
+`, secret)
+
+	var (
+		baseURL  string
+		jiraEmail string
+		cloudID  sql.NullString
+		isDefault bool
+		apiToken string
+	)
+
+	if err := row.Scan(&baseURL, &jiraEmail, &cloudID, &isDefault, &apiToken); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("store: no Jira settings found for provided mcp_secret")
+		}
+		return nil, fmt.Errorf("store: lookup users_settings by mcp_secret: %w", err)
+	}
+
+	return &models.JiraUserSettingsWithSecret{
+		JiraBaseURL:       baseURL,
+		JiraEmail:         jiraEmail,
+		JiraCloudID:       nullStringPtr(cloudID),
+		IsDefault:         isDefault,
+		AtlassianAPIToken: apiToken,
+	}, nil
+}
+
 func nullStringPtr(value sql.NullString) *string {
 	if !value.Valid {
 		return nil

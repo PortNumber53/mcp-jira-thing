@@ -32,16 +32,16 @@ type StatePayload = {
 };
 
 export interface Env {
-	ASSETS: {
-		fetch(request: Request): Promise<Response>;
-	};
-	GITHUB_CLIENT_ID: string;
-	GITHUB_CLIENT_SECRET: string;
-	GOOGLE_CLIENT_ID?: string;
-	GOOGLE_CLIENT_SECRET?: string;
-	COOKIE_SECRET?: string;
-	SESSION_SECRET?: string;
-	BACKEND_BASE_URL?: string;
+  ASSETS: {
+    fetch(request: Request): Promise<Response>;
+  };
+  GITHUB_CLIENT_ID: string;
+  GITHUB_CLIENT_SECRET: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  COOKIE_SECRET?: string;
+  SESSION_SECRET?: string;
+  BACKEND_BASE_URL?: string;
 }
 
 const keyCache = new Map<string, Promise<CryptoKey>>();
@@ -315,48 +315,48 @@ export default {
       return response;
     }
 
-	if (url.pathname === "/api/auth/google/login" && request.method === "GET") {
-		if (!env.GOOGLE_CLIENT_ID) {
-			return jsonResponse({ error: "Google OAuth is not configured" }, { status: 500 });
-		}
+    if (url.pathname === "/api/auth/google/login" && request.method === "GET") {
+      if (!env.GOOGLE_CLIENT_ID) {
+        return jsonResponse({ error: "Google OAuth is not configured" }, { status: 500 });
+      }
 
-		const redirectTarget = normalizeRedirectTarget(url.searchParams.get("redirect"));
-		const nonce = randomToken(32);
+      const redirectTarget = normalizeRedirectTarget(url.searchParams.get("redirect"));
+      const nonce = randomToken(32);
 
-		const statePayload: StatePayload = {
-			nonce,
-			redirect: redirectTarget,
-			createdAt: Date.now(),
-		};
+      const statePayload: StatePayload = {
+        nonce,
+        redirect: redirectTarget,
+        createdAt: Date.now(),
+      };
 
-		const stateCookieValue = await encodeSignedPayload(getCookieSecret(env), statePayload);
+      const stateCookieValue = await encodeSignedPayload(getCookieSecret(env), statePayload);
 
-		const authorizeUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-		authorizeUrl.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
-		authorizeUrl.searchParams.set("redirect_uri", `${url.origin}/google/callback`);
-		authorizeUrl.searchParams.set("response_type", "code");
-		authorizeUrl.searchParams.set("scope", "openid email profile");
-		authorizeUrl.searchParams.set("state", nonce);
-		// Always show the Google account chooser so you can switch accounts
-		authorizeUrl.searchParams.set("prompt", "select_account");
+      const authorizeUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      authorizeUrl.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
+      authorizeUrl.searchParams.set("redirect_uri", `${url.origin}/google/callback`);
+      authorizeUrl.searchParams.set("response_type", "code");
+      authorizeUrl.searchParams.set("scope", "openid email profile");
+      authorizeUrl.searchParams.set("state", nonce);
+      // Always show the Google account chooser so you can switch accounts
+      authorizeUrl.searchParams.set("prompt", "select_account");
 
-		const response = new Response(null, {
-			status: 302,
-			headers: {
-				Location: authorizeUrl.toString(),
-			},
-		});
-		response.headers.append(
-			"Set-Cookie",
-			serializeCookie(STATE_COOKIE, stateCookieValue, {
-				httpOnly: true,
-				secure: !isLocalHost(url),
-				sameSite: "Lax",
-				maxAge: STATE_TTL_SECONDS,
-			}),
-		);
-		return response;
-	}
+      const response = new Response(null, {
+        status: 302,
+        headers: {
+          Location: authorizeUrl.toString(),
+        },
+      });
+      response.headers.append(
+        "Set-Cookie",
+        serializeCookie(STATE_COOKIE, stateCookieValue, {
+          httpOnly: true,
+          secure: !isLocalHost(url),
+          sameSite: "Lax",
+          maxAge: STATE_TTL_SECONDS,
+        }),
+      );
+      return response;
+    }
 
     if (url.pathname === "/api/settings/jira") {
       const session = await readSession(request, env);
@@ -551,159 +551,159 @@ export default {
       return response;
     }
 
-	if (url.pathname === "/google/callback" && request.method === "GET") {
-		const code = url.searchParams.get("code");
-		const state = url.searchParams.get("state");
+    if (url.pathname === "/google/callback" && request.method === "GET") {
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
 
-		if (!code || !state) {
-			return jsonResponse({ error: "Invalid OAuth response" }, { status: 400 });
-		}
+      if (!code || !state) {
+        return jsonResponse({ error: "Invalid OAuth response" }, { status: 400 });
+      }
 
-		if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
-			return jsonResponse({ error: "Google OAuth is not configured" }, { status: 500 });
-		}
+      if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+        return jsonResponse({ error: "Google OAuth is not configured" }, { status: 500 });
+      }
 
-		const cookies = parseCookies(request.headers.get("Cookie"));
-		const stateCookie = cookies[STATE_COOKIE];
-		if (!stateCookie) {
-			return jsonResponse({ error: "OAuth state cookie is missing" }, { status: 400 });
-		}
+      const cookies = parseCookies(request.headers.get("Cookie"));
+      const stateCookie = cookies[STATE_COOKIE];
+      if (!stateCookie) {
+        return jsonResponse({ error: "OAuth state cookie is missing" }, { status: 400 });
+      }
 
-		const parsedState = await decodeSignedPayload<StatePayload>(getCookieSecret(env), stateCookie);
-		if (!parsedState || parsedState.nonce !== state) {
-			return jsonResponse({ error: "OAuth state validation failed" }, { status: 400 });
-		}
+      const parsedState = await decodeSignedPayload<StatePayload>(getCookieSecret(env), stateCookie);
+      if (!parsedState || parsedState.nonce !== state) {
+        return jsonResponse({ error: "OAuth state validation failed" }, { status: 400 });
+      }
 
-		if (Date.now() - parsedState.createdAt > STATE_TTL_SECONDS * 1000) {
-			return jsonResponse({ error: "OAuth state is expired" }, { status: 400 });
-		}
+      if (Date.now() - parsedState.createdAt > STATE_TTL_SECONDS * 1000) {
+        return jsonResponse({ error: "OAuth state is expired" }, { status: 400 });
+      }
 
-		const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/x-www-form-urlencoded",
-			},
-			body: new URLSearchParams({
-				client_id: env.GOOGLE_CLIENT_ID!,
-				client_secret: env.GOOGLE_CLIENT_SECRET!,
-				code,
-				redirect_uri: `${url.origin}/google/callback`,
-				grant_type: "authorization_code",
-			}).toString(),
-		});
+      const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          client_id: env.GOOGLE_CLIENT_ID!,
+          client_secret: env.GOOGLE_CLIENT_SECRET!,
+          code,
+          redirect_uri: `${url.origin}/google/callback`,
+          grant_type: "authorization_code",
+        }).toString(),
+      });
 
-		if (!tokenResponse.ok) {
-			const text = await tokenResponse.text();
-			console.error("Google token exchange failed", tokenResponse.status, text);
-			return jsonResponse({ error: "Failed to exchange OAuth code" }, { status: 502 });
-		}
+      if (!tokenResponse.ok) {
+        const text = await tokenResponse.text();
+        console.error("Google token exchange failed", tokenResponse.status, text);
+        return jsonResponse({ error: "Failed to exchange OAuth code" }, { status: 502 });
+      }
 
-		const tokenPayload = (await tokenResponse.json()) as {
-			access_token?: string;
-			id_token?: string;
-			error?: string;
-			error_description?: string;
-		};
+      const tokenPayload = (await tokenResponse.json()) as {
+        access_token?: string;
+        id_token?: string;
+        error?: string;
+        error_description?: string;
+      };
 
-		if (!tokenPayload.access_token) {
-			console.error("Google token payload missing access token", tokenPayload);
-			return jsonResponse({ error: "Google did not return an access token" }, { status: 502 });
-		}
+      if (!tokenPayload.access_token) {
+        console.error("Google token payload missing access token", tokenPayload);
+        return jsonResponse({ error: "Google did not return an access token" }, { status: 502 });
+      }
 
-		const userResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
-			headers: {
-				Authorization: `Bearer ${tokenPayload.access_token}`,
-			},
-		});
+      const userResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+        headers: {
+          Authorization: `Bearer ${tokenPayload.access_token}`,
+        },
+      });
 
-		if (!userResponse.ok) {
-			const text = await userResponse.text();
-			console.error("Google userinfo fetch failed", userResponse.status, text);
-			return jsonResponse({ error: "Failed to fetch Google profile" }, { status: 502 });
-		}
+      if (!userResponse.ok) {
+        const text = await userResponse.text();
+        console.error("Google userinfo fetch failed", userResponse.status, text);
+        return jsonResponse({ error: "Failed to fetch Google profile" }, { status: 502 });
+      }
 
-		const userData = (await userResponse.json()) as {
-			sub: string;
-			name?: string;
-			email?: string;
-			picture?: string;
-		};
+      const userData = (await userResponse.json()) as {
+        sub: string;
+        name?: string;
+        email?: string;
+        picture?: string;
+      };
 
-		const email = userData.email ?? null;
-		if (!email) {
-			return jsonResponse({ error: "Google did not return an email" }, { status: 502 });
-		}
+      const email = userData.email ?? null;
+      if (!email) {
+        return jsonResponse({ error: "Google did not return an email" }, { status: 502 });
+      }
 
-		const sessionPayload: SessionPayload = {
-			login: email,
-			id: Date.now(),
-			name: userData.name ?? null,
-			avatarUrl: userData.picture ?? null,
-			email,
-			exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
-		};
+      const sessionPayload: SessionPayload = {
+        login: email,
+        id: Date.now(),
+        name: userData.name ?? null,
+        avatarUrl: userData.picture ?? null,
+        email,
+        exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+      };
 
-		const sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
-		const redirectTarget = normalizeRedirectTarget(parsedState.redirect) || "/";
+      const sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
+      const redirectTarget = normalizeRedirectTarget(parsedState.redirect) || "/";
 
-		// Best-effort: synchronise the authenticated Google user into the backend
-		// multi-tenant database. Failures here should not block login.
-		if (env.BACKEND_BASE_URL && tokenPayload.access_token) {
-			const backendUrl = new URL("/api/auth/google", env.BACKEND_BASE_URL);
-			const body = JSON.stringify({
-				sub: userData.sub,
-				name: userData.name ?? null,
-				email,
-				avatar_url: userData.picture ?? null,
-				access_token: tokenPayload.access_token,
-			});
+      // Best-effort: synchronise the authenticated Google user into the backend
+      // multi-tenant database. Failures here should not block login.
+      if (env.BACKEND_BASE_URL && tokenPayload.access_token) {
+        const backendUrl = new URL("/api/auth/google", env.BACKEND_BASE_URL);
+        const body = JSON.stringify({
+          sub: userData.sub,
+          name: userData.name ?? null,
+          email,
+          avatar_url: userData.picture ?? null,
+          access_token: tokenPayload.access_token,
+        });
 
-			try {
-				const backendResponse = await fetch(backendUrl.toString(), {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body,
-				});
-				if (!backendResponse.ok) {
-					const text = await backendResponse.text();
-					console.error("Backend Google auth sync failed", {
-						status: backendResponse.status,
-						body: text,
-					});
-				}
-			} catch (error) {
-				console.error("Failed to sync Google user to backend", error);
-			}
-		}
+        try {
+          const backendResponse = await fetch(backendUrl.toString(), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body,
+          });
+          if (!backendResponse.ok) {
+            const text = await backendResponse.text();
+            console.error("Backend Google auth sync failed", {
+              status: backendResponse.status,
+              body: text,
+            });
+          }
+        } catch (error) {
+          console.error("Failed to sync Google user to backend", error);
+        }
+      }
 
-		const response = new Response(null, {
-			status: 303,
-			headers: {
-				Location: redirectTarget,
-			},
-		});
-		response.headers.append(
-			"Set-Cookie",
-			serializeCookie(SESSION_COOKIE, sessionCookieValue, {
-				httpOnly: true,
-				secure: !isLocalHost(url),
-				sameSite: "Lax",
-				maxAge: SESSION_TTL_SECONDS,
-			}),
-		);
-		response.headers.append(
-			"Set-Cookie",
-			serializeCookie(STATE_COOKIE, "", {
-				httpOnly: true,
-				secure: !isLocalHost(url),
-				sameSite: "Lax",
-				maxAge: 0,
-			}),
-		);
-		return response;
-	}
+      const response = new Response(null, {
+        status: 303,
+        headers: {
+          Location: redirectTarget,
+        },
+      });
+      response.headers.append(
+        "Set-Cookie",
+        serializeCookie(SESSION_COOKIE, sessionCookieValue, {
+          httpOnly: true,
+          secure: !isLocalHost(url),
+          sameSite: "Lax",
+          maxAge: SESSION_TTL_SECONDS,
+        }),
+      );
+      response.headers.append(
+        "Set-Cookie",
+        serializeCookie(STATE_COOKIE, "", {
+          httpOnly: true,
+          secure: !isLocalHost(url),
+          sameSite: "Lax",
+          maxAge: 0,
+        }),
+      );
+      return response;
+    }
 
     if (url.pathname === "/callback" && request.method === "GET") {
       const code = url.searchParams.get("code");

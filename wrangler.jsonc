@@ -38,6 +38,9 @@
 	"observability": {
 		"enabled": true
 	},
+	"vars": {
+		"BACKEND_BASE_URL": "http://localhost:18003"
+	},
 	"dev": {
 		"port": 8788
 	}

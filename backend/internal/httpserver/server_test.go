@@ -40,6 +40,10 @@ func (s *stubUserClient) GetMCPSecret(ctx context.Context, email string) (*strin
 	return nil, nil
 }
 
+func (s *stubUserClient) GetUserSettingsByMCPSecret(ctx context.Context, secret string) (*models.JiraUserSettingsWithSecret, error) {
+	return nil, nil
+}
+
 func TestHealthRoute(t *testing.T) {
 	cfg := config.Config{ServerAddress: ":0"}
 	stub := &stubUserClient{}
