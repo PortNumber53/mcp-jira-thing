@@ -29,6 +29,10 @@ pipeline {
     }
 
     stage('Deploy Frontend') {
+      environment {
+        // Inject Cloudflare API token from Jenkins credentials for wrangler deploy
+        CLOUDFLARE_API_TOKEN = credentials('cloudflare-api-token')
+      }
       steps {
         // Deploy the Cloudflare Worker + SPA from the frontend directory.
         sh 'cd frontend && npm ci && npm run deploy'
