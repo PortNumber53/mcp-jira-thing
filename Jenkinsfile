@@ -50,6 +50,10 @@ pipeline {
       when {
         branch 'master'
       }
+      environment {
+        // Xata database URL for backend migrations and runtime
+        DATABASE_URL = credentials('prod-xata-database-url-mcp-jira-thing')
+      }
       steps {
         withEnv([
           'DEPLOY_HOST=web1',
