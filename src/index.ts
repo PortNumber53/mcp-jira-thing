@@ -1642,9 +1642,15 @@ export class MyMCP extends McpAgent<Env, Props> {
     const backendBase = baseEnv.BACKEND_BASE_URL;
     const mcpSecret = baseEnv.MCP_SECRET;
 
-    if (!backendBase || !mcpSecret) {
-      // Fallback to the Worker-level Jira configuration (single-tenant mode).
-      return baseEnv;
+    // If no MCP secret is present, do NOT fall back to legacy single-tenant
+    // env-based Jira settings. Requiring MCP_SECRET avoids accidentally
+    // exposing shared Jira credentials to arbitrary remote clients.
+    if (!mcpSecret) {
+      throw new Error("MCP_SECRET is required to resolve tenant Jira settings");
+    }
+
+    if (!backendBase) {
+      throw new Error("BACKEND_BASE_URL must be configured when using MCP_SECRET for tenant resolution");
     }
 
     try {
@@ -1659,8 +1665,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       });
 
       if (!response.ok) {
-        console.warn("[mcp] Failed to resolve Jira settings by MCP secret:", response.status, response.statusText);
-        return baseEnv;
+        throw new Error(`[mcp] Failed to resolve Jira settings by MCP secret: ${response.status} ${response.statusText}`);
       }
 
       const data = (await response.json()) as {
@@ -1670,8 +1675,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       };
 
       if (!data.jira_base_url || !data.jira_email || !data.atlassian_api_key) {
-        console.warn("[mcp] Incomplete Jira settings resolved by MCP secret, falling back to env.");
-        return baseEnv;
+        throw new Error("[mcp] Incomplete Jira settings resolved by MCP secret");
       }
 
       return {
@@ -1682,7 +1686,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       } as Env;
     } catch (error) {
       console.error("[mcp] Error resolving Jira settings by MCP secret:", error);
-      return baseEnv;
+      throw error instanceof Error ? error : new Error("Failed to resolve Jira settings by MCP secret");
     }
   }
 }
