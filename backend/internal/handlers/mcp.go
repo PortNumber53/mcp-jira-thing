@@ -1,19 +1,11 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
 )
-
-// MCPSecretStore defines the behaviour required from the storage client used
-// by the MCP secret handler.
-type MCPSecretStore interface {
-	GenerateMCPSecret(ctx context.Context, email string) (string, error)
-	GetMCPSecret(ctx context.Context, email string) (*string, error)
-}
 
 type mcpSecretPayload struct {
 	UserEmail string `json:"user_email"`
@@ -22,7 +14,7 @@ type mcpSecretPayload struct {
 // MCPSecret creates an HTTP handler that allows a user to fetch or rotate
 // their MCP tenant secret, which is used to identify the tenant when an MCP
 // client connects.
-func MCPSecret(store MCPSecretStore) http.HandlerFunc {
+func MCPSecret(store UserSettingsStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
@@ -76,5 +68,3 @@ func MCPSecret(store MCPSecretStore) http.HandlerFunc {
 		}
 	}
 }
-
-

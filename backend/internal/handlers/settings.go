@@ -15,6 +15,8 @@ import (
 type UserSettingsStore interface {
 	UpsertUserSettings(ctx context.Context, userEmail, baseURL, jiraEmail, apiKey string) error
 	ListUserSettings(ctx context.Context, email string) ([]models.JiraUserSettings, error)
+	GenerateMCPSecret(ctx context.Context, email string) (string, error)
+	GetMCPSecret(ctx context.Context, email string) (*string, error)
 }
 
 type jiraSettingsPayload struct {
