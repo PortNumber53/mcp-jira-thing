@@ -21,11 +21,14 @@ fi
 echo "[deploy] Creating archive from prebuilt binary..."
 tar -C "$BUILD_DIR" -czf "$BUILD_DIR/$ARCHIVE_NAME" "$BINARY_NAME"
 
+echo "[deploy] Ensuring remote directories exist at $DEPLOY_HOST:$DEPLOY_PATH"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; mkdir -p '$DEPLOY_PATH' '$DEPLOY_PATH/logs'"
+
 echo "[deploy] Uploading archive to $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH"
 scp "$BUILD_DIR/$ARCHIVE_NAME" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
 
 echo "[deploy] Extracting archive on remote host"
-ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; mkdir -p '$DEPLOY_PATH'; cd '$DEPLOY_PATH'; tar -xzf '$ARCHIVE_NAME'; rm -f '$ARCHIVE_NAME'"
+ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; cd '$DEPLOY_PATH'; tar -xzf '$ARCHIVE_NAME'; rm -f '$ARCHIVE_NAME'"
 
 if [[ -n "${SERVICE_NAME:-}" ]]; then
   echo "[deploy] Restarting systemd service $SERVICE_NAME"

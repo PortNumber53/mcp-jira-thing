@@ -54,7 +54,7 @@ pipeline {
         withEnv([
           'DEPLOY_HOST=web1',
           'DEPLOY_USER=grimlock',
-          'DEPLOY_PATH=/opt/mcp-backend',
+          'DEPLOY_PATH=/var/www/vhosts/mcp-jira-thing.truvis.co',
           'SERVICE_NAME=mcp-backend',
         ]) {
           sh 'scripts/deploy-backend.sh'
