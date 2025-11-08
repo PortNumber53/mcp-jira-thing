@@ -805,12 +805,41 @@ export class MyMCP extends McpAgent<Env, Props> {
               properties: input.properties,
               fieldsByKeys: input.fieldsByKeys,
             });
+
+            const issues = Array.isArray(results.issues) ? results.issues : [];
+            const lines = issues.map((issue: any) => {
+              if (!issue) {
+                return "[invalid issue result]";
+              }
+
+              // Prefer standard Jira shape
+              let key = typeof issue.key === "string" && issue.key.length > 0 ? issue.key : undefined;
+              let summary =
+                issue.fields && typeof issue.fields.summary === "string" && issue.fields.summary.length > 0
+                  ? issue.fields.summary
+                  : undefined;
+
+              // Fallbacks for alternative shapes
+              if (!key && typeof issue.id === "string" && issue.id.length > 0) {
+                key = issue.id;
+              }
+              if (!summary && typeof (issue.summary || issue.title) === "string") {
+                summary = (issue.summary || issue.title) as string;
+              }
+
+              if (!key && !summary) {
+                return "[invalid issue result]";
+              }
+
+              return `${key ?? "?"}: ${summary ?? "<no summary>"}`;
+            });
+
             return {
               content: [
                 {
-                  text: `Found ${results.total} issues. First page:\n${results.issues
-                    .map((issue) => `${issue.key}: ${issue.fields.summary}`)
-                    .join("\n")}`,
+                  text: `Found ${typeof results.total === "number" ? results.total : issues.length} issues. First page:\n${lines.join(
+                    "\n",
+                  )}`,
                   type: "text",
                 },
               ],
@@ -1167,11 +1196,16 @@ export class MyMCP extends McpAgent<Env, Props> {
             "[OPTIONAL] Maximum number of results to return. Default is 50 if not specified. Use a smaller number for more focused results.",
           ),
       },
-      async ({ query }) => {
+      async ({ query, maxResults }) => {
         try {
-          // Use the searchUsers method to find users
           const jiraClient = await this.getJiraClient();
-          const response = await jiraClient.searchUsers(query);
+          console.log("[mcp] getJiraUsers (inline): received request", { query, maxResults });
+          const response = await jiraClient.searchUsers(query, maxResults ?? 10);
+          console.log("[mcp] getJiraUsers (inline): Jira responded", {
+            query,
+            count: Array.isArray(response) ? response.length : null,
+            type: typeof response,
+          });
 
           if (!Array.isArray(response) || response.length === 0) {
             return {
@@ -1689,7 +1723,16 @@ export class MyMCP extends McpAgent<Env, Props> {
       },
       async ({ emailAddress, password, displayName }) => {
         const jiraClient = await this.getJiraClient();
+        console.log("[mcp] createJiraUser: received request", {
+          emailAddress,
+          hasPassword: !!password,
+          displayName,
+        });
         const newUser = await jiraClient.createUser({ emailAddress, password, displayName });
+        console.log("[mcp] createJiraUser: Jira responded", {
+          accountId: (newUser as any)?.accountId,
+          displayName: (newUser as any)?.displayName,
+        });
         return {
           content: [{ text: `User created: ${newUser.displayName} (Account ID: ${newUser.accountId})`, type: "text" }],
         };
@@ -1876,6 +1919,55 @@ function withMcpSecret(handler: any): any {
         });
       } catch (err) {
         console.warn("[mcp] Failed to log env bindings:", err);
+      }
+
+      // Extra debugging for SSE message traffic
+      try {
+        const url = new URL(request.url);
+        if (url.pathname.endsWith("/sse/message")) {
+          const contentType = request.headers.get("content-type") || "";
+          let bodyPreview: unknown = "[unread]";
+          try {
+            if (contentType.includes("application/json")) {
+              const clone = request.clone();
+              const json = await clone.json();
+              // Avoid logging full payload; just structure + keys
+              bodyPreview = {
+                type: "json",
+                keys: typeof json === "object" && json !== null ? Object.keys(json as any) : [],
+              };
+            } else if (contentType.includes("text/")) {
+              const clone = request.clone();
+              const text = await clone.text();
+              bodyPreview = {
+                type: "text",
+                length: text.length,
+                snippet: text.slice(0, 200),
+              };
+            } else if (request.headers.get("content-length")) {
+              bodyPreview = {
+                type: "binary",
+                length: Number.parseInt(request.headers.get("content-length") || "0", 10),
+              };
+            }
+          } catch (bodyErr) {
+            bodyPreview = { error: String(bodyErr) };
+          }
+
+          console.log("[mcp] /sse/message request", {
+            method: request.method,
+            url: url.toString(),
+            headers: {
+              // Only log non-sensitive headers
+              "content-type": contentType,
+              "content-length": request.headers.get("content-length") || null,
+              "user-agent": request.headers.get("user-agent") || null,
+            },
+            bodyPreview,
+          });
+        }
+      } catch (e) {
+        console.warn("[mcp] Failed to log /sse/message debug info:", e);
       }
 
       const mcpSecret = extractMcpSecretFromRequest(request);
