@@ -609,10 +609,25 @@ export class JiraClient extends JiraClientCore {
   /**
    * Search for Jira users by query string
    * @param query Search query (username, display name, or email)
+   * @param maxResults Maximum number of users to return (defaults to 50)
    * @returns Array of user objects with account IDs
    */
-  public async searchUsers(query: string): Promise<any[]> {
-    return this.makeRequest<any[]>(`/rest/api/3/user/search?query=${encodeURIComponent(query)}`, "GET");
+  public async searchUsers(query: string, maxResults: number = 50): Promise<any[]> {
+    const safeMax = Number.isFinite(maxResults) && maxResults > 0 ? Math.min(Math.floor(maxResults), 100) : 50;
+    const url = `/rest/api/3/user/search?query=${encodeURIComponent(query)}&maxResults=${safeMax}`;
+    console.log("[jira] searchUsers: fetching", { query, safeMax, url });
+    try {
+      const result = await this.makeRequest<any[]>(url, "GET");
+      console.log("[jira] searchUsers: success", { query, count: Array.isArray(result) ? result.length : null });
+      return result;
+    } catch (error: any) {
+      console.error("[jira] searchUsers: error", {
+        query,
+        safeMax,
+        message: error?.message,
+      });
+      throw error;
+    }
   }
 
   /**

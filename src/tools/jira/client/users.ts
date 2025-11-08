@@ -7,14 +7,24 @@ export class JiraUsers extends JiraClientCore {
     return this.makeRequest<JiraUser[]>(`/rest/api/3/users/search`);
   }
   public async getUser(accountId: string): Promise<JiraUser> {
-    return this.makeRequest<JiraUser>(`rest/api/3/user?accountId=${accountId}`);
+    const url = `/rest/api/3/user?accountId=${encodeURIComponent(accountId)}`;
+    console.log("[jira] getUser: fetching", { url });
+    return this.makeRequest<JiraUser>(url);
   }
 
   public async createUser(payload: CreateUserPayload): Promise<JiraUser> {
-    return this.makeRequest<JiraUser>('POST', 'rest/api/3/user', payload);
+    const url = `/rest/api/3/user`;
+    console.log("[jira] createUser: creating user", {
+      url,
+      hasEmail: !!payload.emailAddress,
+      hasDisplayName: !!payload.displayName,
+    });
+    return this.makeRequest<JiraUser>('POST', url, payload);
   }
 
   public async deleteUser(accountId: string): Promise<void> {
-    await this.makeRequest<void>('DELETE', `rest/api/3/user?accountId=${accountId}`);
+    const url = `/rest/api/3/user?accountId=${encodeURIComponent(accountId)}`;
+    console.log("[jira] deleteUser: deleting user", { url });
+    await this.makeRequest<void>('DELETE', url);
   }
 }

@@ -10,9 +10,15 @@ export function registerGetJiraUsersTool(server: McpServer, jiraClient: JiraClie
       query: z.string().describe("[REQUIRED] Search query for users - can be a name, email, or username. Partial matches are supported (e.g., 'john', 'smith@example.com')."),
       maxResults: z.number().optional().describe("[OPTIONAL] Maximum number of results to return. Default is 50 if not specified. Use a smaller number for more focused results.")
     },
-    async ({ query }) => {
+    async ({ query, maxResults }) => {
       try {
-        const response = await jiraClient.searchUsers(query);
+        console.log("[mcp] getJiraUsers: received request", { query, maxResults });
+        const response = await jiraClient.searchUsers(query, maxResults ?? 10);
+        console.log("[mcp] getJiraUsers: Jira responded", {
+          query,
+          count: Array.isArray(response) ? response.length : null,
+          type: typeof response,
+        });
         if (!Array.isArray(response) || response.length === 0) {
           return {
             content: [{ text: `No users found matching \"${query}\"`, type: "text" }],
@@ -41,7 +47,13 @@ export function registerGetJiraUsersTool(server: McpServer, jiraClient: JiraClie
           ],
         };
       } catch (error: any) {
-        const errorMessage = `Error searching for users: ${error?.message || 'Unknown error'}`;
+        console.error("[mcp] getJiraUsers: error searching for users", {
+          query,
+          maxResults,
+          message: error?.message,
+          stack: error?.stack,
+        });
+        const errorMessage = `Error searching for users: ${error?.message || "Unknown error"}`;
         const errorJson = JSON.stringify({
           error: true,
           message: error?.message || 'Unknown error',
