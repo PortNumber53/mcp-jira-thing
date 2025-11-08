@@ -6,15 +6,8 @@ import { z } from "zod";
 import { JiraClient } from "./tools/jira";
 import { CreateIssueTypePayload, UpdateIssueTypePayload } from "./tools/jira/interfaces";
 import { GitHubHandler } from "./github-handler";
-
-// Context from the auth process, encrypted & stored in the auth token
-// and provided to the DurableMCP as this.props
-type Props = {
-  login: string;
-  name: string;
-  email: string;
-  accessToken: string;
-};
+import { registerTools } from "./include/tools";
+import type { Props } from "./utils";
 
 const ALLOWED_USERNAMES = new Set<string>([
   "PortNumber53",
@@ -35,26 +28,85 @@ type Env = Cloudflare.Env & {
 };
 
 function extractMcpSecretFromRequest(request: Request): string | undefined {
+  // Debug logging to understand how MCP_SECRET is being passed through.
+  try {
+    const rawHeaders: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      rawHeaders[key.toLowerCase()] = value;
+    });
+    // Log the full header map so we can see exactly what is being sent.
+    console.log("[mcp] Incoming request headers (raw):", rawHeaders);
+
+    // Also log all query string parameters for additional debugging context.
+    try {
+      const url = new URL(request.url);
+      const queryParams: Record<string, string[]> = {};
+      url.searchParams.forEach((value, key) => {
+        if (!queryParams[key]) {
+          queryParams[key] = [];
+        }
+        queryParams[key].push(value);
+      });
+      console.log("[mcp] Incoming request query params:", queryParams);
+    } catch (urlErr) {
+      console.warn("[mcp] Failed to parse URL/query parameters for MCP secret extraction:", urlErr);
+    }
+  } catch (err) {
+    console.warn("[mcp] Failed to log incoming headers for MCP secret extraction:", err);
+  }
+
   // 1) Prefer explicit header
   const headerSecret = request.headers.get("x-mcp-secret") || request.headers.get("X-MCP-SECRET");
   if (headerSecret && headerSecret.trim().length > 0) {
+    console.log("[mcp] MCP secret found in X-MCP-SECRET header (length only):", headerSecret.trim().length);
     return headerSecret.trim();
   }
 
   // 2) Fall back to Cookie header (e.g. MCP_COOKIE="MCP_SECRET=..." in the MCP client)
   const cookieHeader = request.headers.get("cookie") || request.headers.get("Cookie");
-  if (!cookieHeader) return undefined;
-
-  const cookies = cookieHeader.split(";");
-  for (const raw of cookies) {
-    const [name, ...rest] = raw.split("=");
-    if (!name) continue;
-    if (name.trim() === "MCP_SECRET") {
-      const value = rest.join("=").trim();
-      if (value) {
-        return value;
+  if (cookieHeader) {
+    const cookies = cookieHeader.split(";");
+    for (const raw of cookies) {
+      const [name, ...rest] = raw.split("=");
+      if (!name) continue;
+      if (name.trim() === "MCP_SECRET") {
+        const value = rest.join("=").trim();
+        if (value) {
+          console.log("[mcp] MCP secret found in Cookie header (length only):", value.length);
+          return value;
+        }
       }
     }
+  }
+
+  // 3) Finally, attempt to resolve MCP_SECRET from the query string. This supports
+  // both a direct ?mcp_secret=... parameter and the Cursor-style
+  // ?query=MCP_SECRET=... pattern.
+  try {
+    const url = new URL(request.url);
+
+    // Direct parameter
+    const directSecret = url.searchParams.get("mcp_secret") || url.searchParams.get("MCP_SECRET") || url.searchParams.get("mcpSecret");
+    if (directSecret && directSecret.trim().length > 0) {
+      console.log("[mcp] MCP secret found in query parameter (direct) (length only):", directSecret.trim().length);
+      return directSecret.trim();
+    }
+
+    // Fallback: inspect generic "query" parameters for a "MCP_SECRET=..." token
+    const queryParams = url.searchParams.getAll("query");
+    for (const qp of queryParams) {
+      if (!qp) continue;
+      const match = qp.match(/MCP_SECRET=([^&\s]+)/);
+      if (match && match[1]) {
+        const extracted = match[1].trim();
+        if (extracted.length > 0) {
+          console.log("[mcp] MCP secret extracted from query parameter value (MCP_SECRET=...) (length only):", extracted.length);
+          return extracted;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[mcp] Failed to inspect query string for MCP_SECRET:", err);
   }
 
   return undefined;
@@ -1707,17 +1759,64 @@ export class MyMCP extends McpAgent<Env, Props> {
     const baseEnv = this.env as Env;
 
     const backendBase = baseEnv.BACKEND_BASE_URL;
-    const mcpSecret = baseEnv.MCP_SECRET;
-
-    // If no MCP secret is present, do NOT fall back to legacy single-tenant
-    // env-based Jira settings. Requiring MCP_SECRET avoids accidentally
-    // exposing shared Jira credentials to arbitrary remote clients.
-    if (!mcpSecret) {
-      throw new Error("MCP_SECRET is required to resolve tenant Jira settings");
-    }
+    const props = (this.props as Props | undefined) ?? undefined;
+    let mcpSecret = props?.mcpSecret;
 
     if (!backendBase) {
       throw new Error("BACKEND_BASE_URL must be configured when using MCP_SECRET for tenant resolution");
+    }
+
+    // Prefer an explicit MCP secret from the request (header/cookie) or
+    // previously cached on this.props. If it's not present, attempt to
+    // resolve it from the backend using the authenticated user's email.
+    if (!mcpSecret) {
+      const userEmail = props?.email?.trim();
+
+      console.log("[mcp] No MCP_SECRET on props, attempting to resolve by user email", {
+        backendBase,
+        userEmail_present: !!userEmail,
+      });
+
+      if (!userEmail) {
+        throw new Error("MCP_SECRET is required and could not be resolved for the current user (missing email on props)");
+      }
+
+      try {
+        const secretUrl = new URL("/api/mcp/secret", backendBase);
+        secretUrl.searchParams.set("email", userEmail);
+
+        const secretResponse = await fetch(secretUrl.toString(), {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!secretResponse.ok) {
+          throw new Error(`[mcp] Failed to resolve MCP secret by email: ${secretResponse.status} ${secretResponse.statusText}`);
+        }
+
+        const secretData = (await secretResponse.json()) as { mcp_secret?: string | null };
+        const resolvedSecret = secretData.mcp_secret ?? undefined;
+
+        if (!resolvedSecret) {
+          throw new Error("[mcp] No MCP secret configured for current user");
+        }
+
+        mcpSecret = resolvedSecret;
+
+        // Cache for subsequent calls during this DO's lifetime on props only.
+        if (props) (props as Props).mcpSecret = resolvedSecret;
+      } catch (error) {
+        console.error("[mcp] Error resolving MCP secret by email:", error);
+        throw error instanceof Error ? error : new Error("Failed to resolve MCP secret for current user");
+      }
+    }
+
+    // At this point we must have an MCP secret, whether supplied by the
+    // client or resolved from the backend.
+    if (!mcpSecret) {
+      throw new Error("MCP_SECRET is required to resolve tenant Jira settings");
     }
 
     try {
@@ -1764,10 +1863,30 @@ const mcpHandler = MyMCP.serve("/mcp") as any;
 function withMcpSecret(handler: any): any {
   return {
     async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+      // Log environment variable keys (and selected values) to understand
+      // what the Worker sees at runtime for MCP debugging.
+      try {
+        const envObj = env as any;
+        const envKeys = Object.keys(envObj ?? {});
+        console.log("[mcp] Env keys:", envKeys);
+        console.log("[mcp] Env snapshot (selected):", {
+          BACKEND_BASE_URL: envObj?.BACKEND_BASE_URL,
+          GITHUB_CLIENT_ID_present: !!envObj?.GITHUB_CLIENT_ID,
+          SESSION_SECRET_present: !!envObj?.SESSION_SECRET,
+        });
+      } catch (err) {
+        console.warn("[mcp] Failed to log env bindings:", err);
+      }
+
       const mcpSecret = extractMcpSecretFromRequest(request);
       if (mcpSecret) {
-        // Attach to env so downstream logic can resolve the current tenant.
-        (env as Env).MCP_SECRET = mcpSecret;
+        // Attach to ctx.props so the Durable Object-based McpAgent
+        // can see the secret via this.props. The agents library passes
+        // ctx.props into doStub._init(ctx.props), which becomes
+        // MyMCP.props. We merge with any existing props set by the
+        // OAuthProvider (login, email, etc.).
+        const existingProps = (ctx as any).props ?? {};
+        (ctx as any).props = { ...existingProps, mcpSecret } as Props;
       }
 
       if (typeof handler === "function") {

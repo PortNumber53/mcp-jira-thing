@@ -100,10 +100,14 @@ export async function fetchUpstreamAuthToken({
 }
 
 // Context from the auth process, encrypted & stored in the auth token
-// and provided to the DurableMCP as this.props
+// and provided to the DurableMCP as this.props. We also support an
+// optional per-tenant mcpSecret which can be attached at connection
+// time (not persisted in the auth token) so the Durable Object can
+// resolve Jira settings using the Go backend.
 export type Props = {
   login: string;
   name: string;
   email: string;
   accessToken: string;
+  mcpSecret?: string;
 };
