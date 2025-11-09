@@ -39,6 +39,18 @@ pipeline {
       }
     }
 
+    stage('Deploy MCP Worker') {
+      environment {
+        // Reuse Cloudflare API token for deploying the MCP worker defined in wrangler.jsonc
+        CLOUDFLARE_API_TOKEN = credentials('cloudflare-api-token')
+      }
+      steps {
+        // Deploy the MCP Worker from the repository root using Wrangler
+        sh 'npm ci'
+        sh 'npm run deploy'
+      }
+    }
+
     stage('Archive Artifact') {
       steps {
         sh 'tar -czf backend/bin/mcp-backend.tar.gz -C backend/bin mcp-backend'
