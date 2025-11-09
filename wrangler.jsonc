@@ -38,9 +38,10 @@
 	"observability": {
 		"enabled": true
 	},
-	"vars": {
-		"BACKEND_BASE_URL": "http://localhost:18003"
-	},
+	// NOTE:
+	// Do NOT set BACKEND_BASE_URL at the root here, to avoid overwriting the
+	// production value configured via Wrangler environments/secrets.
+	// Configure BACKEND_BASE_URL per-environment instead (e.g. [env.production].vars).
 	"dev": {
 		"port": 8788
 	}
