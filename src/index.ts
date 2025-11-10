@@ -7,6 +7,7 @@ import { JiraClient } from "./tools/jira";
 import { CreateIssueTypePayload, UpdateIssueTypePayload } from "./tools/jira/interfaces";
 import { GitHubHandler } from "./github-handler";
 import { registerTools } from "./include/tools";
+import { registerTools } from "./include/tools";
 import type { Props } from "./utils";
 
 const ALLOWED_USERNAMES = new Set<string>([

@@ -106,29 +106,29 @@ export class JiraIssues extends JiraClientCore {
   }
 
   public async searchIssues(jql: string, options: JiraSearchIssuesOptions = {}): Promise<JiraIssueSearchResult> {
-	    const params = new URLSearchParams();
-	    const fields = normalizeList(options.fields);
-	    const expand = normalizeList(options.expand);
-	    const properties = normalizeList(options.properties);
+    const params = new URLSearchParams();
+    const fields = normalizeList(options.fields);
+    const expand = normalizeList(options.expand);
+    const properties = normalizeList(options.properties);
 
-	    params.set("jql", jql);
-	    if (options.maxResults !== undefined) params.set("maxResults", String(options.maxResults));
-	    if (options.startAt !== undefined) params.set("startAt", String(options.startAt));
-	    if (fields) params.set("fields", fields);
-	    if (expand) params.set("expand", expand);
-	    if (properties) params.set("properties", properties);
-	    if (options.fieldsByKeys !== undefined) params.set("fieldsByKeys", String(options.fieldsByKeys));
+    params.set("jql", jql);
+    if (options.maxResults !== undefined) params.set("maxResults", String(options.maxResults));
+    if (options.startAt !== undefined) params.set("startAt", String(options.startAt));
+    if (fields) params.set("fields", fields);
+    if (expand) params.set("expand", expand);
+    if (properties) params.set("properties", properties);
+    if (options.fieldsByKeys !== undefined) params.set("fieldsByKeys", String(options.fieldsByKeys));
 
-	    const query = params.toString();
+    const query = params.toString();
 
-	    try {
-	      return await this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search/jql?${query}`);
-	    } catch (error) {
-	      if (shouldFallbackToLegacySearch(error)) {
-	        return this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search?${query}`);
-	      }
-	      throw error;
-	    }
+    try {
+      return await this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search/jql?${query}`);
+    } catch (error) {
+      if (shouldFallbackToLegacySearch(error)) {
+        return this.makeRequest<JiraIssueSearchResult>(`/rest/api/3/search?${query}`);
+      }
+      throw error;
+    }
   }
 
   public async getTransitions(issueIdOrKey: string): Promise<JiraTransitionsResponse> {

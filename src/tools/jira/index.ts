@@ -521,11 +521,7 @@ export class JiraClient extends JiraClientCore {
     return this.dashboards.deleteDashboardItemProperty(dashboardId, itemId, propertyKey);
   }
 
-  public async copyDashboard(
-    id: string,
-    payload: Record<string, any>,
-    extendAdminPermissions?: boolean,
-  ): Promise<any> {
+  public async copyDashboard(id: string, payload: Record<string, any>, extendAdminPermissions?: boolean): Promise<any> {
     return this.dashboards.copyDashboard(id, payload, extendAdminPermissions);
   }
 
@@ -563,17 +559,11 @@ export class JiraClient extends JiraClientCore {
     return this.sprints.deleteSprint(sprintId);
   }
 
-  public async startSprint(
-    sprintId: number,
-    overrides: Partial<UpdateSprintPayload> = {},
-  ): Promise<JiraSprint> {
+  public async startSprint(sprintId: number, overrides: Partial<UpdateSprintPayload> = {}): Promise<JiraSprint> {
     return this.sprints.startSprint(sprintId, overrides);
   }
 
-  public async completeSprint(
-    sprintId: number,
-    overrides: Partial<UpdateSprintPayload> = {},
-  ): Promise<JiraSprint> {
+  public async completeSprint(sprintId: number, overrides: Partial<UpdateSprintPayload> = {}): Promise<JiraSprint> {
     return this.sprints.completeSprint(sprintId, overrides);
   }
 
