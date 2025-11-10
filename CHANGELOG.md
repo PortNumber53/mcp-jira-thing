@@ -1,5 +1,13 @@
 # Changelog
 
+## 2025-11-09
+
+- chore: Sync repository with remote origin
+  - Reset local branch to match `origin/master` at commit `055d32f`
+  - Discarded 4 local commits that had diverged from remote
+  - Updated frontend dependencies - added peer dependencies to package-lock.json
+  - Repository is now up-to-date with latest remote changes
+
 ## 2025-10-14
 
 - feat(jira-comments): Implement full comment management support
