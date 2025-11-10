@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -51,7 +52,22 @@ func main() {
 	}
 
 	if err := migrations.Up(db); err != nil {
-		log.Fatalf("failed to apply database migrations: %v", err)
+		// Check if it's a dirty database error and try to fix it
+		log.Printf("migrations: error detected: %v (type: %T)", err, err)
+		if strings.Contains(err.Error(), "Dirty database version") {
+			log.Printf("migrations: dirty database detected, attempting to fix...")
+			if fixErr := migrations.FixDirtyDatabase(db); fixErr != nil {
+				log.Printf("migrations: failed to fix dirty database: %v", fixErr)
+				log.Fatalf("failed to apply database migrations: %v", err)
+			}
+			
+			// Try applying migrations again after fixing dirty state
+			if retryErr := migrations.Up(db); retryErr != nil {
+				log.Fatalf("failed to apply database migrations after fixing dirty state: %v", retryErr)
+			}
+		} else {
+			log.Fatalf("failed to apply database migrations: %v", err)
+		}
 	}
 
 	store, err := store.New(db)
@@ -59,7 +75,7 @@ func main() {
 		log.Fatalf("failed to create store: %v", err)
 	}
 
-	srv := httpserver.New(cfg, store, store, store)
+	srv := httpserver.New(cfg, db, store, store, store)
 
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

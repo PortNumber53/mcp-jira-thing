@@ -2,10 +2,12 @@ package httpserver
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/config"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/models"
 )
@@ -47,7 +49,15 @@ func (s *stubUserClient) GetUserSettingsByMCPSecret(ctx context.Context, secret 
 func TestHealthRoute(t *testing.T) {
 	cfg := config.Config{ServerAddress: ":0"}
 	stub := &stubUserClient{}
-	server := New(cfg, stub, stub, stub)
+	
+	// Create a mock database connection
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open test database: %v", err)
+	}
+	defer db.Close()
+	
+	server := New(cfg, db, stub, stub, stub)
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rr := httptest.NewRecorder()

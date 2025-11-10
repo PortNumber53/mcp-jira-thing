@@ -1,3 +1,4 @@
+import { Octokit } from "octokit";
 import { z } from "zod";
 
 /**
@@ -24,9 +25,24 @@ function extractFirstAppLocation(error) {
  * Call as `await registerTools.call(this)` from within MyMCP.init so that
  * `this.server` and `this.getJiraClient` are available.
  */
+const ALLOWED_USERNAMES = new Set([
+  "PortNumber53",
+  // Add GitHub usernames of users who should have access to the image generation tool
+  // For example: 'yourusername', 'coworkerusername'
+]);
+
 export async function registerTools() {
   const server = this.server;
   const getJiraClient = () => this.getJiraClient();
+
+  server.tool(
+    "add",
+    "Add two numbers the way only MCP can",
+    { a: z.number(), b: z.number() },
+    async ({ a, b }) => ({
+      content: [{ text: String(a + b), type: "text" }],
+    }),
+  );
 
   const IssueActionEnum = z.enum([
     "createIssue",
@@ -1031,4 +1047,280 @@ export async function registerTools() {
       }
     },
   );
+
+  server.tool(
+    "createJiraSprint",
+    "Create a new Jira sprint",
+    {
+      name: z
+        .string()
+        .describe("[REQUIRED] Sprint name - descriptive name for the sprint (e.g., 'Sprint 1', 'June Release')."),
+      originBoardId: z
+        .number()
+        .describe("[REQUIRED] Board ID to create the sprint in - numeric ID of the Scrum board (e.g., 123). Get this from your board URL."),
+      startDate: z
+        .string()
+        .optional()
+        .describe("[OPTIONAL] Start date in ISO format (e.g., '2025-06-30T08:00:00.000Z'). If not provided, sprint will be created in future state."),
+      endDate: z
+        .string()
+        .optional()
+        .describe("[OPTIONAL] End date in ISO format (e.g., '2025-07-14T17:00:00.000Z'). Should be after startDate."),
+      goal: z.string().optional().describe("[OPTIONAL] Sprint goal - brief description of what the team aims to achieve in this sprint."),
+    },
+    async ({ name, startDate, endDate, originBoardId, goal }) => {
+      const jiraClient = await getJiraClient();
+      const payload = { name, originBoardId };
+      if (startDate) payload.startDate = startDate;
+      if (endDate) payload.endDate = endDate;
+      if (goal) payload.goal = goal;
+      const newSprint = await jiraClient.createSprint(payload);
+      return {
+        content: [{ text: `Sprint created: ${newSprint.id} - ${newSprint.name}`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "startJiraSprint",
+    "Start a Jira sprint. Some Jira instances require name, startDate, and endDate.",
+    {
+      sprintId: z.number().describe("ID of the sprint to start"),
+      name: z.string().optional().describe("Sprint name (required on some instances)"),
+      startDate: z.string().optional().describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
+      endDate: z
+        .string()
+        .optional()
+        .describe("End date in ISO format (e.g., 2025-11-09T00:00:00.000Z). Required on some instances. Defaults to ~2 weeks after start if omitted."),
+    },
+    async ({ sprintId, name, startDate, endDate }) => {
+      const jiraClient = await getJiraClient();
+      await jiraClient.startSprint(sprintId, { name, startDate, endDate });
+      return {
+        content: [{ text: `Sprint ${sprintId} started successfully.`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "completeJiraSprint",
+    "Complete a Jira sprint. Some Jira instances require name, startDate, and endDate.",
+    {
+      sprintId: z.number().describe("ID of the sprint to complete"),
+      name: z.string().optional().describe("Sprint name (required on some instances)"),
+      startDate: z.string().optional().describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
+      endDate: z.string().optional().describe("End date in ISO format (e.g., 2025-11-09T00:00:00.000Z). Required on some instances."),
+    },
+    async ({ sprintId, name, startDate, endDate }) => {
+      const jiraClient = await getJiraClient();
+      await jiraClient.completeSprint(sprintId, { name, startDate, endDate });
+      return {
+        content: [{ text: `Sprint ${sprintId} completed successfully.`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "getJiraSprint",
+    "Get details of a Jira sprint",
+    {
+      sprintId: z.number().describe("ID of the sprint to retrieve"),
+    },
+    async ({ sprintId }) => {
+      const jiraClient = await getJiraClient();
+      const sprint = await jiraClient.getSprint(sprintId);
+      return {
+        content: [{ text: `Sprint ${sprint.name} (ID: ${sprint.id}, State: ${sprint.state})`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "updateJiraSprint",
+    "Update details of a Jira sprint",
+    {
+      sprintId: z.number().describe("ID of the sprint to update"),
+      name: z.string().optional().describe("New name for the sprint"),
+      startDate: z.string().optional().describe("New start date for the sprint (YYYY-MM-DD)"),
+      endDate: z.string().optional().describe("New end date for the sprint (YYYY-MM-DD)"),
+      state: z.enum(["future", "active", "closed"]).optional().describe("New state for the sprint"),
+      goal: z.string().optional().describe("New goal for the sprint"),
+    },
+    async ({ sprintId, name, startDate, endDate, state, goal }) => {
+      const jiraClient = await getJiraClient();
+      const updatedSprint = await jiraClient.updateSprint(sprintId, { name, startDate, endDate, state, goal });
+      return {
+        content: [{ text: `Sprint updated: ${updatedSprint.name} (ID: ${updatedSprint.id})`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "deleteJiraSprint",
+    "Delete a Jira sprint",
+    {
+      sprintId: z.number().describe("ID of the sprint to delete"),
+    },
+    async ({ sprintId }) => {
+      const jiraClient = await getJiraClient();
+      await jiraClient.deleteSprint(sprintId);
+      return {
+        content: [{ text: `Sprint ${sprintId} deleted successfully.`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "getJiraSprintsForBoard",
+    "Get all sprints for a given Jira board",
+    {
+      boardId: z.number().describe("ID of the Jira board"),
+    },
+    async ({ boardId }) => {
+      const jiraClient = await getJiraClient();
+      const sprints = await jiraClient.getSprintsForBoard(boardId);
+      const sprintsText = sprints.map((sprint) => `${sprint.name} (ID: ${sprint.id}, State: ${sprint.state})`).join("\n");
+      return {
+        content: [{ text: `Sprints for board ${boardId}:\n${sprintsText}`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "getJiraIssuesForSprint",
+    "Get all issues for a given Jira sprint",
+    {
+      sprintId: z.number().describe("ID of the Jira sprint"),
+    },
+    async ({ sprintId }) => {
+      const jiraClient = await getJiraClient();
+      const issues = await jiraClient.getIssuesForSprint(sprintId);
+      const issuesText = issues.map((issue) => `${issue.key}: ${issue.fields.summary}`).join("\n");
+      return {
+        content: [{ text: `Issues for sprint ${sprintId}:\n${issuesText}`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "moveJiraIssuesToSprint",
+    "Move issues to a Jira sprint",
+    {
+      sprintId: z.number().describe("ID of the target sprint"),
+      issueIdsOrKeys: z.array(z.string()).describe("Array of issue IDs or keys to move"),
+    },
+    async ({ sprintId, issueIdsOrKeys }) => {
+      const jiraClient = await getJiraClient();
+      await jiraClient.moveIssuesToSprint(sprintId, issueIdsOrKeys);
+      return {
+        content: [{ text: `Moved issues ${issueIdsOrKeys.join(", ")} to sprint ${sprintId}.`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "moveJiraIssuesToBacklog",
+    "Move issues to the Jira backlog",
+    {
+      boardId: z.number().describe("ID of the Jira board"),
+      issueIdsOrKeys: z.array(z.string()).describe("Array of issue IDs or keys to move"),
+    },
+    async ({ boardId, issueIdsOrKeys }) => {
+      const jiraClient = await getJiraClient();
+      await jiraClient.moveIssuesToBacklog(boardId, issueIdsOrKeys);
+      return {
+        content: [{ text: `Moved issues ${issueIdsOrKeys.join(", ")} to backlog for board ${boardId}.`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "getJiraUser",
+    "Get details of a Jira user",
+    {
+      accountId: z.string().describe("Account ID of the user to retrieve"),
+    },
+    async ({ accountId }) => {
+      const jiraClient = await getJiraClient();
+      const user = await jiraClient.getUser(accountId);
+      return {
+        content: [
+          { text: `User: ${user.displayName} (Account ID: ${user.accountId}, Email: ${user.emailAddress})`, type: "text" },
+        ],
+      };
+    },
+  );
+
+  server.tool(
+    "createJiraUser",
+    "Create a new Jira user",
+    {
+      emailAddress: z.string().describe("Email address of the new user"),
+      password: z.string().describe("Password for the new user"),
+      displayName: z.string().describe("Display name of the new user"),
+    },
+    async ({ emailAddress, password, displayName }) => {
+      const jiraClient = await getJiraClient();
+      const newUser = await jiraClient.createUser({ emailAddress, password, displayName });
+      return {
+        content: [{ text: `User created: ${newUser.displayName} (Account ID: ${newUser.accountId})`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "deleteJiraUser",
+    "Delete a Jira user",
+    {
+      accountId: z.string().describe("Account ID of the user to delete"),
+    },
+    async ({ accountId }) => {
+      const jiraClient = await getJiraClient();
+      await jiraClient.deleteUser(accountId);
+      return {
+        content: [{ text: `User ${accountId} deleted successfully.`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "userInfoOctokit",
+    "Get user info from GitHub, via Octokit",
+    {},
+    async () => {
+      const octokit = new Octokit({ auth: this.props?.accessToken });
+      const user = await octokit.rest.users.getAuthenticated();
+      return {
+        content: [{ text: JSON.stringify(user), type: "text" }],
+      };
+    },
+  );
+
+  const login = this.props && this.props.login;
+  if (typeof login === "string" && ALLOWED_USERNAMES.has(login)) {
+    server.tool(
+      "generateImage",
+      "Generate an image using the `flux-1-schnell` model. Works best with 8 steps.",
+      {
+        prompt: z.string().describe("A text description of the image you want to generate."),
+        steps: z
+          .number()
+          .min(4)
+          .max(8)
+          .default(4)
+          .describe(
+            "The number of diffusion steps; higher values can improve quality but take longer. Must be between 4 and 8, inclusive.",
+          ),
+      },
+      async ({ prompt, steps }) => {
+        const response = await this.env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
+          prompt,
+          num_steps: steps,
+        });
+        return {
+          content: [{ data: response.image, mimeType: "image/jpeg", type: "image" }],
+        };
+      },
+    );
+  }
 }

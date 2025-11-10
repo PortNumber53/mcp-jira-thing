@@ -1,5 +1,16 @@
 # Changelog
 
+## 2025-11-11
+
+- doc: Updated .windsurf_plan.md and CHANGELOG.md to log analysis and commit process
+
+## 2025-11-10
+
+- refactor(mcp-tools): Centralize MCP tool registration logic
+  - Moved all `this.server.tool(...)` registrations out of `src/index.ts`
+  - Updated `registerTools` in `src/include/tools.js` to host every tool, including the basic `add` helper
+  - Simplified `MyMCP.init` to call `registerTools` with the proper `this` binding, removing duplicate inline definitions
+
 ## 2025-11-09
 
 - chore: Sync repository with remote origin
@@ -7,6 +18,22 @@
   - Discarded 4 local commits that had diverged from remote
   - Updated frontend dependencies - added peer dependencies to package-lock.json
   - Repository is now up-to-date with latest remote changes
+
+- feat(metrics): Add request tracking and usage metrics
+  - Database:
+    - Add `requests` table with migration 0005_add_requests_table.up.sql
+    - Tracks user_id, method, endpoint, status_code, response_time_ms, request/response sizes
+    - Includes performance indexes for analytics queries
+  - Models:
+    - Add `Request` struct for individual request records
+    - Add `RequestMetrics` struct for aggregated usage statistics
+  - Backend:
+    - Add request tracking middleware in `backend/internal/middleware/`
+    - Add store methods: CreateRequest, GetUserRequests, GetUserMetrics, GetAllMetrics
+    - Add API endpoints: /api/metrics/user, /api/metrics/user/requests, /api/metrics/all
+  - Integration:
+    - Updated HTTP server to include request tracking middleware
+    - Configured to track all API calls with response times and sizes
 
 ## 2025-10-14
 
@@ -38,4 +65,3 @@
 - fix(jira): Correct search endpoint in `JiraIssues.searchIssues` (`src/tools/jira/client/issues.ts`).
   - Changed from `/rest/api/3/search/jql` to `/rest/api/3/search`.
   - Rationale: Jira REST API expects `jql` as a query parameter, not a path segment. This resolves MCP search errors.
-

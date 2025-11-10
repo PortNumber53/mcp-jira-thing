@@ -48,5 +48,30 @@ type JiraUserSettingsWithSecret struct {
 	JiraEmail        string  `json:"jira_email"`
 	JiraCloudID      *string `json:"jira_cloud_id,omitempty"`
 	IsDefault        bool    `json:"is_default"`
-	AtlassianAPIToken string `json:"atlassian_api_key"`
+	AtlassianAPIToken string  `json:"atlassian_api_key"`
+}
+
+// Request represents an API request made by a user for tracking usage metrics
+type Request struct {
+	ID                string  `json:"id"`
+	UserID            string  `json:"user_id"`
+	Method            string  `json:"method"`
+	Endpoint          string  `json:"endpoint"`
+	StatusCode        int     `json:"status_code"`
+	ResponseTimeMs    *int    `json:"response_time_ms,omitempty"`
+	RequestSizeBytes  *int    `json:"request_size_bytes,omitempty"`
+	ResponseSizeBytes *int    `json:"response_size_bytes,omitempty"`
+	ErrorMessage      *string `json:"error_message,omitempty"`
+	CreatedAt         string  `json:"created_at"`
+}
+
+// RequestMetrics represents aggregated usage metrics for a user
+type RequestMetrics struct {
+	UserID            string `json:"user_id"`
+	TotalRequests     int    `json:"total_requests"`
+	SuccessRequests   int    `json:"success_requests"`
+	ErrorRequests     int    `json:"error_requests"`
+	AvgResponseTimeMs int    `json:"avg_response_time_ms"`
+	TotalBytes        int    `json:"total_bytes"`
+	LastRequestAt     string `json:"last_request_at"`
 }

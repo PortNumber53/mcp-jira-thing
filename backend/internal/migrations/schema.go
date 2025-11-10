@@ -61,3 +61,69 @@ func Up(db *sql.DB) error {
 
 	return nil
 }
+
+// ForceVersion sets the database migration version to the specified version, 
+// useful for recovering from dirty states.
+func ForceVersion(db *sql.DB, version uint) error {
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return fmt.Errorf("migrations: create postgres driver: %w", err)
+	}
+
+	sourceDriver, err := iofs.New(sqlFS, "sql")
+	if err != nil {
+		return fmt.Errorf("migrations: open embedded migrations: %w", err)
+	}
+
+	m, err := migrate.NewWithInstance("iofs", sourceDriver, "postgres", driver)
+	if err != nil {
+		return fmt.Errorf("migrations: init migrate instance: %w", err)
+	}
+
+	// Force the version to clean up dirty state
+	if err := m.Force(int(version)); err != nil {
+		return fmt.Errorf("migrations: force version %d: %w", version, err)
+	}
+
+	log.Printf("migrations: forced database schema version to %d", version)
+	return nil
+}
+
+// FixDirtyDatabase attempts to fix a dirty database state by forcing the current version
+func FixDirtyDatabase(db *sql.DB) error {
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return fmt.Errorf("migrations: create postgres driver: %w", err)
+	}
+
+	sourceDriver, err := iofs.New(sqlFS, "sql")
+	if err != nil {
+		return fmt.Errorf("migrations: open embedded migrations: %w", err)
+	}
+
+	m, err := migrate.NewWithInstance("iofs", sourceDriver, "postgres", driver)
+	if err != nil {
+		return fmt.Errorf("migrations: init migrate instance: %w", err)
+	}
+
+	// Get current dirty version
+	version, dirty, err := m.Version()
+	if err != nil {
+		return fmt.Errorf("migrations: get version: %w", err)
+	}
+
+	if !dirty {
+		log.Printf("migrations: database is not dirty (version %d)", version)
+		return nil
+	}
+
+	log.Printf("migrations: fixing dirty database at version %d", version)
+	
+	// Force the current version to clean the dirty state
+	if err := m.Force(int(version)); err != nil {
+		return fmt.Errorf("migrations: force version %d to fix dirty state: %w", version, err)
+	}
+
+	log.Printf("migrations: successfully fixed dirty database state")
+	return nil
+}

@@ -111,7 +111,7 @@ func (s *Store) UpsertGitHubUser(ctx context.Context, user models.GitHubAuthUser
 			*user.Email,
 		).Scan(&userID, &existingEmail, &existingAvatar); err == nil {
 			foundByEmail = true
-		} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		} else if !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("store: lookup user by email: %w", err)
 		}
 	}
@@ -225,7 +225,7 @@ func (s *Store) UpsertGoogleUser(ctx context.Context, user models.GoogleAuthUser
 			*user.Email,
 		).Scan(&userID, &existingEmail, &existingAvatar); err == nil {
 			foundByEmail = true
-		} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		} else if !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("store: lookup user by email: %w", err)
 		}
 	}
@@ -524,4 +524,196 @@ func (s *Store) GetMCPSecret(ctx context.Context, email string) (*string, error)
 	}
 
 	return &secret.String, nil
+}
+
+// CreateRequest records a new API request for usage tracking
+func (s *Store) CreateRequest(ctx context.Context, userID int64, method, endpoint string, statusCode int, responseTimeMs, requestSizeBytes, responseSizeBytes *int, errorMessage *string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store: db cannot be nil")
+	}
+
+	query := `
+	INSERT INTO requests (user_id, method, endpoint, status_code, response_time_ms, request_size_bytes, response_size_bytes, error_message)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+
+	var errMessage sql.NullString
+	if errorMessage != nil {
+		errMessage = sql.NullString{String: *errorMessage, Valid: true}
+	}
+
+	_, err := s.db.ExecContext(ctx, query, userID, method, endpoint, statusCode, responseTimeMs, requestSizeBytes, responseSizeBytes, errMessage)
+	if err != nil {
+		return fmt.Errorf("store: create request: %w", err)
+	}
+
+	return nil
+}
+
+// GetUserRequests returns requests for a specific user with pagination
+func (s *Store) GetUserRequests(ctx context.Context, userID int64, limit, offset int) ([]models.Request, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store: db cannot be nil")
+	}
+
+	if limit <= 0 || limit > defaultPageSize {
+		limit = defaultPageSize
+	}
+
+	query := `
+	SELECT 
+		id::text,
+		user_id::text,
+		method,
+		endpoint,
+		status_code,
+		response_time_ms,
+		request_size_bytes,
+		response_size_bytes,
+		error_message,
+		created_at
+	FROM requests 
+	WHERE user_id = $1
+	ORDER BY created_at DESC
+	LIMIT $2 OFFSET $3
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, userID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("store: get user requests: %w", err)
+	}
+	defer rows.Close()
+
+	var requests []models.Request
+	for rows.Next() {
+		var req models.Request
+		var errMessage sql.NullString
+
+		err := rows.Scan(
+			&req.ID,
+			&req.UserID,
+			&req.Method,
+			&req.Endpoint,
+			&req.StatusCode,
+			&req.ResponseTimeMs,
+			&req.RequestSizeBytes,
+			&req.ResponseSizeBytes,
+			&errMessage,
+			&req.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("store: scan request: %w", err)
+		}
+
+		if errMessage.Valid {
+			req.ErrorMessage = &errMessage.String
+		}
+
+		requests = append(requests, req)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate requests: %w", err)
+	}
+
+	return requests, nil
+}
+
+// GetUserMetrics returns aggregated usage metrics for a user
+func (s *Store) GetUserMetrics(ctx context.Context, userID int64) (*models.RequestMetrics, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store: db cannot be nil")
+	}
+
+	query := `
+	SELECT 
+		user_id::text,
+		COUNT(*) as total_requests,
+		COUNT(CASE WHEN status_code < 400 THEN 1 END) as success_requests,
+		COUNT(CASE WHEN status_code >= 400 THEN 1 END) as error_requests,
+		COALESCE(AVG(response_time_ms), 0) as avg_response_time_ms,
+		COALESCE(SUM(COALESCE(request_size_bytes, 0) + COALESCE(response_size_bytes, 0)), 0) as total_bytes,
+		MAX(created_at) as last_request_at
+	FROM requests 
+	WHERE user_id = $1
+	GROUP BY user_id
+	`
+
+	var metrics models.RequestMetrics
+	err := s.db.QueryRowContext(ctx, query, userID).Scan(
+		&metrics.UserID,
+		&metrics.TotalRequests,
+		&metrics.SuccessRequests,
+		&metrics.ErrorRequests,
+		&metrics.AvgResponseTimeMs,
+		&metrics.TotalBytes,
+		&metrics.LastRequestAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Return empty metrics for user with no requests
+			metrics.UserID = fmt.Sprintf("%d", userID)
+			metrics.TotalRequests = 0
+			metrics.SuccessRequests = 0
+			metrics.ErrorRequests = 0
+			metrics.AvgResponseTimeMs = 0
+			metrics.TotalBytes = 0
+			return &metrics, nil
+		}
+		return nil, fmt.Errorf("store: get user metrics: %w", err)
+	}
+
+	return &metrics, nil
+}
+
+// GetAllMetrics returns aggregated usage metrics for all users
+func (s *Store) GetAllMetrics(ctx context.Context) ([]models.RequestMetrics, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store: db cannot be nil")
+	}
+
+	query := `
+	SELECT 
+		user_id::text,
+		COUNT(*) as total_requests,
+		COUNT(CASE WHEN status_code < 400 THEN 1 END) as success_requests,
+		COUNT(CASE WHEN status_code >= 400 THEN 1 END) as error_requests,
+		COALESCE(AVG(response_time_ms), 0) as avg_response_time_ms,
+		COALESCE(SUM(COALESCE(request_size_bytes, 0) + COALESCE(response_size_bytes, 0)), 0) as total_bytes,
+		MAX(created_at) as last_request_at
+	FROM requests 
+	GROUP BY user_id
+	ORDER BY total_requests DESC
+	`
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("store: get all metrics: %w", err)
+	}
+	defer rows.Close()
+
+	var metrics []models.RequestMetrics
+	for rows.Next() {
+		var m models.RequestMetrics
+		err := rows.Scan(
+			&m.UserID,
+			&m.TotalRequests,
+			&m.SuccessRequests,
+			&m.ErrorRequests,
+			&m.AvgResponseTimeMs,
+			&m.TotalBytes,
+			&m.LastRequestAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("store: scan metrics: %w", err)
+		}
+		metrics = append(metrics, m)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate metrics: %w", err)
+	}
+
+	return metrics, nil
 }
