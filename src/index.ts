@@ -19,6 +19,7 @@ type Env = Cloudflare.Env & {
 };
 
 function extractMcpSecretFromRequest(request: Request): string | undefined {
+  console.log("[mcp] extractMcpSecretFromRequest function called");
   // Debug logging to understand how MCP_SECRET is being passed through.
   try {
     const rawHeaders: Record<string, string> = {};
@@ -169,6 +170,7 @@ export class MyMCP extends McpAgent<Env, Props> {
       }
 
       try {
+        console.log("[backend] Sending request to /api/mcp/secret to resolve MCP secret");
         const secretUrl = new URL("/api/mcp/secret", backendBase);
         secretUrl.searchParams.set("email", userEmail);
 
@@ -178,11 +180,11 @@ export class MyMCP extends McpAgent<Env, Props> {
             Accept: "application/json",
           },
         });
-
         if (!secretResponse.ok) {
+          console.log("[backend] Failed to resolve MCP secret: status " + secretResponse.status);
           throw new Error(`[mcp] Failed to resolve MCP secret by email: ${secretResponse.status} ${secretResponse.statusText}`);
         }
-
+        console.log("[backend] Successfully resolved MCP secret");
         const secretData = (await secretResponse.json()) as { mcp_secret?: string | null };
         const resolvedSecret = secretData.mcp_secret ?? undefined;
 
@@ -195,7 +197,7 @@ export class MyMCP extends McpAgent<Env, Props> {
         // Cache for subsequent calls during this DO's lifetime on props only.
         if (props) (props as Props).mcpSecret = resolvedSecret;
       } catch (error) {
-        console.error("[mcp] Error resolving MCP secret by email:", error);
+        console.error("[backend] Error resolving MCP secret by email:", error);
         throw error instanceof Error ? error : new Error("Failed to resolve MCP secret for current user");
       }
     }
@@ -207,6 +209,7 @@ export class MyMCP extends McpAgent<Env, Props> {
     }
 
     try {
+      console.log("[backend] Sending request to /api/settings/jira/tenant to resolve Jira settings");
       const url = new URL("/api/settings/jira/tenant", backendBase);
       url.searchParams.set("mcp_secret", mcpSecret);
 
@@ -216,11 +219,11 @@ export class MyMCP extends McpAgent<Env, Props> {
           Accept: "application/json",
         },
       });
-
       if (!response.ok) {
+        console.log("[backend] Failed to resolve Jira settings: status " + response.status);
         throw new Error(`[mcp] Failed to resolve Jira settings by MCP secret: ${response.status} ${response.statusText}`);
       }
-
+      console.log("[backend] Successfully resolved Jira settings");
       const data = (await response.json()) as {
         jira_base_url?: string;
         jira_email?: string;
@@ -238,7 +241,7 @@ export class MyMCP extends McpAgent<Env, Props> {
         ATLASSIAN_API_KEY: data.atlassian_api_key,
       } as Env;
     } catch (error) {
-      console.error("[mcp] Error resolving Jira settings by MCP secret:", error);
+      console.error("[backend] Error resolving Jira settings by MCP secret:", error);
       throw error instanceof Error ? error : new Error("Failed to resolve Jira settings by MCP secret");
     }
   }

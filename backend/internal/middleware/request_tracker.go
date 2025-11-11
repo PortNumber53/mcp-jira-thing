@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"database/sql"
+	"log"
 	"net/http"
 	"time"
 
@@ -56,6 +57,11 @@ func (rt *RequestTracker) Middleware() func(http.Handler) http.Handler {
 			// Track the request asynchronously to avoid blocking
 			go func() {
 				ctx := context.Background()
+				if userID == 0 {
+					log.Printf("[db] Skipping request log for unauthenticated request: method=%s, endpoint=%s", r.Method, r.URL.Path)
+					return // Skip the rest of the logging logic
+				}
+				log.Printf("[db] Attempting to log request: method=%s, endpoint=%s", r.Method, r.URL.Path)
 				err := rt.store.CreateRequest(
 					ctx,
 					userID,
@@ -68,9 +74,10 @@ func (rt *RequestTracker) Middleware() func(http.Handler) http.Handler {
 					nil, // error message - could be enhanced to capture errors
 				)
 				if err != nil {
+					log.Printf("[db] Error logging request: %v", err)
 					// Log error but don't fail the request
-					// In production, you might want to use a proper logger
-					_ = err
+				} else {
+					log.Printf("[db] Successfully logged request: method=%s, endpoint=%s", r.Method, r.URL.Path)
 				}
 			}()
 		})

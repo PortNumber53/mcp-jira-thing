@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/models"
@@ -526,6 +527,24 @@ func (s *Store) GetMCPSecret(ctx context.Context, email string) (*string, error)
 	return &secret.String, nil
 }
 
+// GetUserIDByMCPSecret retrieves the user ID for a given MCP secret
+func (s *Store) GetUserIDByMCPSecret(ctx context.Context, secret string) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, errors.New("store: db cannot be nil")
+	}
+
+	var userID int64
+	err := s.db.QueryRowContext(ctx, "SELECT id FROM users WHERE mcp_secret = $1", secret).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("store: no user found for MCP secret")
+		}
+		return 0, fmt.Errorf("store: query user by MCP secret: %w", err)
+	}
+
+	return userID, nil
+}
+
 // CreateRequest records a new API request for usage tracking
 func (s *Store) CreateRequest(ctx context.Context, userID int64, method, endpoint string, statusCode int, responseTimeMs, requestSizeBytes, responseSizeBytes *int, errorMessage *string) error {
 	if s == nil || s.db == nil {
@@ -542,10 +561,13 @@ func (s *Store) CreateRequest(ctx context.Context, userID int64, method, endpoin
 		errMessage = sql.NullString{String: *errorMessage, Valid: true}
 	}
 
+	log.Printf("[store] Attempting to create request: method=%s, endpoint=%s, userID=%d", method, endpoint, userID)
 	_, err := s.db.ExecContext(ctx, query, userID, method, endpoint, statusCode, responseTimeMs, requestSizeBytes, responseSizeBytes, errMessage)
 	if err != nil {
+		log.Printf("[store] Error creating request: %v", err)
 		return fmt.Errorf("store: create request: %w", err)
 	}
+	log.Printf("[store] Successfully created request: method=%s, endpoint=%s", method, endpoint)
 
 	return nil
 }

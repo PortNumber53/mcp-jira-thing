@@ -13,6 +13,7 @@ import (
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/handlers"
 	requesttracking "github.com/PortNumber53/mcp-jira-thing/backend/internal/middleware"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/store"
+	"log"
 )
 
 // Server wraps an http.Server with convenience helpers for startup/shutdown.
@@ -28,11 +29,37 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 
+	// Add custom MCP auth middleware function
+	mcpAuthMiddleware := func(db *sql.DB, store *store.Store) func(next http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				secret := r.URL.Query().Get("mcp_secret")
+				if secret != "" {
+					userID, err := store.GetUserIDByMCPSecret(r.Context(), secret) // Assume or add this method in store if not exist
+					if err == nil && userID > 0 {
+						ctx := context.WithValue(r.Context(), "user_id", userID)
+						r = r.WithContext(ctx)
+					} else {
+						log.Printf("[mcpAuth] Invalid MCP secret: %v", err)
+					}
+				}
+				next.ServeHTTP(w, r)
+			})
+		}
+	}
+
+	// Add custom MCP auth middleware using the store
+	s, err := store.New(db)
+	if err != nil {
+		log.Printf("failed to create store for MCP auth: %v", err)
+	} else {
+		router.Use(mcpAuthMiddleware(db, s))
+	}
+
 	// Add request tracking middleware
 	requestTracker, err := requesttracking.NewRequestTracker(db)
 	if err != nil {
-		// In production, you might want to handle this more gracefully
-		// For now, we'll log and continue without tracking
+		// Log and continue without tracking
 		router.Use(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				next.ServeHTTP(w, r)
@@ -55,9 +82,12 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	router.Post("/api/auth/google", handlers.GoogleAuth(authStore))
 	router.Post("/api/settings/jira", handlers.UserSettings(settingsStore))
 	router.Get("/api/settings/jira", handlers.UserSettings(settingsStore))
-	router.Get("/api/settings/jira/tenant", handlers.TenantJiraSettings(settingsStore))
-	router.Get("/api/mcp/secret", handlers.MCPSecret(settingsStore))
-	router.Post("/api/mcp/secret", handlers.MCPSecret(settingsStore))
+	router.Group(func(r chi.Router) {
+		r.Use(mcpAuthMiddleware(db, s)) // Apply MCP auth middleware to this group
+		r.Get("/api/settings/jira/tenant", handlers.TenantJiraSettings(settingsStore))
+		r.Get("/api/mcp/secret", handlers.MCPSecret(settingsStore))
+		r.Post("/api/mcp/secret", handlers.MCPSecret(settingsStore))
+	})
 	
 	// Metrics endpoints
 	if metricsStore != nil {

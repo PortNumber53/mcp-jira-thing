@@ -11,6 +11,15 @@
   - Updated `registerTools` in `src/include/tools.js` to host every tool, including the basic `add` helper
   - Simplified `MyMCP.init` to call `registerTools` with the proper `this` binding, removing duplicate inline definitions
 
+## 2025-11-10
+
+- fix(logging): Add result logging in MCP worker for backend requests in `src/index.ts`
+  - Logs sending and success/error of requests to `/api/mcp/secret` and `/api/settings/jira/tenant`
+- fix(auth): Implement MCP secret validation in backend to set user ID context
+  - Added custom middleware in `server.go` and `GetUserIDByMCPSecret` method in `store.go`
+  - Resolved skipping of authenticated requests in logging middleware
+- chore(build): Fix lint errors and undefined methods in backend code
+
 ## 2025-11-09
 
 - chore: Sync repository with remote origin
