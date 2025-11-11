@@ -6,6 +6,10 @@
 
 ## 2025-11-10
 
+- fix(logging): Implement level-based logging in MCP worker controlled by LOG_LEVEL
+  - Added `logMessage` utility in `src/index.ts` to check against environment variable
+  - Updated all console.log and console.error calls to use `logMessage` with types (debug, info, warn, error)
+  - Fixed TypeScript lint errors by defining LogLevel type for strict indexing
 - refactor(mcp-tools): Centralize MCP tool registration logic
   - Moved all `this.server.tool(...)` registrations out of `src/index.ts`
   - Updated `registerTools` in `src/include/tools.js` to host every tool, including the basic `add` helper
