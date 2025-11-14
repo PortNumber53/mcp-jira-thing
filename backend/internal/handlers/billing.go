@@ -252,10 +252,11 @@ func DeleteAccount(billingStore BillingStore, userStore UserStore, stripeKey str
 
 		// Check if user has an active subscription
 		subscription, err := billingStore.GetSubscription(r.Context(), payload.Email)
-		if err != nil && !strings.Contains(err.Error(), "not found") {
-			log.Printf("DeleteAccount: failed to get subscription: %v", err)
-			http.Error(w, "failed to check subscription", http.StatusInternalServerError)
-			return
+		if err != nil {
+			// Log the error but continue with deletion even if we can't check subscription
+			// This ensures users can still delete their account even if subscription lookup fails
+			log.Printf("DeleteAccount: warning - failed to check subscription: %v", err)
+			subscription = nil
 		}
 
 		// If there's an active subscription, cancel it with prorated refund
