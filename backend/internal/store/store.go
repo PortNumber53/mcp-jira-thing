@@ -946,3 +946,47 @@ LIMIT 1
 
 	return &user, nil
 }
+
+// GetConnectedAccounts retrieves all OAuth providers connected to a user by email.
+func (s *Store) GetConnectedAccounts(ctx context.Context, email string) ([]models.ConnectedAccount, error) {
+	query := `
+SELECT uo.provider, uo.provider_account_id, uo.avatar_url, uo.created_at
+FROM users_oauths uo
+JOIN users u ON uo.user_id = u.id
+WHERE LOWER(u.email) = LOWER($1)
+ORDER BY uo.created_at ASC
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, email)
+	if err != nil {
+		return nil, fmt.Errorf("store: get connected accounts: %w", err)
+	}
+	defer rows.Close()
+
+	var accounts []models.ConnectedAccount
+	for rows.Next() {
+		var account models.ConnectedAccount
+		var avatarURL sql.NullString
+
+		if err := rows.Scan(
+			&account.Provider,
+			&account.ProviderAccountID,
+			&avatarURL,
+			&account.ConnectedAt,
+		); err != nil {
+			return nil, fmt.Errorf("store: scan connected account: %w", err)
+		}
+
+		if avatarURL.Valid {
+			account.AvatarURL = &avatarURL.String
+		}
+
+		accounts = append(accounts, account)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate connected accounts: %w", err)
+	}
+
+	return accounts, nil
+}

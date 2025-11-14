@@ -14,6 +14,7 @@ import (
 type OAuthStore interface {
 	UpsertGitHubUser(ctx context.Context, user models.GitHubAuthUser) error
 	UpsertGoogleUser(ctx context.Context, user models.GoogleAuthUser) error
+	GetConnectedAccounts(ctx context.Context, email string) ([]models.ConnectedAccount, error)
 }
 
 // GitHubAuth accepts GitHub OAuth login data (forwarded from the frontend
@@ -92,6 +93,36 @@ func GoogleAuth(store OAuthStore) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]any{"ok": true}); err != nil {
+			http.Error(w, "failed to encode response", http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+// ConnectedAccounts returns the list of OAuth providers connected to the user.
+func ConnectedAccounts(store OAuthStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		email := r.URL.Query().Get("email")
+		if email == "" {
+			http.Error(w, "email parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		accounts, err := store.GetConnectedAccounts(r.Context(), email)
+		if err != nil {
+			log.Printf("ConnectedAccounts: failed to get connected accounts for %q: %v", email, err)
+			http.Error(w, "failed to get connected accounts", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{"connected_accounts": accounts}); err != nil {
 			http.Error(w, "failed to encode response", http.StatusInternalServerError)
 			return
 		}

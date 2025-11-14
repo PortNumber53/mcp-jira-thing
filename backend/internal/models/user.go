@@ -88,3 +88,11 @@ type RequestMetrics struct {
 	TotalBytes        int    `json:"total_bytes"`
 	LastRequestAt     string `json:"last_request_at"`
 }
+
+// ConnectedAccount represents an OAuth provider connected to a user account
+type ConnectedAccount struct {
+	Provider          string    `json:"provider"`
+	ProviderAccountID string    `json:"provider_account_id"`
+	AvatarURL         *string   `json:"avatar_url,omitempty"`
+	ConnectedAt       time.Time `json:"connected_at"`
+}

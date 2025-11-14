@@ -405,6 +405,45 @@ export default {
       return response;
     }
 
+    if (url.pathname === "/api/auth/connected-accounts" && request.method === "GET") {
+      const session = await readSession(request, env);
+      if (!session) {
+        return jsonResponse({ error: "Not authenticated" }, { status: 401 });
+      }
+
+      if (!env.BACKEND_BASE_URL) {
+        return jsonResponse({ error: "Backend is not configured" }, { status: 500 });
+      }
+
+      const backendUrl = new URL("/api/auth/connected-accounts", env.BACKEND_BASE_URL);
+      if (session.email) {
+        backendUrl.searchParams.set("email", session.email);
+      }
+
+      const upstreamResp = await fetch(backendUrl.toString(), { method: "GET" });
+      const text = await upstreamResp.text();
+
+      if (!upstreamResp.ok) {
+        console.error("Backend connected accounts fetch failed", {
+          status: upstreamResp.status,
+          body: text,
+        });
+        return new Response(text || "Failed to load connected accounts", {
+          status: upstreamResp.status,
+          headers: {
+            "Content-Type": upstreamResp.headers.get("Content-Type") || "text/plain",
+          },
+        });
+      }
+
+      return new Response(text, {
+        status: upstreamResp.status,
+        headers: {
+          "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json; charset=utf-8",
+        },
+      });
+    }
+
     if (url.pathname === "/api/settings/jira") {
       const session = await readSession(request, env);
       if (!session) {

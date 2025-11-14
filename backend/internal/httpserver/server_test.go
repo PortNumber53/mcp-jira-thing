@@ -70,6 +70,10 @@ func (s *stubUserClient) GetUserByEmail(ctx context.Context, email string) (*mod
 	return nil, nil
 }
 
+func (s *stubUserClient) GetConnectedAccounts(ctx context.Context, email string) ([]models.ConnectedAccount, error) {
+	return nil, nil
+}
+
 func TestHealthRoute(t *testing.T) {
 	cfg := config.Config{ServerAddress: ":0"}
 	stub := &stubUserClient{}

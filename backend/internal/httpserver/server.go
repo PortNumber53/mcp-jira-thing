@@ -80,6 +80,7 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	router.Get("/api/users", handlers.Users(userClient))
 	router.Post("/api/auth/github", handlers.GitHubAuth(authStore))
 	router.Post("/api/auth/google", handlers.GoogleAuth(authStore))
+	router.Get("/api/auth/connected-accounts", handlers.ConnectedAccounts(authStore))
 	router.Post("/api/settings/jira", handlers.UserSettings(settingsStore))
 	router.Get("/api/settings/jira", handlers.UserSettings(settingsStore))
 

@@ -43,9 +43,21 @@ type MCPSecretResponse = {
   mcp_secret?: string | null;
 };
 
+type ConnectedAccount = {
+  provider: string;
+  provider_account_id: string;
+  avatar_url?: string | null;
+  connected_at: string;
+};
+
+type ConnectedAccountsResponse = {
+  connected_accounts: ConnectedAccount[];
+};
+
 const SESSION_ENDPOINT = "/api/auth/session";
 const LOGIN_ENDPOINT = "/api/auth/login";
 const LOGOUT_ENDPOINT = "/api/auth/logout";
+const GOOGLE_LOGIN_ENDPOINT = "/api/auth/google/login";
 
 const isSessionResponse = (value: unknown): value is SessionResponse => {
   if (typeof value !== "object" || value === null) {
@@ -77,6 +89,7 @@ const AppContent = () => {
     apiKey: "",
   });
   const [mcpSecret, setMcpSecret] = useState<string | null>(null);
+  const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -128,9 +141,10 @@ const AppContent = () => {
 
     const loadSettings = async () => {
       try {
-        const [settingsResp, secretResp] = await Promise.all([
+        const [settingsResp, secretResp, connectedAccountsResp] = await Promise.all([
           fetch("/api/settings/jira", { method: "GET" }),
           fetch("/api/mcp/secret", { method: "GET" }),
+          fetch("/api/auth/connected-accounts", { method: "GET" }),
         ]);
 
         if (settingsResp.ok) {
@@ -149,6 +163,11 @@ const AppContent = () => {
         if (secretResp.ok) {
           const data: MCPSecretResponse = (await secretResp.json()) as MCPSecretResponse;
           setMcpSecret(data.mcp_secret ?? null);
+        }
+
+        if (connectedAccountsResp.ok) {
+          const data: ConnectedAccountsResponse = (await connectedAccountsResp.json()) as ConnectedAccountsResponse;
+          setConnectedAccounts(data.connected_accounts || []);
         }
       } catch (error) {
         console.error("Failed to load settings", error);
@@ -323,6 +342,80 @@ const AppContent = () => {
                 </button>
               </div>
             </form>
+
+            <div className="settings-form settings-form--secondary">
+              <h3 className="app__section-title">Connected Accounts</h3>
+              <p className="app__status">
+                Link multiple OAuth providers to your account. You can sign in with any connected provider.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {['github', 'google'].map((provider) => {
+                  const connected = connectedAccounts.find((acc) => acc.provider === provider);
+                  const isConnected = !!connected;
+
+                  return (
+                    <div
+                      key={provider}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '1rem',
+                        border: '1px solid #e0e0e0',
+                        borderRadius: '8px',
+                        backgroundColor: isConnected ? '#f5f5f5' : '#fff'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '50%',
+                          backgroundColor: provider === 'github' ? '#24292e' : '#4285f4',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          fontWeight: 'bold',
+                          fontSize: '1.2rem'
+                        }}>
+                          {provider[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: '600', textTransform: 'capitalize' }}>
+                            {provider}
+                          </div>
+                          {isConnected && connected && (
+                            <div style={{ fontSize: '0.875rem', color: '#666' }}>
+                              Connected {new Date(connected.connected_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className={isConnected ? "button" : "button button--primary"}
+                        disabled={isConnected}
+                        onClick={() => {
+                          const loginUrl = new URL(
+                            provider === 'github' ? LOGIN_ENDPOINT : GOOGLE_LOGIN_ENDPOINT,
+                            window.location.origin
+                          );
+                          loginUrl.searchParams.set("redirect", "/settings");
+                          window.location.href = loginUrl.toString();
+                        }}
+                        style={{
+                          opacity: isConnected ? 0.5 : 1,
+                          cursor: isConnected ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        {isConnected ? 'Connected' : 'Connect'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             <div className="settings-form settings-form--secondary">
               <h3 className="app__section-title">Tenant MCP Secret</h3>
