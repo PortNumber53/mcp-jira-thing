@@ -90,6 +90,7 @@ const AppContent = () => {
   });
   const [mcpSecret, setMcpSecret] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
+  const [emailMismatchError, setEmailMismatchError] = useState<{ existing: string; new: string } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -193,13 +194,7 @@ const AppContent = () => {
       const newEmail = params.get("new_email");
 
       if (existingEmail && newEmail) {
-        alert(
-          `Cannot link accounts with different email addresses.\n\n` +
-          `Your current account uses: ${existingEmail}\n` +
-          `The account you're trying to link uses: ${newEmail}\n\n` +
-          `To link these accounts, both must use the same email address. ` +
-          `Alternatively, you need to delete your existing account before creating a new one with the other email.`
-        );
+        setEmailMismatchError({ existing: existingEmail, new: newEmail });
 
         // Clean up URL
         window.history.replaceState({}, "", window.location.pathname);
@@ -513,9 +508,65 @@ const AppContent = () => {
   };
 
     return (
-      <div className="app-shell">
-        <header className="app-shell__header">
-          <div className="app-shell__header-inner">
+      <>
+        {emailMismatchError && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem'
+          }}>
+            <div className="card" style={{
+              maxWidth: '500px',
+              width: '100%',
+              padding: '2rem',
+              position: 'relative'
+            }}>
+              <h2 style={{ marginTop: 0, color: '#ef4444' }}>Cannot Link Accounts</h2>
+              <p style={{ marginBottom: '1rem' }}>
+                Cannot link accounts with different email addresses.
+              </p>
+              <div style={{
+                padding: '1rem',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                borderRadius: '8px',
+                marginBottom: '1rem',
+                border: '1px solid rgba(239, 68, 68, 0.3)'
+              }}>
+                <p style={{ margin: '0 0 0.5rem 0' }}>
+                  <strong>Your current account uses:</strong><br />
+                  {emailMismatchError.existing}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>The account you're trying to link uses:</strong><br />
+                  {emailMismatchError.new}
+                </p>
+              </div>
+              <p style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>
+                To link these accounts, both must use the same email address.
+                Alternatively, you need to delete your existing account before creating a new one with the other email.
+              </p>
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={() => setEmailMismatchError(null)}
+                style={{ marginTop: '1rem' }}
+              >
+                Okay
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="app-shell">
+          <header className="app-shell__header">
+            <div className="app-shell__header-inner">
             <Link to="/" className="app-shell__brand">
               <span className="app-shell__logo-dot" />
               <span className="app-shell__brand-text">
@@ -631,8 +682,9 @@ const AppContent = () => {
             <span className="app-shell__footer-meta">Powered by GitHub OAuth and Xata</span>
           </div>
         </footer>
-      </div>
-  );
+        </div>
+      </>
+    );
 }
 
 const App = () => (
