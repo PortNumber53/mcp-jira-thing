@@ -261,10 +261,10 @@ const AppContent = () => {
         return;
       }
 
-      // Account deleted successfully - log out and redirect
+      // Account deleted successfully - log out and redirect to goodbye page
       setSession({ status: "unauthenticated" });
       setShowDeleteConfirm(false);
-      navigate("/");
+      navigate("/goodbye");
     } catch (error) {
       console.error("Failed to delete account", error);
       alert("Failed to delete account. Please try again.");
@@ -298,6 +298,25 @@ const AppContent = () => {
             <p style={{ fontSize: '0.875rem', color: '#666', marginTop: '1rem', maxWidth: '400px' }}>
               Note: To switch GitHub accounts, please log out of GitHub.com first. Google login allows account selection.
             </p>
+          </div>
+        );
+      }
+
+      if (route === "/goodbye") {
+        return (
+          <div className="card card--center">
+            <h2 style={{ marginTop: 0, fontSize: '2rem' }}>Sorry to See You Go</h2>
+            <p style={{ fontSize: '1.1rem', marginBottom: '1.5rem', maxWidth: '500px' }}>
+              Your account has been successfully deleted. All your data, settings, and subscriptions have been removed from our system.
+            </p>
+            <p style={{ color: 'var(--app-muted-color)', marginBottom: '2rem', maxWidth: '500px' }}>
+              If you change your mind, you're always welcome to create a new account and rejoin us.
+            </p>
+            <div className="login-buttons">
+              <Link to="/" className="button button--primary">
+                Return to Home
+              </Link>
+            </div>
           </div>
         );
       }
