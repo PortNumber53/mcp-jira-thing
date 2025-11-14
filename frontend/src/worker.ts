@@ -29,6 +29,7 @@ type StatePayload = {
   nonce: string;
   redirect: string;
   createdAt: number;
+  linkAccount?: boolean;
 };
 
 export interface Env {
@@ -327,12 +328,14 @@ export default {
       }
 
       const redirectTarget = normalizeRedirectTarget(url.searchParams.get("redirect"));
+      const linkAccount = url.searchParams.get("link") === "true";
       const nonce = randomToken(32);
 
       const statePayload: StatePayload = {
         nonce,
         redirect: redirectTarget,
         createdAt: Date.now(),
+        linkAccount,
       };
 
       const stateCookieValue = await encodeSignedPayload(getCookieSecret(env), statePayload);
@@ -368,12 +371,14 @@ export default {
       }
 
       const redirectTarget = normalizeRedirectTarget(url.searchParams.get("redirect"));
+      const linkAccount = url.searchParams.get("link") === "true";
       const nonce = randomToken(32);
 
       const statePayload: StatePayload = {
         nonce,
         redirect: redirectTarget,
         createdAt: Date.now(),
+        linkAccount,
       };
 
       const stateCookieValue = await encodeSignedPayload(getCookieSecret(env), statePayload);
@@ -1227,17 +1232,39 @@ export default {
         return jsonResponse({ error: "Google did not return an email" }, { status: 502 });
       }
 
-      const sessionPayload: SessionPayload = {
-        login: email,
-        id: Date.now(),
-        name: userData.name ?? null,
-        avatarUrl: userData.picture ?? null,
-        email,
-        exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
-      };
-
-      const sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
+      // If this is an account linking operation, preserve the existing session
+      let sessionCookieValue: string;
       const redirectTarget = normalizeRedirectTarget(parsedState.redirect) || "/";
+
+      if (parsedState.linkAccount) {
+        // Keep the existing session - don't create a new one
+        const existingSessionCookie = cookies[SESSION_COOKIE];
+        if (existingSessionCookie) {
+          sessionCookieValue = existingSessionCookie;
+        } else {
+          // No existing session, create a new one
+          const sessionPayload: SessionPayload = {
+            login: email,
+            id: Date.now(),
+            name: userData.name ?? null,
+            avatarUrl: userData.picture ?? null,
+            email,
+            exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+          };
+          sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
+        }
+      } else {
+        // Normal login - create a new session
+        const sessionPayload: SessionPayload = {
+          login: email,
+          id: Date.now(),
+          name: userData.name ?? null,
+          avatarUrl: userData.picture ?? null,
+          email,
+          exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+        };
+        sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
+      }
 
       // Best-effort: synchronise the authenticated Google user into the backend
       // multi-tenant database. Failures here should not block login.
@@ -1402,17 +1429,39 @@ export default {
         }
       }
 
-      const sessionPayload: SessionPayload = {
-        login: userData.login,
-        id: userData.id,
-        name: userData.name ?? null,
-        avatarUrl: userData.avatar_url ?? null,
-        email: primaryEmail ?? null,
-        exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
-      };
-
-      const sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
+      // If this is an account linking operation, preserve the existing session
+      let sessionCookieValue: string;
       const redirectTarget = normalizeRedirectTarget(parsedState.redirect) || "/";
+
+      if (parsedState.linkAccount) {
+        // Keep the existing session - don't create a new one
+        const existingSessionCookie = cookies[SESSION_COOKIE];
+        if (existingSessionCookie) {
+          sessionCookieValue = existingSessionCookie;
+        } else {
+          // No existing session, create a new one
+          const sessionPayload: SessionPayload = {
+            login: userData.login,
+            id: userData.id,
+            name: userData.name ?? null,
+            avatarUrl: userData.avatar_url ?? null,
+            email: primaryEmail ?? null,
+            exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+          };
+          sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
+        }
+      } else {
+        // Normal login - create a new session
+        const sessionPayload: SessionPayload = {
+          login: userData.login,
+          id: userData.id,
+          name: userData.name ?? null,
+          avatarUrl: userData.avatar_url ?? null,
+          email: primaryEmail ?? null,
+          exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+        };
+        sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
+      }
 
       // Best-effort: synchronise the authenticated GitHub user into the backend
       // multi-tenant database. Failures here should not block login.

@@ -426,6 +426,7 @@ const AppContent = () => {
                           console.log('Using endpoint:', endpoint);
                           const loginUrl = new URL(endpoint, window.location.origin);
                           loginUrl.searchParams.set("redirect", "/settings");
+                          loginUrl.searchParams.set("link", "true");
                           console.log('Navigating to:', loginUrl.toString());
                           window.location.href = loginUrl.toString();
                         }}
