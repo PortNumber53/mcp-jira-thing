@@ -1155,38 +1155,36 @@ export default {
         return jsonResponse({ error: "Not authenticated" }, { status: 401 });
       }
 
+      if (!env.BACKEND_BASE_URL) {
+        return jsonResponse({ error: "Backend is not configured" }, { status: 500 });
+      }
+
       try {
         const body = await request.json() as { email: string };
         if (!body.email || body.email !== session.email) {
           return jsonResponse({ error: "Invalid request" }, { status: 400 });
         }
 
-        // Check for active subscription
-        const subscriptionResult = await env.DB.prepare(
-          `SELECT stripe_subscription_id FROM subscriptions WHERE user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER(?)) LIMIT 1`
-        ).bind(body.email).first<{ stripe_subscription_id: string }>();
+        // Forward the deletion request to the backend
+        const backendResponse = await fetch(`${env.BACKEND_BASE_URL}/api/account/delete`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email: body.email }),
+        });
 
-        if (subscriptionResult && subscriptionResult.stripe_subscription_id) {
-          console.log(`[DeleteAccount] User ${body.email} has active subscription ${subscriptionResult.stripe_subscription_id} - should be cancelled`);
-          // Note: Stripe subscription cancellation should be handled by webhook or Stripe SDK
+        if (!backendResponse.ok) {
+          const errorText = await backendResponse.text();
+          console.error(`[DeleteAccount] Backend error: ${backendResponse.status} - ${errorText}`);
+          return jsonResponse({ error: "Failed to delete account" }, { status: backendResponse.status });
         }
 
-        // Delete user and all associated data in transaction
-        const queries = [
-          env.DB.prepare(`DELETE FROM payment_history WHERE user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER(?))`).bind(body.email),
-          env.DB.prepare(`DELETE FROM subscriptions WHERE user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER(?))`).bind(body.email),
-          env.DB.prepare(`DELETE FROM jira_user_settings WHERE user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER(?))`).bind(body.email),
-          env.DB.prepare(`DELETE FROM users_oauths WHERE user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER(?))`).bind(body.email),
-          env.DB.prepare(`DELETE FROM requests WHERE user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER(?))`).bind(body.email),
-          env.DB.prepare(`DELETE FROM users WHERE LOWER(email) = LOWER(?)`).bind(body.email),
-        ];
-
-        await env.DB.batch(queries);
-
+        const result = await backendResponse.json();
         console.log(`[DeleteAccount] Successfully deleted account for user ${body.email}`);
 
         // Clear session cookie
-        const response = jsonResponse({ success: true, message: "Account deleted successfully" });
+        const response = jsonResponse(result);
         response.headers.append(
           "Set-Cookie",
           serializeCookie(SESSION_COOKIE, "", {
