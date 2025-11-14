@@ -589,11 +589,13 @@ const AppContent = () => {
         </header>
 
         <main className="app-shell__main">
-          {session.status === "error" && <p className="app__status app__status--error">{session.message}</p>}
-          <Routes>
-            <Route path="/billing" element={<Billing />} />
-            <Route path="*" element={renderMain()} />
-          </Routes>
+          <div className="app-shell__content">
+            {session.status === "error" && <p className="app__status app__status--error">{session.message}</p>}
+            <Routes>
+              <Route path="/billing" element={<Billing />} />
+              <Route path="*" element={renderMain()} />
+            </Routes>
+          </div>
         </main>
 
         <footer className="app-shell__footer">

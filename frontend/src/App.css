@@ -35,6 +35,7 @@
 }
 
 .card {
+  width: 100%;
   border-radius: 16px;
   padding: 1.75rem;
   border: 1px solid var(--app-card-border);
@@ -43,6 +44,7 @@
   flex-direction: column;
   gap: 1.5rem;
   align-items: flex-start;
+  box-sizing: border-box;
 }
 
 .card--center {
@@ -56,8 +58,6 @@
 
 .billing-page {
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
 }
 
 .button {
@@ -262,8 +262,18 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+  align-items: center;
   padding-top: 6rem; /* space for fixed header */
   padding-bottom: 4.5rem; /* space for fixed footer */
+  padding-inline: 1.5rem;
+}
+
+.app-shell__content {
+  width: 100%;
+  max-width: 1120px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
 }
 
 .app-shell__footer {
@@ -390,7 +400,7 @@
   flex-direction: column;
   gap: 1.25rem;
   width: 100%;
-  max-width: 520px;
+  max-width: 620px;
 }
 
 .settings-form__field {
