@@ -343,6 +343,8 @@ export default {
       authorizeUrl.searchParams.set("state", nonce);
       authorizeUrl.searchParams.set("scope", "read:user user:email");
       authorizeUrl.searchParams.set("allow_signup", "false");
+      // Force re-authentication to allow account switching
+      authorizeUrl.searchParams.set("prompt", "login");
 
       const response = new Response(null, {
         status: 302,
