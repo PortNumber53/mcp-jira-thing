@@ -217,6 +217,9 @@ const AppContent = () => {
                 Sign in with Google
               </button>
             </div>
+            <p style={{ fontSize: '0.875rem', color: '#666', marginTop: '1rem', maxWidth: '400px' }}>
+              Note: To switch GitHub accounts, please log out of GitHub.com first. Google login allows account selection.
+            </p>
           </div>
         );
       }
@@ -232,6 +235,9 @@ const AppContent = () => {
               Sign in with Google
             </button>
           </div>
+          <p style={{ fontSize: '0.875rem', color: '#666', marginTop: '1rem', maxWidth: '400px' }}>
+            Note: To switch GitHub accounts, please log out of GitHub.com first. Google login allows account selection.
+          </p>
         </div>
       );
     }
