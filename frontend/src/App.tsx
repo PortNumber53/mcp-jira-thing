@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import Billing from './pages/Billing';
+import Pricing from './pages/Pricing';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
 
 type SessionUser = {
   id: number;
@@ -718,9 +721,14 @@ const AppContent = () => {
                   </Link>
                 </>
               ) : (
-                <Link to="/" className={`app-shell__nav-item${route === "/" ? " app-shell__nav-item--active" : ""}`}>
-                  Home
-                </Link>
+                <>
+                  <Link to="/" className={`app-shell__nav-item${route === "/" ? " app-shell__nav-item--active" : ""}`}>
+                    Home
+                  </Link>
+                  <Link to="/pricing" className={`app-shell__nav-item${route === "/pricing" ? " app-shell__nav-item--active" : ""}`}>
+                    Pricing
+                  </Link>
+                </>
               )}
             </nav>
 
@@ -799,6 +807,9 @@ const AppContent = () => {
             {session.status === "error" && <p className="app__status app__status--error">{session.message}</p>}
             <Routes>
               <Route path="/billing" element={<Billing />} />
+              <Route path="/pricing" element={<Pricing />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="*" element={renderMain()} />
             </Routes>
           </div>
@@ -806,9 +817,11 @@ const AppContent = () => {
 
         <footer className="app-shell__footer">
           <div className="app-shell__footer-inner">
-            <span> 2023 MCP Jira Thing</span>
-            &nbsp;
-            <span className="app-shell__footer-meta">Powered by GitHub OAuth and Xata</span>
+            <span> 2025 MCP Jira Thing</span>
+            <span className="app-shell__footer-separator">•</span>
+            <Link to="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms</Link>
+            <span className="app-shell__footer-separator">•</span>
+            <Link to="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</Link>
           </div>
         </footer>
         </div>
