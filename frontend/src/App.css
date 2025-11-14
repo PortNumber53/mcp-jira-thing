@@ -585,6 +585,7 @@
   opacity: 0.5;
   cursor: not-allowed;
   border-color: rgba(148, 163, 184, 0.3);
+  pointer-events: none;
 }
 
 @media (prefers-color-scheme: light) {

@@ -421,11 +421,12 @@ const AppContent = () => {
                         className={`button connected-account-button ${isConnected ? '' : 'button--primary'}`}
                         disabled={isConnected}
                         onClick={() => {
-                          const loginUrl = new URL(
-                            provider === 'github' ? LOGIN_ENDPOINT : GOOGLE_LOGIN_ENDPOINT,
-                            window.location.origin
-                          );
+                          console.log('Connect button clicked for provider:', provider);
+                          const endpoint = provider === 'github' ? LOGIN_ENDPOINT : GOOGLE_LOGIN_ENDPOINT;
+                          console.log('Using endpoint:', endpoint);
+                          const loginUrl = new URL(endpoint, window.location.origin);
                           loginUrl.searchParams.set("redirect", "/settings");
+                          console.log('Navigating to:', loginUrl.toString());
                           window.location.href = loginUrl.toString();
                         }}
                       >
