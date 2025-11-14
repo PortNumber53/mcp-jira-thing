@@ -8,4 +8,18 @@ export default defineConfig({
     outDir: "dist/client",
     emptyOutDir: false,
   },
+  server: {
+    port: 18110,
+    proxy: {
+      // Proxy API requests to the Cloudflare Worker
+      '/api': {
+        target: 'http://localhost:18112',
+        changeOrigin: true,
+      },
+      '/auth': {
+        target: 'http://localhost:18112',
+        changeOrigin: true,
+      },
+    },
+  },
 });

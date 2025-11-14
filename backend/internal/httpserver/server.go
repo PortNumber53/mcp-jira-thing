@@ -22,7 +22,7 @@ type Server struct {
 }
 
 // New constructs an HTTP server using the provided configuration and storage clients.
-func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStore handlers.OAuthStore, settingsStore handlers.UserSettingsStore) *Server {
+func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStore handlers.OAuthStore, settingsStore handlers.UserSettingsStore, billingStore handlers.BillingStore, userStore handlers.UserStore) *Server {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
@@ -82,6 +82,13 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	router.Post("/api/auth/google", handlers.GoogleAuth(authStore))
 	router.Post("/api/settings/jira", handlers.UserSettings(settingsStore))
 	router.Get("/api/settings/jira", handlers.UserSettings(settingsStore))
+
+	// Billing endpoints
+	router.Post("/api/billing/save-subscription", handlers.SaveSubscription(billingStore, userStore))
+	router.Post("/api/billing/save-payment", handlers.SavePayment(billingStore, userStore))
+	router.Get("/api/billing/payment-history", handlers.GetPaymentHistory(billingStore, userStore))
+	router.Get("/api/billing/subscription", handlers.GetSubscription(billingStore))
+
 	router.Group(func(r chi.Router) {
 		r.Use(mcpAuthMiddleware(db, s)) // Apply MCP auth middleware to this group
 		r.Get("/api/settings/jira/tenant", handlers.TenantJiraSettings(settingsStore))

@@ -50,6 +50,16 @@
   text-align: center;
 }
 
+.card--wide {
+  max-width: 1200px;
+}
+
+.billing-page {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 .button {
   border-radius: 999px;
   padding: 0.65rem 1.75rem;

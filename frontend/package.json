@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm:dev:vite\" \"npm:dev:worker\"",
-    "dev:vite": "vite",
-    "dev:worker": "wrangler dev --local --config wrangler.toml",
+    "dev:vite": "rm -rf dist node_modules/.vite && vite",
+    "dev:worker": "wrangler dev --local --config wrangler.toml --port 18112",
     "build": "tsc -b && vite build && npm run build:worker",
     "build:worker": "esbuild src/worker.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=dist/_worker.js",
     "lint": "eslint .",
@@ -15,7 +15,10 @@
   },
   "dependencies": {
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "@stripe/react-stripe-js": "^5.3.0",
+    "@stripe/stripe-js": "^8.4.0",
+    "react-router-dom": "^6.14.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

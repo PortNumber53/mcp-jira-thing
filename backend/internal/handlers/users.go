@@ -13,7 +13,7 @@ const defaultUserPageSize = 50
 
 // UserLister defines the behaviour required from the storage client backing the users handler.
 type UserLister interface {
-	ListUsers(rCtx context.Context, limit int) ([]models.User, error)
+	ListUsers(rCtx context.Context, limit int) ([]models.PublicUser, error)
 }
 
 // Users creates an HTTP handler that returns a list of users fetched from Xata.

@@ -32,7 +32,7 @@ func New(db *sql.DB) (*Store, error) {
 }
 
 // ListUsers returns up to `limit` users ordered by creation time descending.
-func (s *Store) ListUsers(ctx context.Context, limit int) ([]models.User, error) {
+func (s *Store) ListUsers(ctx context.Context, limit int) ([]models.PublicUser, error) {
 	if limit <= 0 || limit > defaultPageSize {
 		limit = defaultPageSize
 	}
@@ -54,7 +54,7 @@ LIMIT $1
 	}
 	defer rows.Close()
 
-	var users []models.User
+	var users []models.PublicUser
 	for rows.Next() {
 		var (
 			id    string
@@ -67,7 +67,7 @@ LIMIT $1
 			return nil, fmt.Errorf("scan %s: %w", nextAuthUsersTable, err)
 		}
 
-		users = append(users, models.User{
+		users = append(users, models.PublicUser{
 			ID:    id,
 			Email: nullStringPtr(email),
 			Name:  nullStringPtr(name),
@@ -738,4 +738,211 @@ func (s *Store) GetAllMetrics(ctx context.Context) ([]models.RequestMetrics, err
 	}
 
 	return metrics, nil
+}
+
+// SaveSubscription inserts or updates a subscription record.
+func (s *Store) SaveSubscription(ctx context.Context, sub *models.Subscription) error {
+	query := `
+INSERT INTO subscriptions (
+	user_id, stripe_customer_id, stripe_subscription_id, stripe_price_id,
+	status, current_period_start, current_period_end, cancel_at_period_end, canceled_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (stripe_subscription_id) DO UPDATE SET
+	status = EXCLUDED.status,
+	current_period_start = EXCLUDED.current_period_start,
+	current_period_end = EXCLUDED.current_period_end,
+	cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+	canceled_at = EXCLUDED.canceled_at,
+	updated_at = now()
+	`
+
+	_, err := s.db.ExecContext(ctx, query,
+		sub.UserID,
+		sub.StripeCustomerID,
+		sub.StripeSubscriptionID,
+		sub.StripePriceID,
+		sub.Status,
+		sub.CurrentPeriodStart,
+		sub.CurrentPeriodEnd,
+		sub.CancelAtPeriodEnd,
+		sub.CanceledAt,
+	)
+	if err != nil {
+		return fmt.Errorf("store: save subscription: %w", err)
+	}
+
+	return nil
+}
+
+// GetSubscription retrieves the active subscription for a user by email.
+func (s *Store) GetSubscription(ctx context.Context, userEmail string) (*models.Subscription, error) {
+	query := `
+SELECT
+	s.id, s.user_id, s.stripe_customer_id, s.stripe_subscription_id,
+	s.stripe_price_id, s.status, s.current_period_start, s.current_period_end,
+	s.cancel_at_period_end, s.canceled_at, s.created_at, s.updated_at
+FROM subscriptions s
+JOIN users u ON s.user_id = u.id
+WHERE u.email = $1 AND s.status IN ('active', 'trialing', 'past_due')
+ORDER BY s.created_at DESC
+LIMIT 1
+	`
+
+	var sub models.Subscription
+	err := s.db.QueryRowContext(ctx, query, userEmail).Scan(
+		&sub.ID,
+		&sub.UserID,
+		&sub.StripeCustomerID,
+		&sub.StripeSubscriptionID,
+		&sub.StripePriceID,
+		&sub.Status,
+		&sub.CurrentPeriodStart,
+		&sub.CurrentPeriodEnd,
+		&sub.CancelAtPeriodEnd,
+		&sub.CanceledAt,
+		&sub.CreatedAt,
+		&sub.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: get subscription: %w", err)
+	}
+
+	return &sub, nil
+}
+
+// UpdateSubscription updates an existing subscription.
+func (s *Store) UpdateSubscription(ctx context.Context, sub *models.Subscription) error {
+	query := `
+UPDATE subscriptions
+SET status = $1,
+	current_period_start = $2,
+	current_period_end = $3,
+	cancel_at_period_end = $4,
+	canceled_at = $5,
+	updated_at = now()
+WHERE id = $6
+	`
+
+	_, err := s.db.ExecContext(ctx, query,
+		sub.Status,
+		sub.CurrentPeriodStart,
+		sub.CurrentPeriodEnd,
+		sub.CancelAtPeriodEnd,
+		sub.CanceledAt,
+		sub.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("store: update subscription: %w", err)
+	}
+
+	return nil
+}
+
+// SavePayment inserts a payment history record.
+func (s *Store) SavePayment(ctx context.Context, payment *models.PaymentHistory) error {
+	query := `
+INSERT INTO payment_history (
+	user_id, subscription_id, stripe_customer_id, stripe_payment_intent_id,
+	stripe_invoice_id, amount, currency, status, description, receipt_url
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`
+
+	_, err := s.db.ExecContext(ctx, query,
+		payment.UserID,
+		payment.SubscriptionID,
+		payment.StripeCustomerID,
+		payment.StripePaymentIntentID,
+		payment.StripeInvoiceID,
+		payment.Amount,
+		payment.Currency,
+		payment.Status,
+		payment.Description,
+		payment.ReceiptURL,
+	)
+	if err != nil {
+		return fmt.Errorf("store: save payment: %w", err)
+	}
+
+	return nil
+}
+
+// GetPaymentHistory retrieves payment history for a user by email.
+func (s *Store) GetPaymentHistory(ctx context.Context, userEmail string) ([]models.PaymentHistory, error) {
+	query := `
+SELECT
+	p.id, p.user_id, p.subscription_id, p.stripe_customer_id,
+	p.stripe_payment_intent_id, p.stripe_invoice_id, p.amount,
+	p.currency, p.status, p.description, p.receipt_url, p.created_at
+FROM payment_history p
+JOIN users u ON p.user_id = u.id
+WHERE u.email = $1
+ORDER BY p.created_at DESC
+LIMIT 100
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, userEmail)
+	if err != nil {
+		return nil, fmt.Errorf("store: get payment history: %w", err)
+	}
+	defer rows.Close()
+
+	var payments []models.PaymentHistory
+	for rows.Next() {
+		var p models.PaymentHistory
+		if err := rows.Scan(
+			&p.ID,
+			&p.UserID,
+			&p.SubscriptionID,
+			&p.StripeCustomerID,
+			&p.StripePaymentIntentID,
+			&p.StripeInvoiceID,
+			&p.Amount,
+			&p.Currency,
+			&p.Status,
+			&p.Description,
+			&p.ReceiptURL,
+			&p.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("store: scan payment: %w", err)
+		}
+		payments = append(payments, p)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate payments: %w", err)
+	}
+
+	return payments, nil
+}
+
+// GetUserByEmail retrieves a user by their email address.
+func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	query := `
+SELECT id, login, name, email, avatar_url, created_at, updated_at
+FROM users
+WHERE email = $1
+LIMIT 1
+	`
+
+	var user models.User
+	err := s.db.QueryRowContext(ctx, query, email).Scan(
+		&user.ID,
+		&user.Login,
+		&user.Name,
+		&user.Email,
+		&user.AvatarURL,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("store: user not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: get user by email: %w", err)
+	}
+
+	return &user, nil
 }

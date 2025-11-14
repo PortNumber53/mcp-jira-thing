@@ -1,7 +1,20 @@
 package models
 
+import "time"
+
 // User represents a sanitized view of a user record exposed by the backend API.
 type User struct {
+	ID        int64      `json:"id"`
+	Login     string     `json:"login"`
+	Email     *string    `json:"email,omitempty"`
+	Name      *string    `json:"name,omitempty"`
+	AvatarURL *string    `json:"avatar_url,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+// PublicUser represents the external API view of a user with string ID
+type PublicUser struct {
 	ID    string  `json:"id"`
 	Email *string `json:"email,omitempty"`
 	Name  *string `json:"name,omitempty"`

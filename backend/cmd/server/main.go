@@ -75,7 +75,7 @@ func main() {
 		log.Fatalf("failed to create store: %v", err)
 	}
 
-	srv := httpserver.New(cfg, db, store, store, store)
+	srv := httpserver.New(cfg, db, store, store, store, store, store)
 
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

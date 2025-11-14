@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import Billing from './pages/Billing';
 
 type SessionUser = {
   id: number;
@@ -63,9 +65,11 @@ const isSessionResponse = (value: unknown): value is SessionResponse => {
   return typeof user.id === "number" && typeof user.login === "string";
 };
 
-function App() {
+const AppContent = () => {
   const [session, setSession] = useState<SessionState>({ status: "loading" });
-  const [route, setRoute] = useState<string>(() => window.location.pathname || "/");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const route = location.pathname;
   const [isAccountMenuOpen, setAccountMenuOpen] = useState(false);
   const [jiraSettings, setJiraSettings] = useState<JiraSettingsFormState>({
     baseUrl: "",
@@ -118,15 +122,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const handlePopState = () => {
-      setRoute(window.location.pathname || "/");
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  // Load Jira settings when user is authenticated and navigates to /settings.
-  useEffect(() => {
     if (session.status !== "authenticated" || route !== "/settings") {
       return;
     }
@@ -146,7 +141,6 @@ function App() {
             setJiraSettings((prev) => ({
               baseUrl: primary.jira_base_url,
               email: primary.jira_email,
-              // For security reasons we do not round-trip the Atlassian API key; keep the field empty.
               apiKey: prev.apiKey,
             }));
           }
@@ -157,7 +151,6 @@ function App() {
           setMcpSecret(data.mcp_secret ?? null);
         }
       } catch (error) {
-        // eslint-disable-next-line no-console
         console.error("Failed to load settings", error);
       }
     };
@@ -167,17 +160,9 @@ function App() {
 
   useEffect(() => {
     if (session.status === "authenticated" && (route === "/" || route === "")) {
-      const target = "/dashboard";
-      window.history.replaceState({}, "", target);
-      setRoute(target);
+      navigate("/dashboard", { replace: true });
     }
-  }, [session, route]);
-
-  const navigate = (path: string) => {
-    if (path === route) return;
-    window.history.pushState({}, "", path);
-    setRoute(path);
-  };
+  }, [session, route, navigate]);
 
   const beginLoginWithGitHub = () => {
     const loginUrl = new URL(LOGIN_ENDPOINT, window.location.origin);
@@ -220,7 +205,7 @@ function App() {
     }
 
     if (session.status === "unauthenticated") {
-      if (route === "/dashboard" || route === "/settings") {
+      if (route === "/dashboard" || route === "/settings" || route === "/billing") {
         return (
           <div className="card card--center">
             <p>You need to sign in to access this page.</p>
@@ -278,14 +263,11 @@ function App() {
                     });
                     if (!response.ok) {
                       const text = await response.text();
-                      // eslint-disable-next-line no-console
                       console.error("Failed to save Jira settings", response.status, text);
                       return;
                     }
-                    // eslint-disable-next-line no-console
                     console.log("Jira settings saved");
                   } catch (error) {
-                    // eslint-disable-next-line no-console
                     console.error("Failed to save Jira settings", error);
                   }
                 };
@@ -361,14 +343,12 @@ function App() {
                         const response = await fetch("/api/mcp/secret", { method: "POST" });
                         if (!response.ok) {
                           const text = await response.text();
-                          // eslint-disable-next-line no-console
                           console.error("Failed to rotate MCP secret", response.status, text);
                           return;
                         }
                         const data: MCPSecretResponse = (await response.json()) as MCPSecretResponse;
                         setMcpSecret(data.mcp_secret ?? null);
                       } catch (error) {
-                        // eslint-disable-next-line no-console
                         console.error("Failed to rotate MCP secret", error);
                       }
                     };
@@ -411,12 +391,18 @@ function App() {
         );
       }
 
+      if (route === "/billing") {
+        return (
+          <Billing />
+        );
+      }
+
       return (
         <div className="card card--center">
           <p>We couldn&apos;t find that page.</p>
-          <button type="button" className="button" onClick={() => navigate("/dashboard")}>
+          <Link to="/dashboard" className="button">
             Go to dashboard
-          </button>
+          </Link>
         </div>
       );
     }
@@ -424,121 +410,131 @@ function App() {
     return null;
   };
 
-  return (
-    <div className="app-shell">
-      <header className="app-shell__header">
-        <div className="app-shell__header-inner">
-          <button type="button" className="app-shell__brand" onClick={() => navigate("/")}>
-            <span className="app-shell__logo-dot" />
-            <span className="app-shell__brand-text">
-              <span className="app-shell__brand-title">MCP Jira Thing</span>
-              <span className="app-shell__brand-subtitle">Multi-tenant Jira control plane</span>
-            </span>
-          </button>
+    return (
+      <div className="app-shell">
+        <header className="app-shell__header">
+          <div className="app-shell__header-inner">
+            <Link to="/" className="app-shell__brand">
+              <span className="app-shell__logo-dot" />
+              <span className="app-shell__brand-text">
+                <span className="app-shell__brand-title">MCP Jira Thing</span>
+                <span className="app-shell__brand-subtitle">Multi-tenant Jira control plane</span>
+              </span>
+            </Link>
 
-          <nav className="app-shell__nav">
-            {session.status === "authenticated" ? (
-              <>
-                <button
-                  type="button"
-                  className={`app-shell__nav-item${route === "/dashboard" ? " app-shell__nav-item--active" : ""}`}
-                  onClick={() => navigate("/dashboard")}
-                >
-                  Dashboard
-                </button>
-                <button
-                  type="button"
-                  className={`app-shell__nav-item${route === "/settings" ? " app-shell__nav-item--active" : ""}`}
-                  onClick={() => navigate("/settings")}
-                >
-                  Settings
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className={`app-shell__nav-item${route === "/" ? " app-shell__nav-item--active" : ""}`}
-                onClick={() => navigate("/")}
-              >
-                Home
-              </button>
-            )}
-          </nav>
+            <nav className="app-shell__nav">
+              {session.status === "authenticated" ? (
+                <>
+                  <Link to="/dashboard" className={`app-shell__nav-item${location.pathname === "/dashboard" ? " app-shell__nav-item--active" : ""}`}>
+                    Dashboard
+                  </Link>
+                                    <Link to="/settings" className={`app-shell__nav-item${location.pathname === "/settings" ? " app-shell__nav-item--active" : ""}`}>
+                    Settings
+                  </Link>
+                                    <Link to="/billing" className={`app-shell__nav-item${location.pathname === "/billing" ? " app-shell__nav-item--active" : ""}`}>
+                    Billing
+                  </Link>
+                </>
+              ) : (
+                <Link to="/" className={`app-shell__nav-item${route === "/" ? " app-shell__nav-item--active" : ""}`}>
+                  Home
+                </Link>
+              )}
+            </nav>
 
-          <div className="app-shell__account">
-            {session.status === "loading" && <span className="app-shell__status-pill">Checking session…</span>}
-            {session.status === "error" && <span className="app-shell__status-pill app-shell__status-pill--error">Session error</span>}
-            {session.status === "unauthenticated" && (
-              <div className="login-buttons">
-                <button type="button" className="button button--primary app-shell__account-button" onClick={beginLoginWithGitHub}>
-                  GitHub
-                </button>
-                <button type="button" className="button app-shell__account-button" onClick={beginLoginWithGoogle}>
-                  Google
-                </button>
-              </div>
-            )}
-            {session.status === "authenticated" && (
-              <div className="account-menu">
-                <button type="button" className="account-menu__trigger" onClick={() => setAccountMenuOpen((open) => !open)}>
-                  {session.user.avatarUrl && (
-                    <img
-                      className="account-menu__avatar"
-                      src={session.user.avatarUrl}
-                      alt={`${session.user.login}'s avatar`}
-                      referrerPolicy="no-referrer"
-                    />
+            <div className="app-shell__account">
+              {session.status === "loading" && <span className="app-shell__status-pill">Checking session…</span>}
+              {session.status === "error" && <span className="app-shell__status-pill app-shell__status-pill--error">Session error</span>}
+              {session.status === "unauthenticated" && (
+                <div className="login-buttons">
+                  <button type="button" className="button button--primary app-shell__account-button" onClick={beginLoginWithGitHub}>
+                    GitHub
+                  </button>
+                  <button type="button" className="button app-shell__account-button" onClick={beginLoginWithGoogle}>
+                    Google
+                  </button>
+                </div>
+              )}
+              {session.status === "authenticated" && (
+                <div className="account-menu">
+                  <button type="button" className="account-menu__trigger" onClick={() => setAccountMenuOpen((open) => !open)}>
+                    {session.user.avatarUrl && (
+                      <img
+                        className="account-menu__avatar"
+                        src={session.user.avatarUrl}
+                        alt={`${session.user.login}'s avatar`}
+                        referrerPolicy="no-referrer"
+                      />
+                    )}
+                    <span className="account-menu__name">{session.user.name ?? session.user.login}</span>
+                    <span className="account-menu__chevron">▾</span>
+                  </button>
+                  {isAccountMenuOpen && (
+                    <div className="account-menu__popover">
+                      <button
+                        type="button"
+                        className="account-menu__item"
+                        onClick={() => {
+                          navigate("/dashboard");
+                          setAccountMenuOpen(false);
+                        }}
+                      >
+                        Dashboard
+                      </button>
+                      <button
+                        type="button"
+                        className="account-menu__item"
+                        onClick={() => {
+                          navigate("/settings");
+                          setAccountMenuOpen(false);
+                        }}
+                      >
+                        Settings
+                      </button>
+                      <button
+                        type="button"
+                        className="account-menu__item"
+                        onClick={() => {
+                          navigate("/billing");
+                          setAccountMenuOpen(false);
+                        }}
+                      >
+                        Billing
+                      </button>
+                      <button type="button" className="account-menu__item account-menu__item--danger" onClick={beginLogout}>
+                        Sign out
+                      </button>
+                    </div>
                   )}
-                  <span className="account-menu__name">{session.user.name ?? session.user.login}</span>
-                  <span className="account-menu__chevron">▾</span>
-                </button>
-                {isAccountMenuOpen && (
-                  <div className="account-menu__popover">
-                    <button
-                      type="button"
-                      className="account-menu__item"
-                      onClick={() => {
-                        navigate("/dashboard");
-                        setAccountMenuOpen(false);
-                      }}
-                    >
-                      Dashboard
-                    </button>
-                    <button
-                      type="button"
-                      className="account-menu__item"
-                      onClick={() => {
-                        navigate("/settings");
-                        setAccountMenuOpen(false);
-                      }}
-                    >
-                      Settings
-                    </button>
-                    <button type="button" className="account-menu__item account-menu__item--danger" onClick={beginLogout}>
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="app-shell__main">
-        {session.status === "error" && <p className="app__status app__status--error">{session.message}</p>}
-        {renderMain()}
-      </main>
+        <main className="app-shell__main">
+          {session.status === "error" && <p className="app__status app__status--error">{session.message}</p>}
+          <Routes>
+            <Route path="/billing" element={<Billing />} />
+            <Route path="*" element={renderMain()} />
+          </Routes>
+        </main>
 
-      <footer className="app-shell__footer">
-        <div className="app-shell__footer-inner">
-          <span>© {new Date().getFullYear()} MCP Jira Thing</span>
-          &nbsp;
-          <span className="app-shell__footer-meta">Powered by GitHub OAuth and Xata</span>
-        </div>
-      </footer>
-    </div>
+        <footer className="app-shell__footer">
+          <div className="app-shell__footer-inner">
+            <span> 2023 MCP Jira Thing</span>
+            &nbsp;
+            <span className="app-shell__footer-meta">Powered by GitHub OAuth and Xata</span>
+          </div>
+        </footer>
+      </div>
   );
 }
+
+const App = () => (
+  <Router>
+    <AppContent />
+  </Router>
+);
 
 export default App;
