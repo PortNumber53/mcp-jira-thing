@@ -344,80 +344,6 @@ const AppContent = () => {
             </form>
 
             <div className="settings-form settings-form--secondary">
-              <h3 className="app__section-title">Connected Accounts</h3>
-              <p className="app__status">
-                Link multiple OAuth providers to your account. You can sign in with any connected provider.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {['github', 'google'].map((provider) => {
-                  const connected = connectedAccounts.find((acc) => acc.provider === provider);
-                  const isConnected = !!connected;
-
-                  return (
-                    <div
-                      key={provider}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '1rem',
-                        border: '1px solid #e0e0e0',
-                        borderRadius: '8px',
-                        backgroundColor: isConnected ? '#f5f5f5' : '#fff'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '50%',
-                          backgroundColor: provider === 'github' ? '#24292e' : '#4285f4',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'white',
-                          fontWeight: 'bold',
-                          fontSize: '1.2rem'
-                        }}>
-                          {provider[0].toUpperCase()}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: '600', textTransform: 'capitalize' }}>
-                            {provider}
-                          </div>
-                          {isConnected && connected && (
-                            <div style={{ fontSize: '0.875rem', color: '#666' }}>
-                              Connected {new Date(connected.connected_at).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className={isConnected ? "button" : "button button--primary"}
-                        disabled={isConnected}
-                        onClick={() => {
-                          const loginUrl = new URL(
-                            provider === 'github' ? LOGIN_ENDPOINT : GOOGLE_LOGIN_ENDPOINT,
-                            window.location.origin
-                          );
-                          loginUrl.searchParams.set("redirect", "/settings");
-                          window.location.href = loginUrl.toString();
-                        }}
-                        style={{
-                          opacity: isConnected ? 0.5 : 1,
-                          cursor: isConnected ? 'not-allowed' : 'pointer'
-                        }}
-                      >
-                        {isConnected ? 'Connected' : 'Connect'}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="settings-form settings-form--secondary">
               <h3 className="app__section-title">Tenant MCP Secret</h3>
               <p className="app__status">
                 Use this secret in your MCP client configuration to identify your tenant when
@@ -457,6 +383,57 @@ const AppContent = () => {
                 >
                   {mcpSecret ? "Rotate secret" : "Generate secret"}
                 </button>
+              </div>
+            </div>
+
+            <div className="settings-form settings-form--secondary">
+              <h3 className="app__section-title">Connected Accounts</h3>
+              <p className="app__status">
+                Link multiple OAuth providers to your account. You can sign in with any connected provider.
+              </p>
+              <div className="connected-accounts">
+                {['github', 'google'].map((provider) => {
+                  const connected = connectedAccounts.find((acc) => acc.provider === provider);
+                  const isConnected = !!connected;
+
+                  return (
+                    <div
+                      key={provider}
+                      className={`connected-account-card ${isConnected ? 'connected-account-card--connected' : ''}`}
+                    >
+                      <div className="connected-account-info">
+                        <div className={`connected-account-avatar connected-account-avatar--${provider}`}>
+                          {provider[0].toUpperCase()}
+                        </div>
+                        <div className="connected-account-details">
+                          <div className="connected-account-name">
+                            {provider}
+                          </div>
+                          {isConnected && connected && (
+                            <div className="connected-account-date">
+                              Connected {new Date(connected.connected_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className={`button connected-account-button ${isConnected ? '' : 'button--primary'}`}
+                        disabled={isConnected}
+                        onClick={() => {
+                          const loginUrl = new URL(
+                            provider === 'github' ? LOGIN_ENDPOINT : GOOGLE_LOGIN_ENDPOINT,
+                            window.location.origin
+                          );
+                          loginUrl.searchParams.set("redirect", "/settings");
+                          window.location.href = loginUrl.toString();
+                        }}
+                      >
+                        {isConnected ? 'Connected' : 'Connect'}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

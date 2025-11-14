@@ -488,6 +488,116 @@
   }
 }
 
+/* === Connected Accounts ================================================== */
+
+.connected-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.connected-account-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 12px;
+  background: radial-gradient(circle at top left, rgba(30, 64, 175, 0.15), rgba(15, 23, 42, 0.6));
+  transition: all 140ms ease-out;
+}
+
+.connected-account-card:hover {
+  border-color: rgba(148, 163, 184, 0.7);
+  background: radial-gradient(circle at top left, rgba(30, 64, 175, 0.25), rgba(15, 23, 42, 0.75));
+}
+
+.connected-account-card--connected {
+  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.2), rgba(15, 23, 42, 0.8));
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.connected-account-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.connected-account-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 1.2rem;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.5);
+}
+
+.connected-account-avatar--github {
+  background: linear-gradient(135deg, #24292e 0%, #1a1e22 100%);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.connected-account-avatar--google {
+  background: linear-gradient(135deg, #4285f4 0%, #357ae8 100%);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+}
+
+.connected-account-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.connected-account-name {
+  font-weight: 600;
+  text-transform: capitalize;
+  color: #e2e8f0;
+  font-size: 1rem;
+}
+
+.connected-account-date {
+  font-size: 0.875rem;
+  color: #94a3b8;
+}
+
+.connected-account-button {
+  min-width: 100px;
+}
+
+.connected-account-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+@media (prefers-color-scheme: light) {
+  .connected-account-card {
+    background: radial-gradient(circle at top left, rgba(191, 219, 254, 0.3), rgba(248, 250, 252, 0.95));
+    border-color: rgba(148, 163, 184, 0.4);
+  }
+
+  .connected-account-card:hover {
+    background: radial-gradient(circle at top left, rgba(191, 219, 254, 0.45), rgba(241, 245, 249, 0.98));
+  }
+
+  .connected-account-card--connected {
+    background: radial-gradient(circle at top left, rgba(147, 197, 253, 0.35), rgba(241, 245, 249, 1));
+    border-color: rgba(59, 130, 246, 0.5);
+  }
+
+  .connected-account-name {
+    color: #0f172a;
+  }
+
+  .connected-account-date {
+    color: #64748b;
+  }
+}
+
 @media (max-width: 640px) {
   .user-summary {
     flex-direction: column;
@@ -501,5 +611,19 @@
 
   .card {
     align-items: center;
+  }
+
+  .connected-account-card {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .connected-account-info {
+    justify-content: center;
+  }
+
+  .connected-account-button {
+    width: 100%;
   }
 }
