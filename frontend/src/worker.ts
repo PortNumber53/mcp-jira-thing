@@ -1240,6 +1240,27 @@ export default {
         // Keep the existing session - don't create a new one
         const existingSessionCookie = cookies[SESSION_COOKIE];
         if (existingSessionCookie) {
+          // Verify the existing session email matches the new OAuth email
+          const existingSession = await decodeSignedPayload<SessionPayload>(getCookieSecret(env), existingSessionCookie);
+
+          if (existingSession && existingSession.email && email) {
+            // Check if emails match (case-insensitive)
+            if (existingSession.email.toLowerCase() !== email.toLowerCase()) {
+              // Emails don't match - can't link accounts
+              const errorUrl = new URL(redirectTarget, url.origin);
+              errorUrl.searchParams.set("error", "email_mismatch");
+              errorUrl.searchParams.set("existing_email", existingSession.email);
+              errorUrl.searchParams.set("new_email", email);
+
+              return new Response(null, {
+                status: 303,
+                headers: {
+                  Location: errorUrl.toString(),
+                },
+              });
+            }
+          }
+
           sessionCookieValue = existingSessionCookie;
         } else {
           // No existing session, create a new one
@@ -1437,6 +1458,27 @@ export default {
         // Keep the existing session - don't create a new one
         const existingSessionCookie = cookies[SESSION_COOKIE];
         if (existingSessionCookie) {
+          // Verify the existing session email matches the new OAuth email
+          const existingSession = await decodeSignedPayload<SessionPayload>(getCookieSecret(env), existingSessionCookie);
+
+          if (existingSession && existingSession.email && primaryEmail) {
+            // Check if emails match (case-insensitive)
+            if (existingSession.email.toLowerCase() !== primaryEmail.toLowerCase()) {
+              // Emails don't match - can't link accounts
+              const errorUrl = new URL(redirectTarget, url.origin);
+              errorUrl.searchParams.set("error", "email_mismatch");
+              errorUrl.searchParams.set("existing_email", existingSession.email);
+              errorUrl.searchParams.set("new_email", primaryEmail);
+
+              return new Response(null, {
+                status: 303,
+                headers: {
+                  Location: errorUrl.toString(),
+                },
+              });
+            }
+          }
+
           sessionCookieValue = existingSessionCookie;
         } else {
           // No existing session, create a new one

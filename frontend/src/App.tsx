@@ -183,6 +183,30 @@ const AppContent = () => {
     }
   }, [session, route, navigate]);
 
+  // Check for OAuth linking errors in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+
+    if (error === "email_mismatch") {
+      const existingEmail = params.get("existing_email");
+      const newEmail = params.get("new_email");
+
+      if (existingEmail && newEmail) {
+        alert(
+          `Cannot link accounts with different email addresses.\n\n` +
+          `Your current account uses: ${existingEmail}\n` +
+          `The account you're trying to link uses: ${newEmail}\n\n` +
+          `To link these accounts, both must use the same email address. ` +
+          `Alternatively, you need to delete your existing account before creating a new one with the other email.`
+        );
+
+        // Clean up URL
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    }
+  }, [route]);
+
   const beginLoginWithGitHub = () => {
     const loginUrl = new URL(LOGIN_ENDPOINT, window.location.origin);
     loginUrl.searchParams.set("redirect", "/dashboard");
