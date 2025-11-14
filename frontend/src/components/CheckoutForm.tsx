@@ -114,7 +114,7 @@ const CheckoutForm = () => {
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ maxWidth: '500px' }}>
+    <form onSubmit={handleSubmit} style={{ width: '100%' }}>
       <div style={{
         padding: '12px',
         border: '1px solid #ccc',
