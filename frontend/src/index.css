@@ -23,6 +23,10 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  overflow-y: scroll;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -33,9 +37,9 @@ body {
 }
 
 #root {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 0 1.75rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 a {
