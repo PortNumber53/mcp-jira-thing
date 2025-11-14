@@ -947,6 +947,68 @@ LIMIT 1
 	return &user, nil
 }
 
+// DeleteUser deletes a user and all associated data by email address.
+func (s *Store) DeleteUser(ctx context.Context, email string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store: db cannot be nil")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: begin delete user tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	// Get user ID first
+	var userID int64
+	err = tx.QueryRowContext(ctx, `SELECT id FROM users WHERE LOWER(email) = LOWER($1)`, email).Scan(&userID)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("store: user not found")
+	}
+	if err != nil {
+		return fmt.Errorf("store: get user id: %w", err)
+	}
+
+	// Delete associated records in order (foreign key constraints)
+	// Delete payment history
+	if _, err := tx.ExecContext(ctx, `DELETE FROM payment_history WHERE user_email = $1`, email); err != nil {
+		return fmt.Errorf("store: delete payment history: %w", err)
+	}
+
+	// Delete subscriptions
+	if _, err := tx.ExecContext(ctx, `DELETE FROM subscriptions WHERE user_email = $1`, email); err != nil {
+		return fmt.Errorf("store: delete subscriptions: %w", err)
+	}
+
+	// Delete Jira settings
+	if _, err := tx.ExecContext(ctx, `DELETE FROM jira_user_settings WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("store: delete jira settings: %w", err)
+	}
+
+	// Delete OAuth associations
+	if _, err := tx.ExecContext(ctx, `DELETE FROM users_oauths WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("store: delete oauth associations: %w", err)
+	}
+
+	// Delete requests
+	if _, err := tx.ExecContext(ctx, `DELETE FROM requests WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("store: delete requests: %w", err)
+	}
+
+	// Finally, delete the user
+	if _, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		return fmt.Errorf("store: delete user: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("store: commit delete user tx: %w", err)
+	}
+
+	return nil
+}
+
 // GetConnectedAccounts retrieves all OAuth providers connected to a user by email.
 func (s *Store) GetConnectedAccounts(ctx context.Context, email string) ([]models.ConnectedAccount, error) {
 	query := `

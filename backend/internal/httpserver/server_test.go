@@ -74,6 +74,10 @@ func (s *stubUserClient) GetConnectedAccounts(ctx context.Context, email string)
 	return nil, nil
 }
 
+func (s *stubUserClient) DeleteUser(ctx context.Context, email string) error {
+	return nil
+}
+
 func TestHealthRoute(t *testing.T) {
 	cfg := config.Config{ServerAddress: ":0"}
 	stub := &stubUserClient{}

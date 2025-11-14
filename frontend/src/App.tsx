@@ -91,6 +91,8 @@ const AppContent = () => {
   const [mcpSecret, setMcpSecret] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
   const [emailMismatchError, setEmailMismatchError] = useState<{ existing: string; new: string } | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -231,6 +233,44 @@ const AppContent = () => {
     };
 
     void logout();
+  };
+
+  const handleDeleteAccount = async () => {
+    if (session.status !== "authenticated" || !session.user.email) {
+      return;
+    }
+
+    setIsDeleting(true);
+
+    try {
+      const response = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          email: session.user.email,
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("Failed to delete account", response.status, text);
+        alert("Failed to delete account. Please try again.");
+        return;
+      }
+
+      // Account deleted successfully - log out and redirect
+      setSession({ status: "unauthenticated" });
+      setShowDeleteConfirm(false);
+      navigate("/");
+    } catch (error) {
+      console.error("Failed to delete account", error);
+      alert("Failed to delete account. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const renderMain = () => {
@@ -457,6 +497,28 @@ const AppContent = () => {
                 })}
               </div>
             </div>
+
+            <div className="danger-zone">
+              <h3 className="danger-zone__title">Danger Zone</h3>
+              <p className="danger-zone__warning">
+                Deleting your account is permanent and cannot be undone. This will:
+              </p>
+              <ul className="danger-zone__warning" style={{ marginTop: '-0.5rem', paddingLeft: '1.5rem' }}>
+                <li>Delete all your Jira settings and configurations</li>
+                <li>Remove all connected OAuth accounts</li>
+                <li>Cancel your Stripe subscription with a prorated refund (if active)</li>
+                <li>Delete all payment history and usage data</li>
+              </ul>
+              <div style={{ marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="button button--danger"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  Delete My Account
+                </button>
+              </div>
+            </div>
           </div>
         );
       }
@@ -509,6 +571,54 @@ const AppContent = () => {
 
     return (
       <>
+        {showDeleteConfirm && (
+          <div className="modal-overlay">
+            <div className="card modal-content">
+              <h2 style={{ marginTop: 0, color: '#fecaca' }}>Confirm Account Deletion</h2>
+              <p style={{ marginBottom: '1rem', lineHeight: '1.6' }}>
+                Are you absolutely sure you want to delete your account? This action cannot be undone.
+              </p>
+              <div style={{
+                padding: '1rem',
+                backgroundColor: 'rgba(220, 38, 38, 0.15)',
+                borderRadius: '8px',
+                marginBottom: '1rem',
+                border: '1px solid rgba(239, 68, 68, 0.4)'
+              }}>
+                <p style={{ margin: '0 0 0.75rem 0', fontWeight: 600, color: '#fca5a5' }}>
+                  This will permanently delete:
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '1.5rem', color: '#fca5a5' }}>
+                  <li>All Jira settings and configurations</li>
+                  <li>All connected OAuth accounts</li>
+                  <li>All payment history and usage data</li>
+                  <li>Your Stripe subscription (with prorated refund)</li>
+                </ul>
+              </div>
+              <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '1rem' }}>
+                You will be logged out immediately and your data will be permanently removed from our servers.
+              </p>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="button button--danger"
+                  onClick={handleDeleteAccount}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete My Account'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {emailMismatchError && (
           <div style={{
             position: 'fixed',

@@ -90,6 +90,9 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	router.Get("/api/billing/payment-history", handlers.GetPaymentHistory(billingStore, userStore))
 	router.Get("/api/billing/subscription", handlers.GetSubscription(billingStore))
 
+	// Account management endpoints
+	router.Post("/api/account/delete", handlers.DeleteAccount(billingStore, userStore, ""))
+
 	router.Group(func(r chi.Router) {
 		r.Use(mcpAuthMiddleware(db, s)) // Apply MCP auth middleware to this group
 		r.Get("/api/settings/jira/tenant", handlers.TenantJiraSettings(settingsStore))
