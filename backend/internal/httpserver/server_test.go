@@ -14,8 +14,8 @@ import (
 
 type stubUserClient struct{}
 
-func (s *stubUserClient) ListUsers(ctx context.Context, limit int) ([]models.User, error) {
-	return []models.User{{ID: "rec1"}}, nil
+func (s *stubUserClient) ListUsers(ctx context.Context, limit int) ([]models.PublicUser, error) {
+	return []models.PublicUser{{ID: "rec1"}}, nil
 }
 
 func (s *stubUserClient) UpsertGitHubUser(ctx context.Context, user models.GitHubAuthUser) error {
@@ -46,18 +46,42 @@ func (s *stubUserClient) GetUserSettingsByMCPSecret(ctx context.Context, secret 
 	return nil, nil
 }
 
+func (s *stubUserClient) SaveSubscription(ctx context.Context, sub *models.Subscription) error {
+	return nil
+}
+
+func (s *stubUserClient) GetSubscription(ctx context.Context, userEmail string) (*models.Subscription, error) {
+	return nil, nil
+}
+
+func (s *stubUserClient) UpdateSubscription(ctx context.Context, sub *models.Subscription) error {
+	return nil
+}
+
+func (s *stubUserClient) SavePayment(ctx context.Context, payment *models.PaymentHistory) error {
+	return nil
+}
+
+func (s *stubUserClient) GetPaymentHistory(ctx context.Context, userEmail string) ([]models.PaymentHistory, error) {
+	return nil, nil
+}
+
+func (s *stubUserClient) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	return nil, nil
+}
+
 func TestHealthRoute(t *testing.T) {
 	cfg := config.Config{ServerAddress: ":0"}
 	stub := &stubUserClient{}
-	
+
 	// Create a mock database connection
 	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
 		t.Fatalf("failed to open test database: %v", err)
 	}
 	defer db.Close()
-	
-	server := New(cfg, db, stub, stub, stub)
+
+	server := New(cfg, db, stub, stub, stub, stub, stub)
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rr := httptest.NewRecorder()

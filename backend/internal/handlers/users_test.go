@@ -11,18 +11,18 @@ import (
 
 type mockUserClient struct {
 	lastLimit int
-	users     []models.User
+	users     []models.PublicUser
 	err       error
 }
 
-func (m *mockUserClient) ListUsers(ctx context.Context, limit int) ([]models.User, error) {
+func (m *mockUserClient) ListUsers(ctx context.Context, limit int) ([]models.PublicUser, error) {
 	m.lastLimit = limit
 	return m.users, m.err
 }
 
 func TestUsersHandler(t *testing.T) {
 	client := &mockUserClient{
-		users: []models.User{{ID: "rec1"}},
+		users: []models.PublicUser{{ID: "rec1"}},
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/users?limit=5", nil)
