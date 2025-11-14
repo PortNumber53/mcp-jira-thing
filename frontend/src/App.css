@@ -797,13 +797,11 @@
 
 .legal-page {
   align-items: flex-start;
-  max-width: 1200px;
   width: 100%;
 }
 
 .legal-content {
   width: 100%;
-  max-width: 1000px;
   text-align: left;
 }
 
