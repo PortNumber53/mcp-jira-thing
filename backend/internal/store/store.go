@@ -972,13 +972,16 @@ func (s *Store) DeleteUser(ctx context.Context, email string) error {
 	}
 
 	// Delete associated records in order (foreign key constraints)
+	// Note: payment_history and subscriptions have ON DELETE CASCADE, but we delete them explicitly
+	// for better control and logging
+
 	// Delete payment history
-	if _, err := tx.ExecContext(ctx, `DELETE FROM payment_history WHERE user_email = $1`, email); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM payment_history WHERE user_id = $1`, userID); err != nil {
 		return fmt.Errorf("store: delete payment history: %w", err)
 	}
 
 	// Delete subscriptions
-	if _, err := tx.ExecContext(ctx, `DELETE FROM subscriptions WHERE user_email = $1`, email); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM subscriptions WHERE user_id = $1`, userID); err != nil {
 		return fmt.Errorf("store: delete subscriptions: %w", err)
 	}
 
