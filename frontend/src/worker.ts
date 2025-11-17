@@ -63,6 +63,13 @@ async function importHmacKey(secret: string): Promise<CryptoKey> {
   return keyCache.get(secret)!;
 }
 
+// Helper function to build backend URLs without double slashes
+function buildBackendUrl(baseUrl: string, path: string): string {
+  const trimmedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  const trimmedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${trimmedBase}${trimmedPath}`;
+}
+
 function base64UrlEncode(source: ArrayBuffer | Uint8Array | string): string {
   let bytes: Uint8Array;
   if (typeof source === "string") {
@@ -726,7 +733,7 @@ export default {
         // Save subscription to backend database
         if (env.BACKEND_BASE_URL) {
           try {
-            await fetch(`${env.BACKEND_BASE_URL}/api/billing/save-subscription`, {
+            await fetch(buildBackendUrl(env.BACKEND_BASE_URL, '/api/billing/save-subscription'), {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -838,7 +845,7 @@ export default {
 
                 console.log("Syncing canceled subscription to database:", JSON.stringify(syncPayload, null, 2));
 
-                const syncResponse = await fetch(`${env.BACKEND_BASE_URL}/api/billing/save-subscription`, {
+                const syncResponse = await fetch(buildBackendUrl(env.BACKEND_BASE_URL, '/api/billing/save-subscription'), {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
@@ -903,7 +910,7 @@ export default {
 
                 console.log("Syncing cancel-at-period-end subscription to database:", JSON.stringify(syncPayload, null, 2));
 
-                const syncResponse = await fetch(`${env.BACKEND_BASE_URL}/api/billing/save-subscription`, {
+                const syncResponse = await fetch(buildBackendUrl(env.BACKEND_BASE_URL, '/api/billing/save-subscription'), {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
@@ -1002,7 +1009,7 @@ export default {
                 if (customerResponse.ok) {
                   const customer = await customerResponse.json();
 
-                  await fetch(`${env.BACKEND_BASE_URL}/api/billing/save-subscription`, {
+                  await fetch(buildBackendUrl(env.BACKEND_BASE_URL, '/api/billing/save-subscription'), {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
@@ -1052,7 +1059,7 @@ export default {
                 if (customerResponse.ok) {
                   const customer = await customerResponse.json();
 
-                  await fetch(`${env.BACKEND_BASE_URL}/api/billing/save-payment`, {
+                  await fetch(buildBackendUrl(env.BACKEND_BASE_URL, '/api/billing/save-payment'), {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
@@ -1097,7 +1104,7 @@ export default {
                 if (customerResponse.ok) {
                   const customer = await customerResponse.json();
 
-                  await fetch(`${env.BACKEND_BASE_URL}/api/billing/save-payment`, {
+                  await fetch(buildBackendUrl(env.BACKEND_BASE_URL, '/api/billing/save-payment'), {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
@@ -1166,7 +1173,7 @@ export default {
         }
 
         // Forward the deletion request to the backend
-        const backendResponse = await fetch(`${env.BACKEND_BASE_URL}/api/account/delete`, {
+        const backendResponse = await fetch(buildBackendUrl(env.BACKEND_BASE_URL, '/api/account/delete'), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
