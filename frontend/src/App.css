@@ -162,6 +162,7 @@
   background: transparent;
   border: 1px solid transparent;
   color: inherit;
+  text-decoration: none;
   cursor: pointer;
   font: inherit;
 }
