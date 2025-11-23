@@ -96,6 +96,9 @@ const AppContent = () => {
     status: "idle" | "testing" | "success" | "error";
     message?: string;
   }>({ status: "idle" });
+  const [mcpInstructionsPlatform, setMcpInstructionsPlatform] = useState<
+    "osx" | "linux" | "windows"
+  >("osx");
   const [mcpSecret, setMcpSecret] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
   const [emailMismatchError, setEmailMismatchError] = useState<{ existing: string; new: string } | null>(null);
@@ -349,6 +352,21 @@ const AppContent = () => {
 
     if (session.status === "authenticated") {
       if (route === "/settings") {
+        const mcpSecretExample = mcpSecret ?? "<YOUR_SECRET>";
+        const mcpSseUrlExample = `${window.location.origin}/sse?query=MCP_SECRET=${mcpSecretExample}`;
+        const platformToNpxPath: Record<typeof mcpInstructionsPlatform, string> = {
+          osx: "/opt/homebrew/bin/npx",
+          linux: "npx",
+          windows: "npx.cmd",
+        };
+        const platformToPathEnv: Record<typeof mcpInstructionsPlatform, string> = {
+          osx: "/opt/homebrew/bin:/usr/bin:/bin",
+          linux: "/usr/bin:/bin:/usr/local/bin",
+          windows: "C:\\\\Program Files\\\\nodejs",
+        };
+        const npxPathForPlatform = platformToNpxPath[mcpInstructionsPlatform];
+        const pathEnvForPlatform = platformToPathEnv[mcpInstructionsPlatform];
+
         const testSettings = async () => {
           setJiraTestStatus({ status: "testing" });
           try {
@@ -528,11 +546,36 @@ const AppContent = () => {
             <div className="settings-form settings-form--secondary">
               <h3 className="app__section-title">Instructions</h3>
               <p className="app__status">
-                Use the MCP secret above to connect your editor to this server. The MCP SSE endpoint is
-                <code style={{ marginLeft: "0.35rem" }}>
-                  {`${window.location.origin}/sse?query=MCP_SECRET=<your secret>`}
-                </code>.
+                Use the MCP secret above to connect your editor to this server. The MCP SSE endpoint for your tenant is
+                <code style={{ marginLeft: "0.35rem" }}>{mcpSseUrlExample}</code>.
               </p>
+              <p className="app__status" style={{ marginTop: "-0.5rem", fontWeight: 600 }}>
+                IMPORTANT: make sure to adjust these examples to your system.
+              </p>
+
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className={`button ${mcpInstructionsPlatform === "osx" ? "button--primary" : ""}`}
+                  onClick={() => setMcpInstructionsPlatform("osx")}
+                >
+                  OSX
+                </button>
+                <button
+                  type="button"
+                  className={`button ${mcpInstructionsPlatform === "linux" ? "button--primary" : ""}`}
+                  onClick={() => setMcpInstructionsPlatform("linux")}
+                >
+                  Linux
+                </button>
+                <button
+                  type="button"
+                  className={`button ${mcpInstructionsPlatform === "windows" ? "button--primary" : ""}`}
+                  onClick={() => setMcpInstructionsPlatform("windows")}
+                >
+                  Windows
+                </button>
+              </div>
 
               <h4 className="app__section-title" style={{ fontSize: "1rem", marginTop: "0.25rem" }}>
                 Cursor
@@ -543,10 +586,10 @@ const AppContent = () => {
                   Add a server entry using <code>npx</code> and the SSE URL:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
 {`"jira-thing": {
-  "command": "/opt/homebrew/bin/npx",
-  "args": ["mcp-remote", "${window.location.origin}/sse?query=MCP_SECRET=<YOUR_SECRET>"],
+  "command": "${npxPathForPlatform}",
+  "args": ["mcp-remote", "${mcpSseUrlExample}"],
   "env": {
-    "PATH": "/opt/homebrew/bin:/usr/bin:/bin"
+    "PATH": "${pathEnvForPlatform}"
   }
 }`}
                   </pre>
@@ -564,7 +607,7 @@ const AppContent = () => {
                 <li>
                   Any MCP client that supports SSE can connect to the same URL. Example:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-{`npx mcp-remote "${window.location.origin}/sse?query=MCP_SECRET=YOUR_SECRET"`}
+{`npx mcp-remote "${mcpSseUrlExample}"`}
                   </pre>
                 </li>
                 <li>
