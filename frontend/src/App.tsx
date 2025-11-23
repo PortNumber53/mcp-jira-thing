@@ -525,6 +525,55 @@ const AppContent = () => {
             </div>
 
             <div className="settings-form settings-form--secondary">
+              <h3 className="app__section-title">Instructions</h3>
+              <p className="app__status">
+                Use the MCP secret above to connect your editor to this server. The MCP SSE endpoint is
+                <code style={{ marginLeft: "0.35rem" }}>
+                  {`${window.location.origin}/sse?query=MCP_SECRET=<your secret>`}
+                </code>.
+              </p>
+
+              <h4 className="app__section-title" style={{ fontSize: "1rem", marginTop: "0.25rem" }}>
+                Cursor
+              </h4>
+              <ol className="app__status" style={{ paddingLeft: "1.25rem", margin: 0 }}>
+                <li>Open Cursor settings for MCP servers (or edit <code>.cursor/mcp.json</code>).</li>
+                <li>
+                  Add a server entry using <code>npx</code> and the SSE URL:
+                  <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
+{`"local-jira-thing": {
+  "command": "/opt/homebrew/bin/npx",
+  "args": ["mcp-remote", "${window.location.origin}/sse?query=MCP_SECRET=YOUR_SECRET"],
+  "env": {
+    "PATH": "/opt/homebrew/bin:/usr/bin:/bin"
+  }
+}`}
+                  </pre>
+                </li>
+                <li>
+                  If Cursor logs <code>spawn npx ENOENT</code> or <code>env: node: No such file or directory</code>,
+                  ensure the <code>PATH</code> in the MCP entry includes the folder containing <code>node</code> and <code>npx</code>.
+                </li>
+              </ol>
+
+              <h4 className="app__section-title" style={{ fontSize: "1rem", marginTop: "1rem" }}>
+                Other editors / CLI clients
+              </h4>
+              <ul className="app__status" style={{ paddingLeft: "1.25rem", margin: 0 }}>
+                <li>
+                  Any MCP client that supports SSE can connect to the same URL. Example:
+                  <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
+{`npx mcp-remote "${window.location.origin}/sse?query=MCP_SECRET=YOUR_SECRET"`}
+                  </pre>
+                </li>
+                <li>
+                  Some clients try an HTTP transport first and then fall back to SSE. This server supports that flow,
+                  so you can ignore an initial retry as long as it connects via SSE.
+                </li>
+              </ul>
+            </div>
+
+            <div className="settings-form settings-form--secondary">
               <h3 className="app__section-title">Connected Accounts</h3>
               <p className="app__status">
                 Link multiple OAuth providers to your account. You can sign in with any connected provider.
