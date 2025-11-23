@@ -22,6 +22,7 @@ type SessionPayload = {
   name?: string | null;
   avatarUrl?: string | null;
   email?: string | null;
+  provider?: "github" | "google";
   exp: number;
 };
 
@@ -1420,6 +1421,7 @@ export async function handleFrontendFetch(
             name: userData.name ?? null,
             avatarUrl: userData.picture ?? null,
             email,
+            provider: "google",
             exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
           };
           sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
@@ -1432,6 +1434,7 @@ export async function handleFrontendFetch(
           name: userData.name ?? null,
           avatarUrl: userData.picture ?? null,
           email,
+          provider: "google",
           exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
         };
         sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
@@ -1639,6 +1642,7 @@ export async function handleFrontendFetch(
             name: userData.name ?? null,
             avatarUrl: userData.avatar_url ?? null,
             email: primaryEmail ?? null,
+            provider: "github",
             exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
           };
           sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);
@@ -1651,6 +1655,7 @@ export async function handleFrontendFetch(
           name: userData.name ?? null,
           avatarUrl: userData.avatar_url ?? null,
           email: primaryEmail ?? null,
+          provider: "github",
           exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
         };
         sessionCookieValue = await encodeSignedPayload(getCookieSecret(env), sessionPayload);

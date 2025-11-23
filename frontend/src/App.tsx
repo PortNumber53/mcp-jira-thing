@@ -12,6 +12,7 @@ type SessionUser = {
   name?: string | null;
   email?: string | null;
   avatarUrl?: string | null;
+  provider?: "github" | "google";
 };
 
 type SessionState =
@@ -581,7 +582,9 @@ const AppContent = () => {
               <div className="connected-accounts">
                 {['github', 'google'].map((provider) => {
                   const connected = connectedAccounts.find((acc) => acc.provider === provider);
-                  const isConnected = !!connected;
+                  const isConnected =
+                    !!connected ||
+                    (session.status === "authenticated" && session.user.provider === provider);
 
                   return (
                     <div
