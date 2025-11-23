@@ -541,9 +541,9 @@ const AppContent = () => {
                 <li>
                   Add a server entry using <code>npx</code> and the SSE URL:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-{`"local-jira-thing": {
+{`"jira-thing": {
   "command": "/opt/homebrew/bin/npx",
-  "args": ["mcp-remote", "${window.location.origin}/sse?query=MCP_SECRET=YOUR_SECRET"],
+  "args": ["mcp-remote", "${window.location.origin}/sse?query=MCP_SECRET=<YOUR_SECRET>"],
   "env": {
     "PATH": "/opt/homebrew/bin:/usr/bin:/bin"
   }
