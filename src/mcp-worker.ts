@@ -213,6 +213,7 @@ export function createMcpOAuthProvider() {
   return new OAuthProvider({
     apiHandlers: {
       "/sse": withMcpSecret(sseHandler),
+      "/sse/message": withMcpSecret(sseHandler),
       "/mcp": withMcpSecret(mcpHandler),
     },
     authorizeEndpoint: "/authorize",
