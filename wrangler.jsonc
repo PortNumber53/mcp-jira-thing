@@ -43,6 +43,32 @@
   },
   "env": {
     "production": {
+      "migrations": [
+        {
+          "new_sqlite_classes": ["MyMCP"],
+          "tag": "v1"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "class_name": "MyMCP",
+            "name": "MCP_OBJECT"
+          }
+        ]
+      },
+      "kv_namespaces": [
+        {
+          "binding": "OAUTH_KV",
+          "id": "50f7d3c0b1f94315856ba4d31ae5f381"
+        }
+      ],
+      "ai": {
+        "binding": "AI"
+      },
+      "observability": {
+        "enabled": true
+      },
       "assets": {
         "directory": "frontend/dist/client",
         "binding": "ASSETS"
