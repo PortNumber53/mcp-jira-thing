@@ -44,6 +44,8 @@ pipeline {
         // Production Worker configuration.
         BACKEND_BASE_URL = credentials('prod-backend-url-mcp-jira-thing')
         SESSION_SECRET = credentials('prod-jwt-secret-truvisco-website')
+        GITHUB_CLIENT_ID = credentials('prod-githuib-client-id-mcp-jira-thing')
+        GITHUB_CLIENT_SECRET = credentials('prod-githuib-client-secret-mcp-jira-thing')
         GOOGLE_CLIENT_ID = credentials('prod-google-client-id-mcp-jira-thing')
         GOOGLE_CLIENT_SECRET = credentials('prod-google-client-secret-mcp-jira-thing')
       }
@@ -53,10 +55,11 @@ pipeline {
 
         // Sync secrets into the production Worker.
         sh 'echo "$SESSION_SECRET" | npx wrangler secret put SESSION_SECRET --env production'
+        sh 'echo "$GITHUB_CLIENT_SECRET" | npx wrangler secret put GITHUB_CLIENT_SECRET --env production'
         sh 'echo "$GOOGLE_CLIENT_SECRET" | npx wrangler secret put GOOGLE_CLIENT_SECRET --env production'
 
         // Deploy the merged Worker (serves SPA at / and MCP at /sse).
-        sh 'npx wrangler deploy --env production --var BACKEND_BASE_URL:$BACKEND_BASE_URL --var GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID'
+        sh 'npx wrangler deploy --env production --var BACKEND_BASE_URL:$BACKEND_BASE_URL --var GITHUB_CLIENT_ID:$GITHUB_CLIENT_ID --var GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID'
       }
     }
 
