@@ -35,7 +35,7 @@ function logMessage(env: any, level: LogLevel, message: string, ...args: any[]) 
   }
 }
 
-function extractMcpSecretFromRequest(request: Request): string | undefined {
+export function extractMcpSecretFromRequest(request: Request): string | undefined {
   const headerSecret = request.headers.get("x-mcp-secret") || request.headers.get("X-MCP-SECRET");
   if (headerSecret && headerSecret.trim().length > 0) {
     return headerSecret.trim();
@@ -220,4 +220,26 @@ export function createMcpOAuthProvider() {
     defaultHandler: GitHubHandler as any,
     tokenEndpoint: "/token",
   });
+}
+
+export async function handleMcpWithoutOAuth(
+  request: Request,
+  env: McpEnv,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const mcpSecret = extractMcpSecretFromRequest(request);
+  if (mcpSecret) {
+    const existingProps = (ctx as any).props ?? {};
+    (ctx as any).props = { ...existingProps, mcpSecret } as Props;
+  }
+
+  if (url.pathname.startsWith("/sse")) {
+    return (sseHandler.fetch ? sseHandler.fetch(request, env, ctx) : sseHandler(request, env, ctx)) as Response;
+  }
+  if (url.pathname.startsWith("/mcp")) {
+    return (mcpHandler.fetch ? mcpHandler.fetch(request, env, ctx) : mcpHandler(request, env, ctx)) as Response;
+  }
+
+  return new Response("Not Found", { status: 404 });
 }
