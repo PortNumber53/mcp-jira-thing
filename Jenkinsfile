@@ -52,11 +52,11 @@ pipeline {
         sh 'npm ci'
 
         // Sync secrets into the production Worker.
-        sh 'echo "$SESSION_SECRET" | wrangler secret put SESSION_SECRET --env production'
-        sh 'echo "$GOOGLE_CLIENT_SECRET" | wrangler secret put GOOGLE_CLIENT_SECRET --env production'
+        sh 'echo "$SESSION_SECRET" | npx wrangler secret put SESSION_SECRET --env production'
+        sh 'echo "$GOOGLE_CLIENT_SECRET" | npx wrangler secret put GOOGLE_CLIENT_SECRET --env production'
 
         // Deploy the merged Worker (serves SPA at / and MCP at /sse).
-        sh 'wrangler deploy --env production --var BACKEND_BASE_URL:$BACKEND_BASE_URL --var GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID'
+        sh 'npx wrangler deploy --env production --var BACKEND_BASE_URL:$BACKEND_BASE_URL --var GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID'
       }
     }
 
