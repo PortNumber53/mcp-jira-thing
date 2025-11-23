@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/store"
@@ -54,6 +55,10 @@ func (rt *RequestTracker) Middleware() func(http.Handler) http.Handler {
 			// Get response size
 			responseSizeBytes := rw.size
 
+			if shouldSkipTracking(r.URL.Path) {
+				return
+			}
+
 			// Track the request asynchronously to avoid blocking
 			go func() {
 				ctx := context.Background()
@@ -100,4 +105,17 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	n, err := rw.ResponseWriter.Write(b)
 	rw.size += n
 	return n, err
+}
+
+func shouldSkipTracking(path string) bool {
+	switch path {
+	case "/healthz", "/favicon.ico", "/robots.txt":
+		return true
+	}
+
+	if !strings.HasPrefix(path, "/api/") {
+		return true
+	}
+
+	return false
 }
