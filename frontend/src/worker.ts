@@ -329,7 +329,7 @@ async function serveAsset(request: Request, env: Env, url: URL): Promise<Respons
 export async function handleFrontendFetch(
   request: Request,
   env: Env,
-  _ctx: ExecutionContext,
+  _ctx: unknown,
 ): Promise<Response> {
   const url = new URL(request.url);
 
