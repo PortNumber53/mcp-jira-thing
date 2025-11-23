@@ -28,16 +28,35 @@ pipeline {
       }
     }
 
-    stage('Deploy MCP Worker') {
+    stage('Build Frontend') {
+      steps {
+        sh 'cd frontend && npm ci && npm run build'
+      }
+    }
+
+    stage('Deploy Cloudflare Worker') {
+      when {
+        branch 'master'
+      }
       environment {
-        // Reuse Cloudflare API token for deploying the MCP worker defined in wrangler.jsonc
+        // Cloudflare API token for Wrangler deploys.
         CLOUDFLARE_API_TOKEN = credentials('cloudflare-api-token')
+        // Production Worker configuration.
+        BACKEND_BASE_URL = credentials('prod-backend-url-mcp-jira-thing')
+        SESSION_SECRET = credentials('prod-jwt-secret-truvisco-website')
+        GOOGLE_CLIENT_ID = credentials('prod-google-client-id-mcp-jira-thing')
+        GOOGLE_CLIENT_SECRET = credentials('prod-google-client-secret-mcp-jira-thing')
       }
       steps {
-        // Build the SPA assets and deploy the single merged Worker from the repository root.
-        sh 'cd frontend && npm ci && npm run build'
+        // Install root dependencies (Worker code).
         sh 'npm ci'
-        sh 'npm run deploy'
+
+        // Sync secrets into the production Worker.
+        sh 'echo "$SESSION_SECRET" | wrangler secret put SESSION_SECRET --env production'
+        sh 'echo "$GOOGLE_CLIENT_SECRET" | wrangler secret put GOOGLE_CLIENT_SECRET --env production'
+
+        // Deploy the merged Worker (serves SPA at / and MCP at /sse).
+        sh 'wrangler deploy --env production --var BACKEND_BASE_URL:$BACKEND_BASE_URL --var GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID'
       }
     }
 
