@@ -6,12 +6,12 @@
   "scripts": {
     "dev": "concurrently \"npm:dev:vite\" \"npm:dev:worker\"",
     "dev:vite": "rm -rf dist node_modules/.vite && vite",
-    "dev:worker": "wrangler dev --local --config wrangler.toml --port 18112",
+    "dev:worker": "wrangler dev --local --config ../wrangler.jsonc --port 18112",
     "build": "tsc -b && vite build && npm run build:worker",
     "build:worker": "esbuild src/worker.ts --bundle --format=esm --platform=browser --target=es2022 --outfile=dist/_worker.js",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy --config wrangler.toml"
+    "deploy": "npm run build && wrangler deploy --config ../wrangler.jsonc --env production"
   },
   "dependencies": {
     "react": "^19.1.1",

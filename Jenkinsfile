@@ -28,24 +28,14 @@ pipeline {
       }
     }
 
-    stage('Deploy Frontend') {
-      environment {
-        // Inject Cloudflare API token from Jenkins credentials for wrangler deploy
-        CLOUDFLARE_API_TOKEN = credentials('cloudflare-api-token')
-      }
-      steps {
-        // Deploy the Cloudflare Worker + SPA from the frontend directory.
-        sh 'cd frontend && npm ci && npm run deploy'
-      }
-    }
-
     stage('Deploy MCP Worker') {
       environment {
         // Reuse Cloudflare API token for deploying the MCP worker defined in wrangler.jsonc
         CLOUDFLARE_API_TOKEN = credentials('cloudflare-api-token')
       }
       steps {
-        // Deploy the MCP Worker from the repository root using Wrangler
+        // Build the SPA assets and deploy the single merged Worker from the repository root.
+        sh 'cd frontend && npm ci && npm run build'
         sh 'npm ci'
         sh 'npm run deploy'
       }

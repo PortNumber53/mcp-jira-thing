@@ -306,6 +306,15 @@ function acceptsHtml(request: Request): boolean {
 }
 
 async function serveAsset(request: Request, env: Env, url: URL): Promise<Response> {
+  if (!env.ASSETS || typeof env.ASSETS.fetch !== "function") {
+    if (isLocalHost(url)) {
+      const viteUrl = new URL(request.url);
+      viteUrl.host = "localhost:18110";
+      return fetch(viteUrl.toString(), request);
+    }
+    return new Response("Assets binding is not configured", { status: 500 });
+  }
+
   const response = await env.ASSETS.fetch(request);
   const hasFileExtension = /\.[^/]+$/.test(url.pathname);
 
@@ -317,9 +326,12 @@ async function serveAsset(request: Request, env: Env, url: URL): Promise<Respons
   return response;
 }
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
+export async function handleFrontendFetch(
+  request: Request,
+  env: Env,
+  _ctx: ExecutionContext,
+): Promise<Response> {
+  const url = new URL(request.url);
 
     if (url.pathname === "/api/auth/session" && request.method === "GET") {
       const session = await readSession(request, env);
@@ -452,6 +464,84 @@ export default {
         status: upstreamResp.status,
         headers: {
           "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json; charset=utf-8",
+        },
+      });
+    }
+
+    if (url.pathname === "/api/settings/jira/test") {
+      const session = await readSession(request, env);
+      if (!session) {
+        return jsonResponse({ ok: false, error: "Not authenticated" }, { status: 401 });
+      }
+
+      if (request.method !== "POST") {
+        return jsonResponse({ ok: false, error: "Method not allowed" }, { status: 405 });
+      }
+
+      let body:
+        | { jira_base_url?: string; jira_email?: string; atlassian_api_key?: string }
+        | undefined;
+      try {
+        body = (await request.json()) as typeof body;
+      } catch (error) {
+        console.error("Failed to parse Jira test payload", error);
+        return jsonResponse({ ok: false, error: "Invalid JSON payload" }, { status: 400 });
+      }
+
+      if (!body?.jira_base_url || !body.jira_email || !body.atlassian_api_key) {
+        return jsonResponse({ ok: false, error: "Missing required fields" }, { status: 400 });
+      }
+
+      const trimmedBase = body.jira_base_url.endsWith("/")
+        ? body.jira_base_url.slice(0, -1)
+        : body.jira_base_url;
+      const basicToken = btoa(`${body.jira_email}:${body.atlassian_api_key}`);
+
+      const makeRequest = async (path: string) => {
+        const testUrl = `${trimmedBase}${path}`;
+        return fetch(testUrl, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Basic ${basicToken}`,
+          },
+        });
+      };
+
+      let upstreamResp = await makeRequest("/rest/api/3/myself");
+      if (upstreamResp.status === 404) {
+        upstreamResp = await makeRequest("/rest/api/2/myself");
+      }
+
+      const text = await upstreamResp.text();
+      if (!upstreamResp.ok) {
+        console.error("Jira credential test failed", {
+          status: upstreamResp.status,
+          body: text.slice(0, 500),
+        });
+        return jsonResponse(
+          {
+            ok: false,
+            status: upstreamResp.status,
+            error: text || upstreamResp.statusText || "Jira request failed",
+          },
+          { status: upstreamResp.status },
+        );
+      }
+
+      let profile: any = null;
+      try {
+        profile = JSON.parse(text);
+      } catch {
+        profile = null;
+      }
+
+      return jsonResponse({
+        ok: true,
+        account: {
+          displayName: profile?.displayName ?? null,
+          accountId: profile?.accountId ?? null,
+          emailAddress: profile?.emailAddress ?? null,
         },
       });
     }
@@ -1626,6 +1716,9 @@ export default {
       return response;
     }
 
-    return serveAsset(request, env, url);
-  },
+  return serveAsset(request, env, url);
+}
+
+export default {
+  fetch: handleFrontendFetch,
 };

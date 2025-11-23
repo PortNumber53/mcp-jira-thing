@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "deploy": "wrangler deploy",
+    "build:frontend": "npm run build --prefix frontend",
+    "deploy": "npm run build:frontend && wrangler deploy --env production",
     "dev": "wrangler dev",
     "start": "wrangler dev",
     "cf-typegen": "wrangler types",

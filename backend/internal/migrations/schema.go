@@ -19,7 +19,9 @@ var sqlFS embed.FS
 // Up applies all pending database migrations. It is safe to call multiple
 // times; when the database schema is up to date, the function is a no-op.
 func Up(db *sql.DB) error {
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	driver, err := postgres.WithInstance(db, &postgres.Config{
+		MigrationsTable: "mcp_jira_thing_schema_migrations",
+	})
 	if err != nil {
 		return fmt.Errorf("migrations: create postgres driver: %w", err)
 	}
@@ -62,10 +64,12 @@ func Up(db *sql.DB) error {
 	return nil
 }
 
-// ForceVersion sets the database migration version to the specified version, 
+// ForceVersion sets the database migration version to the specified version,
 // useful for recovering from dirty states.
 func ForceVersion(db *sql.DB, version uint) error {
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	driver, err := postgres.WithInstance(db, &postgres.Config{
+		MigrationsTable: "mcp_jira_thing_schema_migrations",
+	})
 	if err != nil {
 		return fmt.Errorf("migrations: create postgres driver: %w", err)
 	}
@@ -91,7 +95,9 @@ func ForceVersion(db *sql.DB, version uint) error {
 
 // FixDirtyDatabase attempts to fix a dirty database state by forcing the current version
 func FixDirtyDatabase(db *sql.DB) error {
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	driver, err := postgres.WithInstance(db, &postgres.Config{
+		MigrationsTable: "mcp_jira_thing_schema_migrations",
+	})
 	if err != nil {
 		return fmt.Errorf("migrations: create postgres driver: %w", err)
 	}
@@ -118,7 +124,7 @@ func FixDirtyDatabase(db *sql.DB) error {
 	}
 
 	log.Printf("migrations: fixing dirty database at version %d", version)
-	
+
 	// Force the current version to clean the dirty state
 	if err := m.Force(int(version)); err != nil {
 		return fmt.Errorf("migrations: force version %d to fix dirty state: %w", version, err)

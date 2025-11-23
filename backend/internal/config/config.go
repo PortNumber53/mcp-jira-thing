@@ -9,7 +9,7 @@ import (
 
 // Config captures runtime configuration values used by the backend service.
 type Config struct {
-	// ServerAddress is the host:port pair the HTTP server listens on. Defaults to ":8080".
+	// ServerAddress is the host:port pair the HTTP server listens on. Defaults to ":18111".
 	ServerAddress string
 
 	// XataAPIKey is the API token used to authenticate against the Xata Postgres endpoint.
@@ -33,7 +33,7 @@ type Config struct {
 }
 
 const (
-	defaultServerAddress = ":8080"
+	defaultServerAddress = ":18111"
 	defaultXataBranch    = "main"
 	defaultXataRegion    = "us-east-1"
 	envServerAddress     = "BACKEND_ADDR"

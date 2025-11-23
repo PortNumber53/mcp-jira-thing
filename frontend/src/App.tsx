@@ -91,6 +91,10 @@ const AppContent = () => {
     email: "",
     apiKey: "",
   });
+  const [jiraTestStatus, setJiraTestStatus] = useState<{
+    status: "idle" | "testing" | "success" | "error";
+    message?: string;
+  }>({ status: "idle" });
   const [mcpSecret, setMcpSecret] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
   const [emailMismatchError, setEmailMismatchError] = useState<{ existing: string; new: string } | null>(null);
@@ -344,6 +348,44 @@ const AppContent = () => {
 
     if (session.status === "authenticated") {
       if (route === "/settings") {
+        const testSettings = async () => {
+          setJiraTestStatus({ status: "testing" });
+          try {
+            const response = await fetch("/api/settings/jira/test", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                jira_base_url: jiraSettings.baseUrl,
+                jira_email: jiraSettings.email,
+                atlassian_api_key: jiraSettings.apiKey,
+              }),
+            });
+
+            const data = (await response.json().catch(() => null)) as
+              | { ok?: boolean; account?: { displayName?: string | null }; error?: string }
+              | null;
+
+            if (!response.ok || !data?.ok) {
+              const errorMessage =
+                data?.error ||
+                `Jira test failed with status ${response.status}`;
+              setJiraTestStatus({ status: "error", message: errorMessage });
+              return;
+            }
+
+            const name = data?.account?.displayName;
+            setJiraTestStatus({
+              status: "success",
+              message: name ? `Authenticated as ${name}.` : "Credentials are valid.",
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to test Jira settings";
+            setJiraTestStatus({ status: "error", message });
+          }
+        };
+
         return (
           <div className="card">
             <h2 className="app__section-title">Settings</h2>
@@ -421,7 +463,22 @@ const AppContent = () => {
                 <button type="submit" className="button button--primary">
                   Save settings
                 </button>
+                <button
+                  type="button"
+                  className="button"
+                  disabled={jiraTestStatus.status === "testing"}
+                  onClick={() => {
+                    void testSettings();
+                  }}
+                >
+                  {jiraTestStatus.status === "testing" ? "Testing..." : "Test settings"}
+                </button>
               </div>
+              {jiraTestStatus.status !== "idle" && jiraTestStatus.message && (
+                <p className="app__status" style={{ marginTop: "0.75rem" }}>
+                  {jiraTestStatus.message}
+                </p>
+              )}
             </form>
 
             <div className="settings-form settings-form--secondary">

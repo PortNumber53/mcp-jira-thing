@@ -44,17 +44,17 @@ A React + Vite single-page application lives under `frontend/`. It provides the 
 cd frontend
 npm install    # install local dependencies before development
 npm run dev          # starts the Vite development server with HMR
-npm run dev:worker   # runs wrangler dev locally (builds first via wrangler.toml)
+npm run dev:worker   # runs the merged Worker locally on :18112
 ```
 
 For reproducible builds and deployment:
 
 ```bash
-npm run build   # runs tsc + bundles the worker + vite build
-npm run deploy  # uploads the worker and assets via wrangler deploy
+npm run build   # runs tsc + vite build (Worker deploy is from repo root)
+npm run deploy  # uploads the merged Worker and SPA assets via wrangler deploy
 ```
 
-`wrangler.toml` configures the Worker entry (`src/worker.ts`) and serves the bundled assets from `dist/client`. The Worker handles SPA fallback logic while keeping `/api/**` routes served by the OAuth handler. Running `npm run dev:worker` uses `wrangler dev --local`, so secrets from `.dev.vars` are automatically injected for the OAuth flow.
+The Cloudflare Worker is defined at the repository root (`src/index.ts`). It serves the SPA from `frontend/dist/client` at `/` and exposes the MCP server under `/sse` (and `/mcp`). Deployment is performed from the repo root with `npm run deploy`, which builds the SPA first. Running `npm run dev:worker` in `frontend/` starts the same merged Worker locally using `../wrangler.jsonc`.
 
 ## Go Backend (`backend/`)
 
@@ -69,7 +69,7 @@ Create a copy of `backend/.env.example` and provide the required values:
 
 | Variable                       | Required | Description                                                   |
 | ------------------------------ | -------- | ------------------------------------------------------------- |
-| `BACKEND_ADDR`                 | optional | Address the HTTP server listens on. Defaults to `:8080`.      |
+| `BACKEND_ADDR`                 | optional | Address the HTTP server listens on. Defaults to `:18111`.      |
 | `XATA_API_KEY`                 | ✅       | Xata API key with read access to the `dbjirathing` database.  |
 | `XATA_WORKSPACE`               | ✅       | Workspace slug (e.g. `acme-labs`).                            |
 | `XATA_DATABASE`                | ✅       | Database name (`dbjirathing`).                                |
@@ -288,8 +288,8 @@ Once the Tools (under 🔨) show up in the interface, you can ask Claude to use 
 
 If you'd like to iterate and test your MCP server, you can do so in local development. This will require you to create another OAuth App on GitHub:
 
-- For the Homepage URL, specify `http://localhost:8788`
-- For the Authorization callback URL, specify `http://localhost:8788/callback`
+- For the Homepage URL, specify `http://localhost:18112`
+- For the Authorization callback URL, specify `http://localhost:18112/callback`
 - Note your Client ID and generate a Client secret.
 - Create a `.dev.vars` file in your project root with:
 
@@ -300,10 +300,10 @@ GITHUB_CLIENT_SECRET=your_development_github_client_secret
 
 #### Develop & Test
 
-Run the server locally to make it available at `http://localhost:8788`
+Run the server locally to make it available at `http://localhost:18112`
 `wrangler dev`
 
-To test the local server, enter `http://localhost:8788/sse` into Inspector and hit connect. Once you follow the prompts, you'll be able to "List Tools".
+To test the local server, enter `http://localhost:18112/sse` into Inspector and hit connect. Once you follow the prompts, you'll be able to "List Tools".
 
 #### Using Claude and other MCP Clients
 

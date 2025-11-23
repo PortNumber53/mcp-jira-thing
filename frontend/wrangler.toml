@@ -14,3 +14,6 @@ command = "npm run build"
 # NOTE:
 # Do NOT hardcode BACKEND_BASE_URL here to avoid overwriting production values.
 # Configure BACKEND_BASE_URL per-environment (e.g. via `wrangler.toml` env blocks or Wrangler secrets).
+
+[dev]
+port = 18112
