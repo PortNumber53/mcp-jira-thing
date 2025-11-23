@@ -166,7 +166,7 @@ Follow these steps to configure and deploy your MCP server.
 First, you need to create a [GitHub OAuth App](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app) to get your client credentials.
 
 - **Homepage URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev`
-- **Authorization callback URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev/callback`
+- **Authorization callback URL**: `https://<your-worker-name>.<your-subdomain>.workers.dev/callback/github`
 
 Once the app is created, note the **Client ID** and generate a new **Client secret**.
 
@@ -289,7 +289,7 @@ Once the Tools (under 🔨) show up in the interface, you can ask Claude to use 
 If you'd like to iterate and test your MCP server, you can do so in local development. This will require you to create another OAuth App on GitHub:
 
 - For the Homepage URL, specify `http://localhost:18112`
-- For the Authorization callback URL, specify `http://localhost:18112/callback`
+- For the Authorization callback URL, specify `http://localhost:18112/callback/github`
 - Note your Client ID and generate a Client secret.
 - Create a `.dev.vars` file in your project root with:
 

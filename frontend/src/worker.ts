@@ -361,7 +361,7 @@ export async function handleFrontendFetch(
 
       const authorizeUrl = new URL("https://github.com/login/oauth/authorize");
       authorizeUrl.searchParams.set("client_id", env.GITHUB_CLIENT_ID);
-      authorizeUrl.searchParams.set("redirect_uri", `${url.origin}/callback`);
+      authorizeUrl.searchParams.set("redirect_uri", `${url.origin}/callback/github`);
       authorizeUrl.searchParams.set("state", nonce);
       authorizeUrl.searchParams.set("scope", "read:user user:email");
       authorizeUrl.searchParams.set("allow_signup", "false");
@@ -404,7 +404,7 @@ export async function handleFrontendFetch(
 
       const authorizeUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
       authorizeUrl.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
-      authorizeUrl.searchParams.set("redirect_uri", `${url.origin}/google/callback`);
+      authorizeUrl.searchParams.set("redirect_uri", `${url.origin}/callback/google`);
       authorizeUrl.searchParams.set("response_type", "code");
       authorizeUrl.searchParams.set("scope", "openid email profile");
       authorizeUrl.searchParams.set("state", nonce);
@@ -1298,7 +1298,7 @@ export async function handleFrontendFetch(
       }
     }
 
-    if (url.pathname === "/google/callback" && request.method === "GET") {
+    if ((url.pathname === "/callback/google" || url.pathname === "/google/callback") && request.method === "GET") {
       const code = url.searchParams.get("code");
       const state = url.searchParams.get("state");
 
@@ -1325,6 +1325,7 @@ export async function handleFrontendFetch(
         return jsonResponse({ error: "OAuth state is expired" }, { status: 400 });
       }
 
+      const googleCallbackPath = url.pathname === "/google/callback" ? "/google/callback" : "/callback/google";
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: {
@@ -1334,7 +1335,7 @@ export async function handleFrontendFetch(
           client_id: env.GOOGLE_CLIENT_ID!,
           client_secret: env.GOOGLE_CLIENT_SECRET!,
           code,
-          redirect_uri: `${url.origin}/google/callback`,
+          redirect_uri: `${url.origin}${googleCallbackPath}`,
           grant_type: "authorization_code",
         }).toString(),
       });
@@ -1495,7 +1496,7 @@ export async function handleFrontendFetch(
       return response;
     }
 
-    if (url.pathname === "/callback" && request.method === "GET") {
+    if ((url.pathname === "/callback/github" || url.pathname === "/callback") && request.method === "GET") {
       const code = url.searchParams.get("code");
       const state = url.searchParams.get("state");
 
@@ -1522,6 +1523,7 @@ export async function handleFrontendFetch(
         return jsonResponse({ error: "OAuth state is expired" }, { status: 400 });
       }
 
+      const githubCallbackPath = url.pathname === "/callback" ? "/callback" : "/callback/github";
       const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
         method: "POST",
         headers: {
@@ -1533,7 +1535,7 @@ export async function handleFrontendFetch(
           client_id: env.GITHUB_CLIENT_ID,
           client_secret: env.GITHUB_CLIENT_SECRET,
           code,
-          redirect_uri: `${url.origin}/callback`,
+          redirect_uri: `${url.origin}${githubCallbackPath}`,
         }),
       });
 
