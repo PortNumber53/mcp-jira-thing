@@ -33,7 +33,8 @@ scp "$BUILD_DIR/$ARCHIVE_NAME" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
 echo "[deploy] Extracting archive on remote host"
 ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; cd '$DEPLOY_PATH'; tar -xzf '$ARCHIVE_NAME'; rm -f '$ARCHIVE_NAME'"
 
-# Deploy /etc/mcp-jira-thing/config.ini.sample and ensure /etc/mcp-jira-thing/config.ini exists.
+# Deploy /etc/mcp-jira-thing/config.ini.sample.
+# NOTE: We avoid touching /etc/mcp-jira-thing/config.ini to preserve local overrides.
 if [[ -f "$CONFIG_SAMPLE_LOCAL" ]]; then
   echo "[deploy] Ensuring remote config directory $CONFIG_DIR exists"
   ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mkdir -pv '$CONFIG_DIR'"
@@ -44,16 +45,6 @@ if [[ -f "$CONFIG_SAMPLE_LOCAL" ]]; then
 
   echo "[deploy] Installing config.ini.sample under $CONFIG_DIR"
   ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mv '$TMP_CONFIG' '$CONFIG_DIR/config.ini.sample'; sudo chown root:root '$CONFIG_DIR/config.ini.sample'; sudo chmod 640 '$CONFIG_DIR/config.ini.sample'"
-
-  echo "[deploy] Ensuring $CONFIG_DIR/config.ini exists (copying from sample if missing)"
-  ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; if [[ ! -f '$CONFIG_DIR/config.ini' ]]; then sudo cp '$CONFIG_DIR/config.ini.sample' '$CONFIG_DIR/config.ini'; sudo chown root:root '$CONFIG_DIR/config.ini'; sudo chmod 640 '$CONFIG_DIR/config.ini'; fi"
-
-  # If DATABASE_URL is provided in the deployment environment, ensure it is
-  # present (and up to date) in the remote config.ini.
-  if [[ -n "${DATABASE_URL:-}" ]]; then
-    echo "[deploy] Updating DATABASE_URL in $CONFIG_DIR/config.ini"
-    ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo sed -i.bak '/^DATABASE_URL=/d' '$CONFIG_DIR/config.ini'; printf '%s\n' \"DATABASE_URL=$DATABASE_URL\" | sudo tee -a '$CONFIG_DIR/config.ini' >/dev/null"
-  fi
 else
   echo "[deploy] WARNING: $CONFIG_SAMPLE_LOCAL not found; skipping config.ini deployment" >&2
 fi
