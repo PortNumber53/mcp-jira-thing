@@ -9,6 +9,7 @@ ARCHIVE_NAME="$BINARY_NAME.tar.gz"
 CONFIG_DIR="/etc/mcp-jira-thing"
 CONFIG_SAMPLE_LOCAL="$ROOT_DIR/etc/mcp-jira-thing/config.ini.sample"
 SYSTEMD_UNIT_LOCAL="$ROOT_DIR/scripts/systemd/mcp-backend.service"
+CONFIG_REMOTE_PATH="$CONFIG_DIR/config.ini"
 
 : "${DEPLOY_HOST:?DEPLOY_HOST must be set (e.g. production.example.com)}"
 : "${DEPLOY_USER:?DEPLOY_USER must be set (e.g. deploy)}"
@@ -47,6 +48,41 @@ if [[ -f "$CONFIG_SAMPLE_LOCAL" ]]; then
   ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mv '$TMP_CONFIG' '$CONFIG_DIR/config.ini.sample'; sudo chown root:root '$CONFIG_DIR/config.ini.sample'; sudo chmod 640 '$CONFIG_DIR/config.ini.sample'"
 else
   echo "[deploy] WARNING: $CONFIG_SAMPLE_LOCAL not found; skipping config.ini deployment" >&2
+fi
+
+# Optionally publish /etc/mcp-jira-thing/config.ini on every deploy so secrets can be rotated
+# by updating CI credentials and re-running the deploy (no code change required).
+#
+# Enable by setting DEPLOY_PUBLISH_CONFIG_INI=1 in the environment.
+if [[ "${DEPLOY_PUBLISH_CONFIG_INI:-}" == "1" ]]; then
+  : "${DATABASE_URL:?DATABASE_URL must be set to publish $CONFIG_REMOTE_PATH}"
+
+  echo "[deploy] Publishing $CONFIG_REMOTE_PATH from CI environment (DEPLOY_PUBLISH_CONFIG_INI=1)"
+
+  LOCAL_TMP_CONFIG="$(mktemp)"
+  cleanup() { rm -f "$LOCAL_TMP_CONFIG"; }
+  trap cleanup EXIT
+
+  {
+    echo "# Managed by CI deploy script. Do not edit on the server; update Jenkins credentials and re-deploy."
+    echo "BACKEND_ADDR=${BACKEND_ADDR:-:18111}"
+    echo "DATABASE_URL=${DATABASE_URL}"
+    if [[ -n "${XATA_DATABASE_URL:-}" ]]; then
+      echo "XATA_DATABASE_URL=${XATA_DATABASE_URL}"
+    fi
+    if [[ -n "${BACKEND_HTTP_TIMEOUT_SECONDS:-}" ]]; then
+      echo "BACKEND_HTTP_TIMEOUT_SECONDS=${BACKEND_HTTP_TIMEOUT_SECONDS}"
+    fi
+    if [[ -n "${LOG_LEVEL:-}" ]]; then
+      echo "LOG_LEVEL=${LOG_LEVEL}"
+    fi
+  } > "$LOCAL_TMP_CONFIG"
+
+  ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mkdir -pv '$CONFIG_DIR'"
+
+  REMOTE_TMP_CONFIG="/tmp/mcp-jira-thing.config.ini.$$"
+  scp "$LOCAL_TMP_CONFIG" "$DEPLOY_USER@$DEPLOY_HOST:$REMOTE_TMP_CONFIG"
+  ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mv '$REMOTE_TMP_CONFIG' '$CONFIG_REMOTE_PATH'; sudo chown root:root '$CONFIG_REMOTE_PATH'; sudo chmod 640 '$CONFIG_REMOTE_PATH'"
 fi
 
 # Deploy /etc/systemd/system/mcp-backend.service unit file if available

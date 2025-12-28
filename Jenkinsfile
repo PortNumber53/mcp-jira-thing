@@ -86,6 +86,9 @@ pipeline {
           'DEPLOY_USER=grimlock',
           'DEPLOY_PATH=/var/www/vhosts/mcp-jira-thing.truvis.co',
           'SERVICE_NAME=mcp-backend',
+          // Always publish /etc/mcp-jira-thing/config.ini from Jenkins env/credentials
+          // so secrets can be rotated by updating credentials and re-deploying.
+          'DEPLOY_PUBLISH_CONFIG_INI=1',
         ]) {
           sh 'scripts/deploy-backend.sh'
         }

@@ -1,6 +1,9 @@
 # Environment variables for the MCP Jira Thing backend service.
 # Copy this file to /etc/mcp-jira-thing/config.ini and adjust values for
 # your environment.
+#
+# NOTE: In production, Jenkins can optionally publish /etc/mcp-jira-thing/config.ini
+# on each deploy to support secret rotation without code changes.
 
 # Address the backend HTTP server should bind to.
 BACKEND_ADDR=:18003
