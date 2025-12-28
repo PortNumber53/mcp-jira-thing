@@ -6,7 +6,7 @@ import (
 )
 
 func TestLoadDefaults(t *testing.T) {
-	t.Setenv(envDatabaseURL, "")
+	t.Setenv(envDatabaseURL, "postgresql://user:pass@db.example.com:5432/app?sslmode=disable")
 	t.Setenv(envXataAPIKey, "test-key")
 	t.Setenv(envXataWorkspace, "workspace")
 	t.Setenv(envXataDatabase, "database")
@@ -29,23 +29,25 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("expected region %q, got %q", "eu-west-1", cfg.XataRegion)
 	}
 
-	if cfg.DatabaseURL == "" {
-		t.Fatal("expected DatabaseURL to be generated")
+	if cfg.XataDatabaseURL == "" {
+		t.Fatal("expected XataDatabaseURL to be generated")
 	}
 
-	if !strings.Contains(cfg.DatabaseURL, "sslmode=require") {
-		t.Fatalf("expected sslmode parameter in dsn, got %s", cfg.DatabaseURL)
+	if !strings.Contains(cfg.XataDatabaseURL, "sslmode=require") {
+		t.Fatalf("expected sslmode parameter in xata dsn, got %s", cfg.XataDatabaseURL)
 	}
 }
 
 func TestLoadMissingRequired(t *testing.T) {
-	t.Setenv(envDatabaseURL, "")
+	t.Setenv(envDatabaseURL, "postgresql://user:pass@db.example.com:5432/app?sslmode=disable")
 	t.Setenv(envXataWorkspace, "workspace")
 	t.Setenv(envXataDatabase, "database")
 	t.Setenv(envXataRegion, "us-east-1")
 
+	// Xata config is optional unless you set any XATA_* pieces. Here we set some pieces
+	// but omit XATA_API_KEY, so it should error.
 	if _, err := Load(); err == nil {
-		t.Fatal("expected error when API key missing")
+		t.Fatal("expected error when XATA_API_KEY missing and Xata pieces are provided")
 	}
 
 	t.Setenv(envXataAPIKey, "key")
@@ -71,81 +73,54 @@ func TestLoadMissingRequired(t *testing.T) {
 	}
 }
 
-func TestLoadFromDatabaseURL(t *testing.T) {
-	t.Setenv(envDatabaseURL, "postgresql://workspace:api-key@us-east-1.sql.xata.sh/dbjirathing:main?sslmode=require")
-	t.Setenv(envXataAPIKey, "")
-	t.Setenv(envXataWorkspace, "")
-	t.Setenv(envXataDatabase, "")
-	t.Setenv(envXataBranch, "")
-	t.Setenv(envXataRegion, "")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-
-	if cfg.XataAPIKey != "api-key" {
-		t.Fatalf("unexpected api key: %q", cfg.XataAPIKey)
-	}
-	if cfg.XataWorkspace != "workspace" {
-		t.Fatalf("unexpected workspace: %q", cfg.XataWorkspace)
-	}
-	if cfg.XataDatabase != "dbjirathing" {
-		t.Fatalf("unexpected database: %q", cfg.XataDatabase)
-	}
-	if cfg.XataBranch != "main" {
-		t.Fatalf("unexpected branch: %q", cfg.XataBranch)
-	}
-	if cfg.XataRegion != "us-east-1" {
-		t.Fatalf("unexpected region: %q", cfg.XataRegion)
-	}
-	if cfg.DatabaseURL == "" {
-		t.Fatal("expected DatabaseURL to be retained")
-	}
-}
-
-func TestLoadDatabaseURLOverride(t *testing.T) {
-	t.Setenv(envDatabaseURL, "postgresql://workspace:api-key@us-east-1.sql.xata.sh/dbjirathing:main")
-	t.Setenv(envXataAPIKey, "direct-key")
-	t.Setenv(envXataWorkspace, "direct-workspace")
-	t.Setenv(envXataDatabase, "direct-db")
-	t.Setenv(envXataBranch, "preview")
-	t.Setenv(envXataRegion, "eu-central-1")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-
-	if cfg.XataAPIKey != "direct-key" {
-		t.Fatalf("expected direct api key, got %q", cfg.XataAPIKey)
-	}
-	if cfg.XataWorkspace != "direct-workspace" {
-		t.Fatalf("expected direct workspace, got %q", cfg.XataWorkspace)
-	}
-	if cfg.XataDatabase != "direct-db" {
-		t.Fatalf("expected direct database, got %q", cfg.XataDatabase)
-	}
-	if cfg.XataBranch != "preview" {
-		t.Fatalf("expected direct branch, got %q", cfg.XataBranch)
-	}
-	if cfg.XataRegion != "eu-central-1" {
-		t.Fatalf("expected direct region, got %q", cfg.XataRegion)
-	}
-	if cfg.DatabaseURL == "" {
-		t.Fatal("expected DatabaseURL to fall back to provided url")
-	}
-}
-
-func TestLoadInvalidDatabaseURL(t *testing.T) {
-	t.Setenv(envDatabaseURL, "postgresql://workspace@host/")
-	t.Setenv(envXataAPIKey, "")
-	t.Setenv(envXataWorkspace, "")
-	t.Setenv(envXataDatabase, "")
-	t.Setenv(envXataBranch, "")
-	t.Setenv(envXataRegion, "")
+func TestLoadRequiresDatabaseURL(t *testing.T) {
+	t.Setenv(envDatabaseURL, "")
+	t.Setenv(envXataAPIKey, "test-key")
+	t.Setenv(envXataWorkspace, "workspace")
+	t.Setenv(envXataDatabase, "database")
+	t.Setenv(envXataRegion, "us-east-1")
 
 	if _, err := Load(); err == nil {
-		t.Fatal("expected error for invalid DATABASE_URL")
+		t.Fatal("expected error when DATABASE_URL missing")
 	}
 }
+
+func TestLoadXataDatabaseURLOverride(t *testing.T) {
+	t.Setenv(envDatabaseURL, "postgresql://user:pass@db.example.com:5432/app?sslmode=disable")
+	t.Setenv(envXataDatabaseURL, "postgresql://workspace:api-key@us-east-1.sql.xata.sh/dbjirathing:main?sslmode=require")
+	t.Setenv(envXataAPIKey, "")
+	t.Setenv(envXataWorkspace, "")
+	t.Setenv(envXataDatabase, "")
+	t.Setenv(envXataBranch, "")
+	t.Setenv(envXataRegion, "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if cfg.XataDatabaseURL != "postgresql://workspace:api-key@us-east-1.sql.xata.sh/dbjirathing:main?sslmode=require" {
+		t.Fatalf("expected XataDatabaseURL override, got %q", cfg.XataDatabaseURL)
+	}
+}
+
+func TestLoadNoXataConfigAllowed(t *testing.T) {
+	t.Setenv(envDatabaseURL, "postgresql://user:pass@db.example.com:5432/app?sslmode=disable")
+	t.Setenv(envXataDatabaseURL, "")
+	t.Setenv(envXataAPIKey, "")
+	t.Setenv(envXataWorkspace, "")
+	t.Setenv(envXataDatabase, "")
+	t.Setenv(envXataBranch, "")
+	t.Setenv(envXataRegion, "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.XataDatabaseURL != "" {
+		t.Fatalf("expected XataDatabaseURL to be empty when xata is not configured, got %q", cfg.XataDatabaseURL)
+	}
+}
+
+// Note: DATABASE_URL is treated as the primary DB DSN and is not parsed/validated
+// beyond being required; sql.Open will surface connectivity/DSN issues at runtime.

@@ -16,7 +16,7 @@ type UserLister interface {
 	ListUsers(rCtx context.Context, limit int) ([]models.PublicUser, error)
 }
 
-// Users creates an HTTP handler that returns a list of users fetched from Xata.
+// Users creates an HTTP handler that returns a list of users from the primary database.
 func Users(client UserLister) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

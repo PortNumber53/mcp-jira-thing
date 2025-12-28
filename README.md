@@ -41,6 +41,9 @@ Users can connect to your deployed MCP server, and they will be prompted to sign
 A React + Vite single-page application lives under `frontend/`. It provides the GitHub sign-in flow for users and can be developed with the standard Vite server.
 
 ```bash
+cd mcp-jira-thing
+npm install    # install Worker + shared dependencies (repo root)
+
 cd frontend
 npm install    # install local dependencies before development
 npm run dev          # starts the Vite development server with HMR
@@ -56,6 +59,83 @@ npm run deploy  # uploads the merged Worker and SPA assets via wrangler deploy
 
 The Cloudflare Worker is defined at the repository root (`src/index.ts`). It serves the SPA from `frontend/dist/client` at `/` and exposes the MCP server under `/sse` (and `/mcp`). Deployment is performed from the repo root with `npm run deploy`, which builds the SPA first. Running `npm run dev:worker` in `frontend/` starts the same merged Worker locally using `../wrangler.jsonc`.
 
+## Slack App (per-channel Jira project integration)
+
+If you want Slack users to interact with Jira *in the context of a Slack channel* (e.g. create/search issues against a default Jira project per channel), connect a Slack app to this Worker and store a mapping:
+
+- **Slack channel ID** → **Jira project key** (e.g. `C01234567` → `ENG`)
+
+This repository does **not** ship Slack endpoints yet, but the steps below describe the configuration you’ll need once you add them.
+
+### 1) Create a Slack app
+
+In Slack, create an app from scratch and enable:
+
+- **Interactivity & Shortcuts** (optional but recommended)
+- **Slash Commands** (recommended)
+- **Event Subscriptions** (optional; useful for `@yourapp` mentions)
+- **OAuth & Permissions**
+
+### 2) OAuth settings + required scopes
+
+Add a redirect URL for the Worker, for example:
+
+- `http://localhost:18112/slack/oauth/callback` (local)
+- `https://<your-worker>.<your-subdomain>.workers.dev/slack/oauth/callback` (prod)
+
+Suggested bot token scopes (adjust to your needs):
+
+- **`commands`**: enable slash commands like `/jira`
+- **`chat:write`**: post responses/messages
+- **`channels:read`** and/or **`groups:read`**: read channel metadata (public vs private)
+- **`app_mentions:read`** (if using events for mentions)
+- **`users:read`** (if you want to display usernames / enrich messages)
+
+### 3) Configure Slack request URLs (Worker endpoints you’ll add)
+
+Once implemented, Slack should point to Worker endpoints like:
+
+- **Slash command request URL**: `.../slack/commands`
+- **Interactivity request URL**: `.../slack/interactions`
+- **Events request URL** (if enabled): `.../slack/events`
+
+All of these endpoints should:
+
+- **Verify Slack signatures** using `SLACK_SIGNING_SECRET`
+- **Ack within 3 seconds** (use `response_url` or async follow-ups for slow Jira calls)
+
+### 4) Store “channel → Jira project” mapping
+
+Recommended approach in this repo:
+
+- **Store mapping in Cloudflare KV** (simple) or a **Durable Object** (strong consistency)
+- Key by channel ID, value includes at least `{ projectKey, updatedAt, updatedBy }`
+
+Example mapping key:
+
+- `slack:channel-project:C01234567` → `{"projectKey":"ENG","updatedAt":...}`
+
+### 5) Suggested Slack UX (commands)
+
+One practical pattern is a `/jira` command that sets or uses the channel’s default project:
+
+- **Set default**: `/jira project set ENG`
+- **Show default**: `/jira project get`
+- **Create issue**: `/jira create "Bug title" --type Task`
+- **Search**: `/jira search status=Open assignee=me`
+
+Implementation detail: the handler reads the channel ID from Slack payload, looks up the project key for that channel, then calls the existing Jira client/tooling in `src/tools/jira/` to perform the requested action.
+
+### 6) Environment variables you’ll need
+
+Add these as Wrangler secrets/vars (names are suggestions; pick a convention and stick to it):
+
+- **`SLACK_SIGNING_SECRET`**: required to verify Slack requests
+- **`SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET`**: required for Slack OAuth install flow
+- **`SLACK_BOT_TOKEN`**: required to call Slack APIs (or store per-workspace tokens after OAuth)
+
+If you support multiple Slack workspaces, store the workspace/team install info keyed by `team_id`, not globally.
+
 ## Go Backend (`backend/`)
 
 The Go backend exposes REST endpoints that read from our Xata database and serve the data to the frontend (or other consumers). The initial implementation ships with:
@@ -65,33 +145,41 @@ The Go backend exposes REST endpoints that read from our Xata database and serve
 
 ### Environment variables
 
-Create a copy of `backend/.env.example` and provide the required values:
+Create a copy of `backend/env.example` and provide the required values:
 
 | Variable                       | Required | Description                                                   |
 | ------------------------------ | -------- | ------------------------------------------------------------- |
 | `BACKEND_ADDR`                 | optional | Address the HTTP server listens on. Defaults to `:18111`.      |
-| `XATA_API_KEY`                 | ✅       | Xata API key with read access to the `dbjirathing` database.  |
-| `XATA_WORKSPACE`               | ✅       | Workspace slug (e.g. `acme-labs`).                            |
-| `XATA_DATABASE`                | ✅       | Database name (`dbjirathing`).                                |
+| `DATABASE_URL`                 | ✅       | **Primary** (non-Xata) Postgres DSN used by the backend at runtime. |
+| `XATA_DATABASE_URL`            | optional | Legacy Xata Postgres DSN (preferred when migrating).          |
+| `XATA_API_KEY`                 | optional | Xata API key (used only during migration/sync; required if you set other `XATA_*` pieces and do not set `XATA_DATABASE_URL`). |
+| `XATA_WORKSPACE`               | optional | Workspace slug (e.g. `acme-labs`).                            |
+| `XATA_DATABASE`                | optional | Database name (`dbjirathing`).                                |
 | `XATA_BRANCH`                  | optional | Database branch, defaults to `main`.                          |
 | `XATA_REGION`                  | optional | Workspace region (e.g. `us-east-1`); defaults to `us-east-1`. |
 | `BACKEND_HTTP_TIMEOUT_SECONDS` | optional | Outbound request timeout, defaults to 15 seconds.             |
 
-If you already have a PostgreSQL-style `DATABASE_URL` from Xata (e.g. `postgresql://workspace:<API_KEY>@us-east-1.sql.xata.sh/dbjirathing:main?sslmode=require`) you can simply set that single environment variable—the backend will parse it automatically and populate the individual settings.
+During the Xata→new-DB migration period, the backend will:
 
-To populate `.env` manually from the URL you can parse it with a small helper script:
+- Apply the same SQL migrations to **both** databases.
+- Copy data **table-by-table** from Xata → the primary DB.
+- Start serving traffic using **only** the primary (non-Xata) DB.
+
+You can re-run the copy step even when the primary DB already has data using `--force-migration`.
+
+To populate `XATA_*` manually from a Xata-style DSN you can parse it with a small helper script:
 
 ```bash
-# Example DATABASE_URL
-database_url='postgresql://workspace:<API_KEY>@us-east-1.sql.xata.sh/dbjirathing:main?sslmode=require'
+# Example XATA_DATABASE_URL
+xata_database_url='postgresql://workspace:<API_KEY>@us-east-1.sql.xata.sh/dbjirathing:main?sslmode=require'
 
 python3 - <<'PY'
 import os
 import urllib.parse
 
-url = urllib.parse.urlparse(os.environ.get('database_url') or os.environ.get('DATABASE_URL'))
+url = urllib.parse.urlparse(os.environ.get('xata_database_url') or os.environ.get('XATA_DATABASE_URL'))
 if not url.username or not url.password:
-    raise SystemExit("DATABASE_URL must include username (workspace) and password (API key)")
+    raise SystemExit("XATA_DATABASE_URL must include username (workspace) and password (API key)")
 
 database, _, branch = url.path.lstrip('/').partition(':')
 branch = branch or 'main'
@@ -109,7 +197,7 @@ PY
 
 ```bash
 cd backend
-cp .env.example .env   # edit with your credentials (or export env vars)
+cp env.example .env   # edit with your credentials (or export env vars)
 go test ./...
 go run ./cmd/server
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strings"
 )
 
 // Config captures runtime configuration values used by the backend service.
@@ -28,8 +27,12 @@ type Config struct {
 	XataRegion string
 
 	// DatabaseURL is the Postgres DSN used by database/sql. Either supplied directly
-	// or constructed from the Xata* values above.
+	// and used as the primary (non-Xata) database.
 	DatabaseURL string
+
+	// XataDatabaseURL is the Postgres DSN for the legacy Xata database used during
+	// the migration period (for running migrations and copying data into DatabaseURL).
+	XataDatabaseURL string
 }
 
 const (
@@ -42,6 +45,7 @@ const (
 	envXataDatabase      = "XATA_DATABASE"
 	envXataBranch        = "XATA_BRANCH"
 	envXataRegion        = "XATA_REGION"
+	envXataDatabaseURL   = "XATA_DATABASE_URL"
 	envDatabaseURL       = "DATABASE_URL"
 )
 
@@ -49,23 +53,11 @@ const (
 // a Config structure. Required values return an error when missing.
 func Load() (Config, error) {
 	cfg := Config{
-		ServerAddress: firstNonEmpty(os.Getenv(envServerAddress), defaultServerAddress),
-		XataBranch:    defaultXataBranch,
-		XataRegion:    defaultXataRegion,
-		DatabaseURL:   os.Getenv(envDatabaseURL),
-	}
-
-	if cfg.DatabaseURL != "" {
-		parsed, err := parseDatabaseURL(cfg.DatabaseURL)
-		if err != nil {
-			return Config{}, fmt.Errorf("invalid %s: %w", envDatabaseURL, err)
-		}
-
-		cfg.XataAPIKey = parsed.APIKey
-		cfg.XataWorkspace = parsed.Workspace
-		cfg.XataDatabase = parsed.Database
-		cfg.XataBranch = parsed.Branch
-		cfg.XataRegion = parsed.Region
+		ServerAddress:   firstNonEmpty(os.Getenv(envServerAddress), defaultServerAddress),
+		XataBranch:      defaultXataBranch,
+		XataRegion:      defaultXataRegion,
+		DatabaseURL:     os.Getenv(envDatabaseURL),
+		XataDatabaseURL: os.Getenv(envXataDatabaseURL),
 	}
 
 	if value := os.Getenv(envXataAPIKey); value != "" {
@@ -84,36 +76,39 @@ func Load() (Config, error) {
 		cfg.XataRegion = value
 	}
 
-	if cfg.XataAPIKey == "" {
-		return Config{}, fmt.Errorf("%s is required", envXataAPIKey)
-	}
-	if cfg.XataWorkspace == "" {
-		return Config{}, fmt.Errorf("%s is required", envXataWorkspace)
-	}
-	if cfg.XataDatabase == "" {
-		return Config{}, fmt.Errorf("%s is required", envXataDatabase)
-	}
-	if cfg.XataRegion == "" {
-		return Config{}, fmt.Errorf("%s is required", envXataRegion)
+	if cfg.DatabaseURL == "" {
+		return Config{}, fmt.Errorf("%s is required", envDatabaseURL)
 	}
 
-	if cfg.DatabaseURL == "" {
-		dsn, err := buildDatabaseURL(cfg)
-		if err != nil {
-			return Config{}, err
+	// Xata DSN can be supplied directly (preferred) or built from the XATA_* pieces.
+	if cfg.XataDatabaseURL == "" {
+		// Xata configuration is optional. Only attempt to construct the DSN when at least
+		// one XATA_* value is set (to avoid forcing legacy settings for primary-only runs).
+		hasAnyXataPiece := cfg.XataAPIKey != "" || cfg.XataWorkspace != "" || cfg.XataDatabase != "" || os.Getenv(envXataBranch) != "" || os.Getenv(envXataRegion) != ""
+		if hasAnyXataPiece {
+			// If any pieces are set, require the full set needed to build a DSN.
+			if cfg.XataAPIKey == "" {
+				return Config{}, fmt.Errorf("%s is required (or set %s)", envXataAPIKey, envXataDatabaseURL)
+			}
+			if cfg.XataWorkspace == "" {
+				return Config{}, fmt.Errorf("%s is required (or set %s)", envXataWorkspace, envXataDatabaseURL)
+			}
+			if cfg.XataDatabase == "" {
+				return Config{}, fmt.Errorf("%s is required (or set %s)", envXataDatabase, envXataDatabaseURL)
+			}
+			if cfg.XataRegion == "" {
+				return Config{}, fmt.Errorf("%s is required (or set %s)", envXataRegion, envXataDatabaseURL)
+			}
+
+			dsn, err := buildXataDatabaseURL(cfg)
+			if err != nil {
+				return Config{}, err
+			}
+			cfg.XataDatabaseURL = dsn
 		}
-		cfg.DatabaseURL = dsn
 	}
 
 	return cfg, nil
-}
-
-type databaseURLParts struct {
-	Workspace string
-	APIKey    string
-	Database  string
-	Branch    string
-	Region    string
 }
 
 func firstNonEmpty(values ...string) string {
@@ -125,58 +120,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func parseDatabaseURL(raw string) (databaseURLParts, error) {
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return databaseURLParts{}, err
-	}
-
-	if parsed.User == nil {
-		return databaseURLParts{}, fmt.Errorf("missing credentials")
-	}
-
-	workspace := parsed.User.Username()
-	if workspace == "" {
-		return databaseURLParts{}, fmt.Errorf("missing workspace in username")
-	}
-
-	apiKey, hasPassword := parsed.User.Password()
-	if !hasPassword || apiKey == "" {
-		return databaseURLParts{}, fmt.Errorf("missing api key in password field")
-	}
-
-	hostParts := strings.Split(parsed.Hostname(), ".")
-	region := defaultXataRegion
-	if len(hostParts) >= 1 && hostParts[0] != "" {
-		region = hostParts[0]
-	}
-
-	path := strings.TrimPrefix(parsed.Path, "/")
-	if path == "" {
-		return databaseURLParts{}, fmt.Errorf("missing database/branch in path")
-	}
-
-	segments := strings.Split(path, ":")
-	database := segments[0]
-	if database == "" {
-		return databaseURLParts{}, fmt.Errorf("missing database name")
-	}
-
-	branch := defaultXataBranch
-	if len(segments) > 1 && segments[1] != "" {
-		branch = segments[1]
-	}
-
-	return databaseURLParts{
-		Workspace: workspace,
-		APIKey:    apiKey,
-		Database:  database,
-		Branch:    branch,
-		Region:    region,
-	}, nil
-}
-
-func buildDatabaseURL(cfg Config) (string, error) {
+func buildXataDatabaseURL(cfg Config) (string, error) {
 	u := &url.URL{
 		Scheme: "postgresql",
 		User:   url.UserPassword(cfg.XataWorkspace, cfg.XataAPIKey),

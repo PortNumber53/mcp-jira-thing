@@ -5,9 +5,16 @@
 # Address the backend HTTP server should bind to.
 BACKEND_ADDR=:18003
 
-# Xata Postgres connection. Either provide DATABASE_URL directly or the
-# individual XATA_* variables below. DATABASE_URL takes precedence.
-#DATABASE_URL=postgresql://workspace:api_key@us-east-1.sql.xata.sh/dbname:main?sslmode=require
+# Database connections:
+#
+# - DATABASE_URL is the primary (non-Xata) database used by the backend at runtime.
+# - XATA_DATABASE_URL / XATA_* are optional and only used during the migration window
+#   to run migrations on Xata and copy data from Xata -> primary.
+#
+#DATABASE_URL=postgresql://user:password@localhost:5432/mcp_jira_thing?sslmode=disable
+
+# Optional legacy Xata DSN (preferred if migrating).
+#XATA_DATABASE_URL=postgresql://workspace:api_key@us-east-1.sql.xata.sh/dbname:main?sslmode=require
 
 #XATA_API_KEY=your_xata_api_key
 #XATA_WORKSPACE=your_workspace

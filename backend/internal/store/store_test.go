@@ -25,9 +25,9 @@ func TestListUsersSuccess(t *testing.T) {
 		db.Close()
 	})
 
-	query := regexp.MustCompile(`SELECT\s+COALESCE\(xata_id, ''\) AS id`)
+	query := regexp.MustCompile(`SELECT\s+id::text\s+AS id`)
 	rows := sqlmock.NewRows([]string{"id", "email", "name", "image"}).
-		AddRow("rec1", "user@example.com", "User", "https://avatar")
+		AddRow("1", "user@example.com", "User", "https://avatar")
 
 	mock.ExpectQuery(query.String()).WithArgs(5).WillReturnRows(rows)
 
@@ -39,7 +39,7 @@ func TestListUsersSuccess(t *testing.T) {
 	if len(users) != 1 {
 		t.Fatalf("expected 1 user, got %d", len(users))
 	}
-	if users[0].ID != "rec1" {
+	if users[0].ID != "1" {
 		t.Fatalf("unexpected id: %s", users[0].ID)
 	}
 
@@ -58,7 +58,7 @@ func TestListUsersQueryError(t *testing.T) {
 		db.Close()
 	})
 
-	query := regexp.MustCompile(`SELECT\s+COALESCE\(xata_id, ''\) AS id`)
+	query := regexp.MustCompile(`SELECT\s+id::text\s+AS id`)
 	mock.ExpectQuery(query.String()).WithArgs(defaultPageSize).WillReturnError(errors.New("boom"))
 
 	if _, err := s.ListUsers(context.Background(), 0); err == nil {

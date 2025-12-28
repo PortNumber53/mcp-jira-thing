@@ -120,6 +120,15 @@ backend/bin/
 backend/.env
 backend/tmp/
 
+# Local dev caches / scratch data (do not commit)
+tmp/
+tmp/gocache/
+tmp/gomodcache/
+tmp/gopath/
+
+# Wrangler generated types (frontend)
+frontend/worker-configuration.d.ts
+
 # Gatsby files
 
 .cache/

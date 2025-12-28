@@ -14,8 +14,7 @@ import (
 )
 
 const (
-	defaultPageSize    = 200
-	nextAuthUsersTable = "public.nextauth_users"
+	defaultPageSize = 200
 )
 
 // Store provides database-backed accessors for application data.
@@ -39,18 +38,18 @@ func (s *Store) ListUsers(ctx context.Context, limit int) ([]models.PublicUser, 
 
 	query := fmt.Sprintf(`
 SELECT
-  COALESCE(xata_id, '') AS id,
+  id::text AS id,
   email,
   name,
-  image
-FROM %s
-ORDER BY xata_createdat DESC
+  avatar_url AS image
+FROM users
+ORDER BY created_at DESC
 LIMIT $1
-`, nextAuthUsersTable)
+`)
 
 	rows, err := s.db.QueryContext(ctx, query, limit)
 	if err != nil {
-		return nil, fmt.Errorf("query %s: %w", nextAuthUsersTable, err)
+		return nil, fmt.Errorf("query users: %w", err)
 	}
 	defer rows.Close()
 
@@ -64,7 +63,7 @@ LIMIT $1
 		)
 
 		if err := rows.Scan(&id, &email, &name, &image); err != nil {
-			return nil, fmt.Errorf("scan %s: %w", nextAuthUsersTable, err)
+			return nil, fmt.Errorf("scan users: %w", err)
 		}
 
 		users = append(users, models.PublicUser{
@@ -76,7 +75,7 @@ LIMIT $1
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate %s: %w", nextAuthUsersTable, err)
+		return nil, fmt.Errorf("iterate users: %w", err)
 	}
 
 	return users, nil
@@ -378,9 +377,9 @@ ORDER BY us.is_default DESC, us.jira_base_url ASC
 	var settings []models.JiraUserSettings
 	for rows.Next() {
 		var (
-			baseURL string
+			baseURL   string
 			jiraEmail string
-			cloudID sql.NullString
+			cloudID   sql.NullString
 			isDefault bool
 		)
 
@@ -427,11 +426,11 @@ LIMIT 1
 `, secret)
 
 	var (
-		baseURL  string
+		baseURL   string
 		jiraEmail string
-		cloudID  sql.NullString
+		cloudID   sql.NullString
 		isDefault bool
-		apiToken string
+		apiToken  string
 	)
 
 	if err := row.Scan(&baseURL, &jiraEmail, &cloudID, &isDefault, &apiToken); err != nil {
