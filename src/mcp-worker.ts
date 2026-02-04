@@ -241,6 +241,18 @@ export async function handleMcpWithoutOAuth(
           status: 200,
         });
       }
+    } else if (requestBody.toolName === 'generateImage' && requestBody.args) {
+      const { prompt, steps } = requestBody.args;
+      if (typeof prompt === 'string' && typeof steps === 'number') {
+        // Mock AI response for image generation
+        const mockImage = 'mock_image_data_base64'; // Base64 encoded dummy image
+        return new Response(JSON.stringify({
+          content: [{ data: mockImage, mimeType: 'image/jpeg', type: 'image' }],
+        }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
     }
     return new Response(JSON.stringify({ error: "Tool invocation failed in test mode" }), { status: 400 });
   }
