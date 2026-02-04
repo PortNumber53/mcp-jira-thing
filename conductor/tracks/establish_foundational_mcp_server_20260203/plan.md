@@ -26,7 +26,7 @@ This plan outlines the steps to establish the foundational Model Context Protoco
 - [x] Task: Implement the `generateImage` MCP tool with user restriction 76b624a
     - [x] Write Failing Tests: Test `generateImage` tool for authorized and unauthorized users
     - [x] Implement to Pass Tests: Create `generateImage` tool and implement `ALLOWED_USERNAMES` check
-- [x] Task: Implement dynamic tool exposure based on user identity 4731922
+- [x] Task: Implement dynamic tool exposure based on user identity f440e13 4731922
     - [x] Write Failing Tests: Verify tools are correctly exposed/hidden based on login status and permissions
     - [x] Implement to Pass Tests: Refine MCP server logic for dynamic tool registration
 - [ ] Task: Conductor - User Manual Verification 'Basic MCP Tools Implementation' (Protocol in workflow.md)
