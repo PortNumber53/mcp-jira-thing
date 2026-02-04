@@ -13,9 +13,9 @@ This plan outlines the steps to establish the foundational Model Context Protoco
 - [x] Task: Configure secure session management and secret handling 1841c25
     - [x] Write Failing Tests: Test session cookie signing and validation
     - [x] Implement to Pass Tests: Integrate `SESSION_SECRET` and cookie logic
-- [ ] Task: Initialize basic MCP server functionality (SSE connections, request handling)
-    - [ ] Write Failing Tests: Test SSE connection establishment and basic request parsing
-    - [ ] Implement to Pass Tests: Set up Durable MCP and basic SSE endpoint
+- [~] Task: Initialize basic MCP server functionality (SSE connections, request handling)
+    - [x] Write Failing Tests: Test SSE connection establishment and basic request parsing
+    - [x] Implement to Pass Tests: Set up Durable MCP and basic SSE endpoint
 - [ ] Task: Conductor - User Manual Verification 'Core MCP Server & GitHub OAuth Setup' (Protocol in workflow.md)
 
 ## Phase 2: Basic MCP Tools Implementation

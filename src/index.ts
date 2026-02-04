@@ -26,6 +26,9 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname.startsWith("/sse") || url.pathname.startsWith("/mcp")) {
+      if (env.TEST_MODE_SSE_NO_AUTH === 'true') {
+        return handleMcpWithoutOAuth(request, env, ctx);
+      }
       const hasBearer = request.headers.get("authorization")?.toLowerCase().startsWith("bearer ");
       const hasMcpSecret = !!extractMcpSecretFromRequest(request);
       if (!hasBearer && hasMcpSecret) {
