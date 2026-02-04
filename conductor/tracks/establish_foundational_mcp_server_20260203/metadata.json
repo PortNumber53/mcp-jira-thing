@@ -1,0 +1,8 @@
+{
+"track_id": "establish_foundational_mcp_server_20260203",
+"type": "feature",
+"status": "new",
+"created_at": "2026-02-03T00:00:00Z",
+"updated_at": "2026-02-03T00:00:00Z",
+"description": "Establish foundational MCP server with GitHub OAuth and core integrations"
+}
