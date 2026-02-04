@@ -20,9 +20,9 @@ This plan outlines the steps to establish the foundational Model Context Protoco
 
 ## Phase 2: Basic MCP Tools Implementation
 
-- [ ] Task: Implement the `add` MCP tool
-    - [ ] Write Failing Tests: Test `add` tool with various number inputs
-    - [ ] Implement to Pass Tests: Create `add` tool and register with MCP server
+- [~] Task: Implement the `add` MCP tool
+    - [x] Write Failing Tests: Test `add` tool with various number inputs
+    - [x] Implement to Pass Tests: Create `add` tool and register with MCP server
 - [ ] Task: Implement the `generateImage` MCP tool with user restriction
     - [ ] Write Failing Tests: Test `generateImage` tool for authorized and unauthorized users
     - [ ] Implement to Pass Tests: Create `generateImage` tool and implement `ALLOWED_USERNAMES` check

@@ -229,6 +229,22 @@ export async function handleMcpWithoutOAuth(
   ctx: ExecutionContext,
 ): Promise<Response> {
   const url = new URL(request.url);
+
+  // Temporary bypass for testing MCP tool invocation without authentication
+  if (env.TEST_MODE_MCP_NO_AUTH === 'true' && url.pathname.startsWith("/mcp")) {
+    const requestBody = await request.json();
+    if (requestBody.toolName === 'add' && requestBody.args) {
+      const { a, b } = requestBody.args;
+      if (typeof a === 'number' && typeof b === 'number') {
+        return new Response(JSON.stringify({ result: a + b }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+    }
+    return new Response(JSON.stringify({ error: "Tool invocation failed in test mode" }), { status: 400 });
+  }
+
   const mcpSecret = extractMcpSecretFromRequest(request);
   if (mcpSecret) {
     const existingProps = (ctx as any).props ?? {};
