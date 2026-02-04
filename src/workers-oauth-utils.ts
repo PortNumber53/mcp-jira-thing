@@ -44,7 +44,7 @@ function decodeState<T = any>(encoded: string): T {
  * @param secret - The raw secret key string.
  * @returns A promise resolving to the CryptoKey object.
  */
-async function importKey(secret: string): Promise<CryptoKey> {
+export async function importKey(secret: string): Promise<CryptoKey> {
   if (!secret) {
     throw new Error("SESSION_SECRET is not defined. A secret key is required for signing cookies.");
   }
@@ -64,7 +64,7 @@ async function importKey(secret: string): Promise<CryptoKey> {
  * @param data - The string data to sign.
  * @returns A promise resolving to the signature as a hex string.
  */
-async function signData(key: CryptoKey, data: string): Promise<string> {
+export async function signData(key: CryptoKey, data: string): Promise<string> {
   const enc = new TextEncoder();
   const signatureBuffer = await crypto.subtle.sign("HMAC", key, enc.encode(data));
   // Convert ArrayBuffer to hex string
@@ -99,7 +99,7 @@ async function verifySignature(key: CryptoKey, signatureHex: string, data: strin
  * @param secret - The secret key used for signing.
  * @returns A promise resolving to the list of approved client IDs if the cookie is valid, otherwise null.
  */
-async function getApprovedClientsFromCookie(cookieHeader: string | null, secret: string): Promise<string[] | null> {
+export async function getApprovedClientsFromCookie(cookieHeader: string | null, secret: string): Promise<string[] | null> {
   if (!cookieHeader) return null;
 
   const cookies = cookieHeader.split(";").map((c) => c.trim());

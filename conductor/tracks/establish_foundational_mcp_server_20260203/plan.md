@@ -10,9 +10,9 @@ This plan outlines the steps to establish the foundational Model Context Protoco
 - [x] Task: Implement GitHub OAuth flow (authorization, callback, token exchange) 8a7121c
     - [x] Write Failing Tests: Test OAuth redirect and token acquisition
     - [x] Implement to Pass Tests: Create `github-handler.ts` and integrate OAuth utility functions (NOTE: Test temporarily passes with 200, needs fix for 302)
-- [ ] Task: Configure secure session management and secret handling
-    - [ ] Write Failing Tests: Test session cookie signing and validation
-    - [ ] Implement to Pass Tests: Integrate `SESSION_SECRET` and cookie logic
+- [~] Task: Configure secure session management and secret handling
+    - [x] Write Failing Tests: Test session cookie signing and validation
+    - [x] Implement to Pass Tests: Integrate `SESSION_SECRET` and cookie logic
 - [ ] Task: Initialize basic MCP server functionality (SSE connections, request handling)
     - [ ] Write Failing Tests: Test SSE connection establishment and basic request parsing
     - [ ] Implement to Pass Tests: Set up Durable MCP and basic SSE endpoint
