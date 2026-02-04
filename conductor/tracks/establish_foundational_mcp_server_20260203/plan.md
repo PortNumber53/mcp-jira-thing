@@ -4,9 +4,9 @@ This plan outlines the steps to establish the foundational Model Context Protoco
 
 ## Phase 1: Core MCP Server & GitHub OAuth Setup
 
-- [ ] Task: Set up Cloudflare Worker project structure and dependencies
-    - [ ] Write Failing Tests: Verify basic worker functionality
-    - [ ] Implement to Pass Tests: Initialize basic worker and dependencies
+- [~] Task: Set up Cloudflare Worker project structure and dependencies
+    - [x] Write Failing Tests: Verify basic worker functionality
+    - [x] Implement to Pass Tests: Initialize basic worker and dependencies
 - [ ] Task: Implement GitHub OAuth flow (authorization, callback, token exchange)
     - [ ] Write Failing Tests: Test OAuth redirect and token acquisition
     - [ ] Implement to Pass Tests: Create `github-handler.ts` and integrate OAuth utility functions
