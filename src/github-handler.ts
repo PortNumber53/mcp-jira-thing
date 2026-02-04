@@ -59,7 +59,7 @@ app.post("/authorize", async (c) => {
     return c.text("Invalid request", 400);
   }
 
-  return redirectToGithub(c.req.raw, state.oauthReqInfo, headers);
+  return redirectToGithub(c.raw.raw, state.oauthReqInfo, headers);
 });
 
 async function redirectToGithub(request: Request, oauthReqInfo: AuthRequest, headers: Record<string, string> = {}) {
