@@ -243,15 +243,23 @@ export async function handleMcpWithoutOAuth(
       }
     } else if (requestBody.toolName === 'generateImage' && requestBody.args) {
       const { prompt, steps } = requestBody.args;
+      const simulatedLogin = request.headers.get('X-MCP-User-Login');
+      // For testing, hardcode ALLOWED_USERNAMES as they are in src/include/tools.js
+      const ALLOWED_USERNAMES_TEST = new Set(["PortNumber53"]);
+
       if (typeof prompt === 'string' && typeof steps === 'number') {
-        // Mock AI response for image generation
-        const mockImage = 'mock_image_data_base64'; // Base64 encoded dummy image
-        return new Response(JSON.stringify({
-          content: [{ data: mockImage, mimeType: 'image/jpeg', type: 'image' }],
-        }), {
-          headers: { 'Content-Type': 'application/json' },
-          status: 200,
-        });
+        if (simulatedLogin && ALLOWED_USERNAMES_TEST.has(simulatedLogin)) {
+          // Mock AI response for image generation
+          const mockImage = 'mock_image_data_base64'; // Base64 encoded dummy image
+          return new Response(JSON.stringify({
+            content: [{ data: mockImage, mimeType: 'image/jpeg', type: 'image' }],
+          }), {
+            headers: { 'Content-Type': 'application/json' },
+            status: 200,
+          });
+        } else {
+          return new Response(JSON.stringify({ error: "Unauthorized access to generateImage tool" }), { status: 403 });
+        }
       }
     }
     return new Response(JSON.stringify({ error: "Tool invocation failed in test mode" }), { status: 400 });
