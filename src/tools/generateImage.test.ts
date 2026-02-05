@@ -7,7 +7,7 @@ describe('MCP GenerateImage Tool', () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       vars: {
-        TEST_MODE_MCP_NO_AUTH: 'true', // Use the bypass for now to test tool invocation directly
+        TEST_MODE_TOOL_INVOCATION: 'true',
       },
     });
   });
@@ -21,6 +21,7 @@ describe('MCP GenerateImage Tool', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-MCP-User-Login': 'PortNumber53', // Simulate authorized user
       },
       body: JSON.stringify({
         toolName: 'generateImage',

@@ -7,7 +7,7 @@ describe('MCP Add Tool', () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       vars: {
-        TEST_MODE_MCP_NO_AUTH: 'true',
+        TEST_MODE_TOOL_INVOCATION: 'true',
       },
     });
   });
