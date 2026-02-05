@@ -18,7 +18,7 @@ This plan outlines the steps to establish the foundational Model Context Protoco
     - [x] Implement to Pass Tests: Set up Durable MCP and basic SSE endpoint
 - [x] Task: Conductor - User Manual Verification 'Core MCP Server & GitHub OAuth Setup' (Protocol in workflow.md)
 
-## Phase 2: Basic MCP Tools Implementation
+## Phase 2: Basic MCP Tools Implementation [checkpoint: 8964eed]
 
 - [x] Task: Implement the `add` MCP tool 1a6f129
     - [x] Write Failing Tests: Test `add` tool with various number inputs
@@ -29,7 +29,7 @@ This plan outlines the steps to establish the foundational Model Context Protoco
 - [x] Task: Implement dynamic tool exposure based on user identity f440e13 4731922
     - [x] Write Failing Tests: Verify tools are correctly exposed/hidden based on login status and permissions
     - [x] Implement to Pass Tests: Refine MCP server logic for dynamic tool registration
-- [ ] Task: Conductor - User Manual Verification 'Basic MCP Tools Implementation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Basic MCP Tools Implementation' (Protocol in workflow.md)
 
 ## Phase 3: Jira Integration Foundation
 
