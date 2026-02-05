@@ -7,7 +7,7 @@ describe('MCP Dynamic Tool Exposure', () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
       vars: {
-        TEST_MODE_MCP_NO_AUTH: 'true', // Temporarily bypass OAuth for direct tool invocation
+        TEST_MODE_TOOL_INVOCATION: 'true', // Temporarily bypass OAuth for direct tool invocation
       },
     });
   });
