@@ -39,7 +39,7 @@ This plan outlines the steps to establish the foundational Model Context Protoco
 - [x] Task: Define basic Jira data models and interfaces f21e3a5
     - [x] Write Failing Tests: Validate data model parsing for common Jira entities
     - [x] Implement to Pass Tests: Create `src/tools/jira/interfaces/` and populate with key structures
-- [~] Task: Implement placeholder Jira tools (e.g., `getProjects`, `listJiraIssueTypes`)
+- [x] Task: Implement placeholder Jira tools (e.g., `getProjects`, `listJiraIssueTypes`) 4ef56ee
     - [x] Write Failing Tests: Test placeholder Jira tool responses
     - [ ] Implement to Pass Tests: Implement `getProjects.ts` and `listJiraIssueTypes.ts`
 - [ ] Task: Conductor - User Manual Verification 'Jira Integration Foundation' (Protocol in workflow.md)
