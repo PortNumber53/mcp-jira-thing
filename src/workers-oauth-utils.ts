@@ -449,9 +449,8 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                 </div>
               </div>
 
-              ${
-                clientUri
-                  ? `
+              ${clientUri
+      ? `
                 <div class="client-detail">
                   <div class="detail-label">Website:</div>
                   <div class="detail-value small">
@@ -461,12 +460,11 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-                  : ""
-              }
+      : ""
+    }
 
-              ${
-                policyUri
-                  ? `
+              ${policyUri
+      ? `
                 <div class="client-detail">
                   <div class="detail-label">Privacy Policy:</div>
                   <div class="detail-value">
@@ -476,12 +474,11 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-                  : ""
-              }
+      : ""
+    }
 
-              ${
-                tosUri
-                  ? `
+              ${tosUri
+      ? `
                 <div class="client-detail">
                   <div class="detail-label">Terms of Service:</div>
                   <div class="detail-value">
@@ -491,12 +488,11 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-                  : ""
-              }
+      : ""
+    }
 
-              ${
-                redirectUris.length > 0
-                  ? `
+              ${redirectUris.length > 0
+      ? `
                 <div class="client-detail">
                   <div class="detail-label">Redirect URIs:</div>
                   <div class="detail-value small">
@@ -504,19 +500,18 @@ export function renderApprovalDialog(request: Request, options: ApprovalDialogOp
                   </div>
                 </div>
               `
-                  : ""
-              }
+      : ""
+    }
 
-              ${
-                contacts
-                  ? `
+              ${contacts
+      ? `
                 <div class="client-detail">
                   <div class="detail-label">Contact:</div>
                   <div class="detail-value">${contacts}</div>
                 </div>
               `
-                  : ""
-              }
+      : ""
+    }
             </div>
 
             <p>This MCP Client is requesting to be authorized on ${serverName}. If you approve, you will be redirected to complete authentication.</p>
@@ -603,8 +598,23 @@ export async function parseRedirectApproval(request: Request, cookieSecret: stri
   const newCookieValue = `${signature}.${btoa(payload)}`; // signature.base64(payload)
 
   // Generate Set-Cookie header
+  const requestUrl = new URL(request.url);
+  const isSecure = requestUrl.protocol === "https:";
+  const isLocalhost = requestUrl.hostname === "localhost" || requestUrl.hostname === "127.0.0.1";
+
+  const cookieAttributes = [
+    `${COOKIE_NAME}=${newCookieValue}`,
+    "HttpOnly",
+    isSecure ? "Secure" : "",
+    "Path=/",
+    // Don't set Domain for localhost - it causes issues with cookies not being sent
+    !isLocalhost && requestUrl.hostname ? `Domain=${requestUrl.hostname}` : "",
+    "SameSite=Lax",
+    `Max-Age=${ONE_YEAR_IN_SECONDS}`,
+  ].filter(Boolean).join("; ");
+
   const headers: Record<string, string> = {
-    "Set-Cookie": `${COOKIE_NAME}=${newCookieValue}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=${ONE_YEAR_IN_SECONDS}`,
+    "Set-Cookie": cookieAttributes,
   };
 
   return { headers, state };
