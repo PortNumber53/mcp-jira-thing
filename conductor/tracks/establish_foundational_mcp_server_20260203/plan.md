@@ -36,7 +36,7 @@ This plan outlines the steps to establish the foundational Model Context Protoco
 - [x] Task: Establish Jira API client and authentication mechanism 3ea41fe
     - [x] Write Failing Tests: Test Jira client initialization and basic connectivity
     - [x] Implement to Pass Tests: Create `src/tools/jira/client/` and integrate `client/core.ts`
-- [~] Task: Define basic Jira data models and interfaces
+- [x] Task: Define basic Jira data models and interfaces f21e3a5
     - [x] Write Failing Tests: Validate data model parsing for common Jira entities
     - [x] Implement to Pass Tests: Create `src/tools/jira/interfaces/` and populate with key structures
 - [ ] Task: Implement placeholder Jira tools (e.g., `getProjects`, `listJiraIssueTypes`)
