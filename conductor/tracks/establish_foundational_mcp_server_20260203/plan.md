@@ -33,9 +33,9 @@ This plan outlines the steps to establish the foundational Model Context Protoco
 
 ## Phase 3: Jira Integration Foundation
 
-- [ ] Task: Establish Jira API client and authentication mechanism
-    - [ ] Write Failing Tests: Test Jira client initialization and basic connectivity
-    - [ ] Implement to Pass Tests: Create `src/tools/jira/client/` and integrate `client/core.ts`
+- [~] Task: Establish Jira API client and authentication mechanism
+    - [x] Write Failing Tests: Test Jira client initialization and basic connectivity
+    - [x] Implement to Pass Tests: Create `src/tools/jira/client/` and integrate `client/core.ts`
 - [ ] Task: Define basic Jira data models and interfaces
     - [ ] Write Failing Tests: Validate data model parsing for common Jira entities
     - [ ] Implement to Pass Tests: Create `src/tools/jira/interfaces/` and populate with key structures
