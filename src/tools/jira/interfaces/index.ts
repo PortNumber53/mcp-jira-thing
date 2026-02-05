@@ -1,3 +1,26 @@
+import { z } from "zod";
+
+export const JiraProjectSchema = z.object({
+  id: z.string(),
+  key: z.string(),
+  name: z.string(),
+  projectTypeKey: z.string(),
+  simplified: z.boolean(),
+  description: z.string().optional().nullable(),
+  lead: z.object({
+    accountId: z.string(),
+    displayName: z.string(),
+    active: z.boolean(),
+    self: z.string(),
+  }).optional().nullable(),
+  avatarUrls: z.object({
+    "16x16": z.string(),
+    "24x24": z.string(),
+    "32x32": z.string(),
+    "48x48": z.string(),
+  }),
+});
+
 export interface JiraIssueFields {
   project: { key: string };
   summary: string;
