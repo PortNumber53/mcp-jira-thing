@@ -59,7 +59,7 @@ app.post("/authorize", async (c) => {
     return c.text("Invalid request", 400);
   }
 
-  return redirectToGithub(c.raw.raw, state.oauthReqInfo, headers);
+  return redirectToGithub(c.req.raw, state.oauthReqInfo, headers);
 });
 
 async function redirectToGithub(request: Request, oauthReqInfo: AuthRequest, headers: Record<string, string> = {}) {
@@ -111,6 +111,12 @@ app.get("/callback", async (c) => {
 
     const user = await new Octokit({ auth: accessToken }).rest.users.getAuthenticated();
     const { login, name, email } = user.data;
+
+    // Fix: If redirectUri is empty, use a default one
+    // This happens when the OAuth client doesn't provide a redirect_uri parameter
+    if (!oauthReqInfo.redirectUri || oauthReqInfo.redirectUri === "") {
+      oauthReqInfo.redirectUri = new URL("/", c.req.url).href;
+    }
 
     const result = await c.env.OAUTH_PROVIDER.completeAuthorization({
       metadata: {
