@@ -101,6 +101,11 @@ type Worker struct {
 	lastProcessedAt time.Time
 }
 
+// RegisterHandler registers a handler for a specific job type
+func (w *Worker) RegisterHandler(jobType string, handler Handler) {
+	w.handlers[jobType] = handler
+}
+
 // New creates a new Worker instance
 func New(config Config, store *store.JobStore, handlers Handlers) *Worker {
 	if config.MaxConcurrent <= 0 {
@@ -310,7 +315,7 @@ func (w *Worker) handleError(ctx context.Context, job *models.Job, err error, st
 		baseDelay := float64(w.config.RetryBaseDelay) * pow(w.config.RetryBackoffMultiplier, float64(job.Attempts-1))
 		maxDelay := float64(w.config.RetryMaxDelay)
 		delay := time.Duration(min(baseDelay, maxDelay))
-		
+
 		// Add jitter (±20%) to prevent thundering herd
 		jitter := time.Duration(float64(delay) * (0.8 + 0.4*rand.Float64()))
 		retryAfter := time.Now().Add(jitter)
@@ -333,7 +338,7 @@ func (w *Worker) handleError(ctx context.Context, job *models.Job, err error, st
 	} else {
 		// Max attempts reached, mark as failed
 		log.Printf("[worker] Job %d exhausted all %d attempts, marking as failed", job.ID, job.MaxAttempts)
-		
+
 		if err := w.store.MarkFailed(ctx, job.ID, err.Error()); err != nil {
 			log.Printf("[worker] Failed to mark job %d as failed: %v", job.ID, err)
 		}

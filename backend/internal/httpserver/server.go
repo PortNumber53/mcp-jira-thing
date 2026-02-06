@@ -25,7 +25,7 @@ type Server struct {
 }
 
 // New constructs an HTTP server using the provided configuration and storage clients.
-func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStore handlers.OAuthStore, settingsStore handlers.UserSettingsStore, billingStore handlers.BillingStore, userStore handlers.UserStore, jobWorker *worker.Worker, jobStore *store.JobStore) *Server {
+func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStore handlers.OAuthStore, settingsStore handlers.UserSettingsStore, billingStore handlers.BillingStore, userStore handlers.UserStore, jobWorker *worker.Worker, jobStore *store.JobStore, stripeHandler *handlers.StripeHandler) *Server {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
@@ -114,6 +114,11 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	if jobStore != nil {
 		jobHandler := handlers.NewJobHandler(jobStore, jobWorker)
 		jobHandler.RegisterRoutes(router)
+	}
+
+	// Stripe / membership plan endpoints
+	if stripeHandler != nil {
+		stripeHandler.RegisterRoutes(router)
 	}
 
 	srv := &http.Server{

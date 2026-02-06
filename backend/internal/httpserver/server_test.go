@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/config"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/models"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type stubUserClient struct{}
@@ -89,7 +89,7 @@ func TestHealthRoute(t *testing.T) {
 	}
 	defer db.Close()
 
-	server := New(cfg, db, stub, stub, stub, stub, stub)
+	server := New(cfg, db, stub, stub, stub, stub, stub, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rr := httptest.NewRecorder()

@@ -17,10 +17,12 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/config"
+	"github.com/PortNumber53/mcp-jira-thing/backend/internal/handlers"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/httpserver"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/migrations"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/models"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/store"
+	stripeClient "github.com/PortNumber53/mcp-jira-thing/backend/internal/stripe"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/worker"
 )
 
@@ -100,7 +102,27 @@ func main() {
 	}
 	jobWorker.SetInstrumentation(inst)
 
-	srv := httpserver.New(cfg, db, appStore, appStore, appStore, appStore, appStore, jobWorker, jobStore)
+	// Initialize plan store and Stripe integration
+	planStore, err := store.NewPlanStore(db)
+	if err != nil {
+		log.Fatalf("failed to create plan store: %v", err)
+	}
+
+	var stripeHandler *handlers.StripeHandler
+	stripeKey := os.Getenv("STRIPE_SECRET_KEY")
+	stripeWebhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	if stripeKey != "" {
+		sc := stripeClient.NewClient(stripeKey)
+		stripeHandler = handlers.NewStripeHandler(planStore, appStore, appStore, appStore, sc, stripeWebhookSecret)
+
+		// Register billing worker jobs
+		worker.RegisterBillingJobs(jobWorker, planStore, sc)
+		log.Println("[main] Stripe integration initialized")
+	} else {
+		log.Println("[main] STRIPE_SECRET_KEY not set, Stripe integration disabled")
+	}
+
+	srv := httpserver.New(cfg, db, appStore, appStore, appStore, appStore, appStore, jobWorker, jobStore, stripeHandler)
 
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

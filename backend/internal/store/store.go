@@ -917,6 +917,59 @@ LIMIT 100
 	return payments, nil
 }
 
+// GetSubscriptionByStripeID retrieves a subscription by its Stripe subscription ID.
+func (s *Store) GetSubscriptionByStripeID(ctx context.Context, stripeSubID string) (*models.Subscription, error) {
+	query := `
+SELECT id, user_id, stripe_customer_id, stripe_subscription_id,
+	stripe_price_id, status, current_period_start, current_period_end,
+	cancel_at_period_end, canceled_at, created_at, updated_at
+FROM subscriptions
+WHERE stripe_subscription_id = $1
+LIMIT 1
+	`
+
+	var sub models.Subscription
+	err := s.db.QueryRowContext(ctx, query, stripeSubID).Scan(
+		&sub.ID, &sub.UserID, &sub.StripeCustomerID, &sub.StripeSubscriptionID,
+		&sub.StripePriceID, &sub.Status, &sub.CurrentPeriodStart, &sub.CurrentPeriodEnd,
+		&sub.CancelAtPeriodEnd, &sub.CanceledAt, &sub.CreatedAt, &sub.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: get subscription by stripe id: %w", err)
+	}
+	return &sub, nil
+}
+
+// GetSubscriptionByCustomerID retrieves the most recent subscription by Stripe customer ID.
+func (s *Store) GetSubscriptionByCustomerID(ctx context.Context, customerID string) (*models.Subscription, error) {
+	query := `
+SELECT id, user_id, stripe_customer_id, stripe_subscription_id,
+	stripe_price_id, status, current_period_start, current_period_end,
+	cancel_at_period_end, canceled_at, created_at, updated_at
+FROM subscriptions
+WHERE stripe_customer_id = $1
+ORDER BY created_at DESC
+LIMIT 1
+	`
+
+	var sub models.Subscription
+	err := s.db.QueryRowContext(ctx, query, customerID).Scan(
+		&sub.ID, &sub.UserID, &sub.StripeCustomerID, &sub.StripeSubscriptionID,
+		&sub.StripePriceID, &sub.Status, &sub.CurrentPeriodStart, &sub.CurrentPeriodEnd,
+		&sub.CancelAtPeriodEnd, &sub.CanceledAt, &sub.CreatedAt, &sub.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("store: get subscription by customer id: %w", err)
+	}
+	return &sub, nil
+}
+
 // GetUserByEmail retrieves a user by their email address.
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	query := `
