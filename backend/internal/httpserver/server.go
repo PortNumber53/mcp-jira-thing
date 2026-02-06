@@ -9,20 +9,23 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"log"
+
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/config"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/handlers"
 	requesttracking "github.com/PortNumber53/mcp-jira-thing/backend/internal/middleware"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/store"
-	"log"
+	"github.com/PortNumber53/mcp-jira-thing/backend/internal/worker"
 )
 
 // Server wraps an http.Server with convenience helpers for startup/shutdown.
 type Server struct {
 	httpServer *http.Server
+	worker     *worker.Worker
 }
 
 // New constructs an HTTP server using the provided configuration and storage clients.
-func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStore handlers.OAuthStore, settingsStore handlers.UserSettingsStore, billingStore handlers.BillingStore, userStore handlers.UserStore) *Server {
+func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStore handlers.OAuthStore, settingsStore handlers.UserSettingsStore, billingStore handlers.BillingStore, userStore handlers.UserStore, jobWorker *worker.Worker, jobStore *store.JobStore) *Server {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
@@ -99,12 +102,18 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 		r.Get("/api/mcp/secret", handlers.MCPSecret(settingsStore))
 		r.Post("/api/mcp/secret", handlers.MCPSecret(settingsStore))
 	})
-	
+
 	// Metrics endpoints
 	if metricsStore != nil {
 		router.Get("/api/metrics/user", handlers.UserMetrics(metricsStore))
 		router.Get("/api/metrics/user/requests", handlers.UserRequests(metricsStore))
 		router.Get("/api/metrics/all", handlers.AllMetrics(metricsStore))
+	}
+
+	// Job queue endpoints
+	if jobStore != nil {
+		jobHandler := handlers.NewJobHandler(jobStore, jobWorker)
+		jobHandler.RegisterRoutes(router)
 	}
 
 	srv := &http.Server{
@@ -115,16 +124,26 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 		IdleTimeout:  60 * time.Second,
 	}
 
-	return &Server{httpServer: srv}
+	return &Server{httpServer: srv, worker: jobWorker}
 }
 
-// Start begins serving HTTP traffic until the process is stopped.
+// Start begins serving HTTP traffic and starts the worker.
 func (s *Server) Start() error {
+	if s.worker != nil {
+		log.Println("[server] Starting job worker...")
+		s.worker.Start(context.Background())
+	}
 	return s.httpServer.ListenAndServe()
 }
 
-// Shutdown gracefully stops the HTTP server.
+// Shutdown gracefully stops the HTTP server and worker.
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.worker != nil {
+		log.Println("[server] Shutting down job worker...")
+		if err := s.worker.Stop(ctx); err != nil {
+			log.Printf("[server] Worker shutdown error: %v", err)
+		}
+	}
 	return s.httpServer.Shutdown(ctx)
 }
 

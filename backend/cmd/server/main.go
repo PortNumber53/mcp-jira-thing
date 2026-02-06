@@ -19,7 +19,9 @@ import (
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/config"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/httpserver"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/migrations"
+	"github.com/PortNumber53/mcp-jira-thing/backend/internal/models"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/store"
+	"github.com/PortNumber53/mcp-jira-thing/backend/internal/worker"
 )
 
 func main() {
@@ -54,12 +56,51 @@ func main() {
 		log.Fatalf("failed to apply database migrations: %v", err)
 	}
 
-	store, err := store.New(db)
+	appStore, err := store.New(db)
 	if err != nil {
 		log.Fatalf("failed to create store: %v", err)
 	}
 
-	srv := httpserver.New(cfg, db, store, store, store, store, store)
+	// Initialize job store and worker
+	jobStore, err := store.NewJobStore(db)
+	if err != nil {
+		log.Fatalf("failed to create job store: %v", err)
+	}
+
+	// Configure and create worker
+	workerConfig := worker.DefaultConfig()
+	workerConfig.MaxConcurrent = 5
+	workerConfig.PollInterval = time.Second
+
+	// Initialize worker with empty handlers (handlers registered at runtime)
+	jobWorker := worker.New(workerConfig, jobStore, worker.Handlers{})
+
+	// Set up instrumentation hooks
+	inst := &worker.Instrumentation{
+		OnEnqueue: func(job *models.Job) {
+			log.Printf("[worker] Job %d enqueued (type: %s)", job.ID, job.JobType)
+		},
+		OnStart: func(job *models.Job) {
+			log.Printf("[worker] Job %d started (type: %s, attempt %d/%d)",
+				job.ID, job.JobType, job.Attempts, job.MaxAttempts)
+		},
+		OnComplete: func(job *models.Job, duration time.Duration) {
+			log.Printf("[worker] Job %d completed in %v", job.ID, duration)
+		},
+		OnFail: func(job *models.Job, err error, duration time.Duration) {
+			log.Printf("[worker] Job %d failed after %v: %v", job.ID, duration, err)
+		},
+		OnRetry: func(job *models.Job, delay time.Duration) {
+			log.Printf("[worker] Job %d scheduled for retry in %v", job.ID, delay)
+		},
+		OnHeartbeat: func(workerID string, stats worker.Stats) {
+			log.Printf("[worker] Heartbeat from %s: processed=%d, succeeded=%d, failed=%d, active=%d",
+				workerID, stats.JobsProcessed, stats.JobsSucceeded, stats.JobsFailed, stats.ActiveWorkers)
+		},
+	}
+	jobWorker.SetInstrumentation(inst)
+
+	srv := httpserver.New(cfg, db, appStore, appStore, appStore, appStore, appStore, jobWorker, jobStore)
 
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
