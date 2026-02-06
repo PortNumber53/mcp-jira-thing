@@ -172,6 +172,19 @@
   background: radial-gradient(circle at left, rgba(59, 130, 246, 0.15), transparent 55%);
 }
 
+.app-shell__logo {
+  height: 40px;
+  width: auto;
+  display: block;
+  transition: transform 150ms ease-out, filter 150ms ease-out;
+}
+
+.app-shell__brand:hover .app-shell__logo {
+  transform: scale(1.05);
+  filter: drop-shadow(0 8px 20px rgba(59, 130, 246, 0.4));
+}
+
+/* Legacy logo dot - kept for backwards compatibility */
 .app-shell__logo-dot {
   width: 28px;
   height: 28px;

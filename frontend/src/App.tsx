@@ -585,7 +585,7 @@ const AppContent = () => {
                 <li>
                   Add a server entry using <code>npx</code> and the SSE URL:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-{`"jira-thing": {
+                    {`"jira-thing": {
   "command": "${npxPathForPlatform}",
   "args": ["mcp-remote", "${mcpSseUrlExample}"],
   "env": {
@@ -607,7 +607,7 @@ const AppContent = () => {
                 <li>
                   Any MCP client that supports SSE can connect to the same URL. Example:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-{`npx mcp-remote "${mcpSseUrlExample}"`}
+                    {`npx mcp-remote "${mcpSseUrlExample}"`}
                   </pre>
                 </li>
                 <li>
@@ -743,118 +743,122 @@ const AppContent = () => {
     return null;
   };
 
-    return (
-      <>
-        {showDeleteConfirm && (
-          <div className="modal-overlay">
-            <div className="card modal-content">
-              <h2 style={{ marginTop: 0, color: '#fecaca' }}>Confirm Account Deletion</h2>
-              <p style={{ marginBottom: '1rem', lineHeight: '1.6' }}>
-                Are you absolutely sure you want to delete your account? This action cannot be undone.
-              </p>
-              <div style={{
-                padding: '1rem',
-                backgroundColor: 'rgba(220, 38, 38, 0.15)',
-                borderRadius: '8px',
-                marginBottom: '1rem',
-                border: '1px solid rgba(239, 68, 68, 0.4)'
-              }}>
-                <p style={{ margin: '0 0 0.75rem 0', fontWeight: 600, color: '#fca5a5' }}>
-                  This will permanently delete:
-                </p>
-                <ul style={{ margin: 0, paddingLeft: '1.5rem', color: '#fca5a5' }}>
-                  <li>All Jira settings and configurations</li>
-                  <li>All connected OAuth accounts</li>
-                  <li>All payment history and usage data</li>
-                  <li>Your Stripe subscription (with prorated refund)</li>
-                </ul>
-              </div>
-              <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '1rem' }}>
-                You will be logged out immediately and your data will be permanently removed from our servers.
-              </p>
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => setShowDeleteConfirm(false)}
-                  disabled={isDeleting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="button button--danger"
-                  onClick={handleDeleteAccount}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? 'Deleting...' : 'Delete My Account'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        {emailMismatchError && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '1rem'
-          }}>
-            <div className="card" style={{
-              maxWidth: '500px',
-              width: '100%',
-              padding: '2rem',
-              position: 'relative'
+  return (
+    <>
+      {showDeleteConfirm && (
+        <div className="modal-overlay">
+          <div className="card modal-content">
+            <h2 style={{ marginTop: 0, color: '#fecaca' }}>Confirm Account Deletion</h2>
+            <p style={{ marginBottom: '1rem', lineHeight: '1.6' }}>
+              Are you absolutely sure you want to delete your account? This action cannot be undone.
+            </p>
+            <div style={{
+              padding: '1rem',
+              backgroundColor: 'rgba(220, 38, 38, 0.15)',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+              border: '1px solid rgba(239, 68, 68, 0.4)'
             }}>
-              <h2 style={{ marginTop: 0, color: '#ef4444' }}>Cannot Link Accounts</h2>
-              <p style={{ marginBottom: '1rem' }}>
-                Cannot link accounts with different email addresses.
+              <p style={{ margin: '0 0 0.75rem 0', fontWeight: 600, color: '#fca5a5' }}>
+                This will permanently delete:
               </p>
-              <div style={{
-                padding: '1rem',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                borderRadius: '8px',
-                marginBottom: '1rem',
-                border: '1px solid rgba(239, 68, 68, 0.3)'
-              }}>
-                <p style={{ margin: '0 0 0.5rem 0' }}>
-                  <strong>Your current account uses:</strong><br />
-                  {emailMismatchError.existing}
-                </p>
-                <p style={{ margin: 0 }}>
-                  <strong>The account you're trying to link uses:</strong><br />
-                  {emailMismatchError.new}
-                </p>
-              </div>
-              <p style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>
-                To link these accounts, both must use the same email address.
-                Alternatively, you need to delete your existing account before creating a new one with the other email.
-              </p>
+              <ul style={{ margin: 0, paddingLeft: '1.5rem', color: '#fca5a5' }}>
+                <li>All Jira settings and configurations</li>
+                <li>All connected OAuth accounts</li>
+                <li>All payment history and usage data</li>
+                <li>Your Stripe subscription (with prorated refund)</li>
+              </ul>
+            </div>
+            <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '1rem' }}>
+              You will be logged out immediately and your data will be permanently removed from our servers.
+            </p>
+            <div className="modal-actions">
               <button
                 type="button"
-                className="button button--primary"
-                onClick={() => setEmailMismatchError(null)}
-                style={{ marginTop: '1rem' }}
+                className="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
               >
-                Okay
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button button--danger"
+                onClick={handleDeleteAccount}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete My Account'}
               </button>
             </div>
           </div>
-        )}
-        <div className="app-shell">
-          <header className="app-shell__header">
-            <div className="app-shell__header-inner">
+        </div>
+      )}
+      {emailMismatchError && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}>
+          <div className="card" style={{
+            maxWidth: '500px',
+            width: '100%',
+            padding: '2rem',
+            position: 'relative'
+          }}>
+            <h2 style={{ marginTop: 0, color: '#ef4444' }}>Cannot Link Accounts</h2>
+            <p style={{ marginBottom: '1rem' }}>
+              Cannot link accounts with different email addresses.
+            </p>
+            <div style={{
+              padding: '1rem',
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+              border: '1px solid rgba(239, 68, 68, 0.3)'
+            }}>
+              <p style={{ margin: '0 0 0.5rem 0' }}>
+                <strong>Your current account uses:</strong><br />
+                {emailMismatchError.existing}
+              </p>
+              <p style={{ margin: 0 }}>
+                <strong>The account you're trying to link uses:</strong><br />
+                {emailMismatchError.new}
+              </p>
+            </div>
+            <p style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>
+              To link these accounts, both must use the same email address.
+              Alternatively, you need to delete your existing account before creating a new one with the other email.
+            </p>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => setEmailMismatchError(null)}
+              style={{ marginTop: '1rem' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="app-shell">
+        <header className="app-shell__header">
+          <div className="app-shell__header-inner">
             <Link to="/" className="app-shell__brand">
-              <span className="app-shell__logo-dot" />
+              <img
+                src="/assets/logo-small.png"
+                alt="MCP JIRA THING"
+                className="app-shell__logo"
+                height="40"
+              />
               <span className="app-shell__brand-text">
-                <span className="app-shell__brand-title">MCP Jira Thing</span>
                 <span className="app-shell__brand-subtitle">Multi-tenant Jira control plane</span>
               </span>
             </Link>
@@ -865,10 +869,10 @@ const AppContent = () => {
                   <Link to="/dashboard" className={`app-shell__nav-item${location.pathname === "/dashboard" ? " app-shell__nav-item--active" : ""}`}>
                     Dashboard
                   </Link>
-                                    <Link to="/settings" className={`app-shell__nav-item${location.pathname === "/settings" ? " app-shell__nav-item--active" : ""}`}>
+                  <Link to="/settings" className={`app-shell__nav-item${location.pathname === "/settings" ? " app-shell__nav-item--active" : ""}`}>
                     Settings
                   </Link>
-                                    <Link to="/billing" className={`app-shell__nav-item${location.pathname === "/billing" ? " app-shell__nav-item--active" : ""}`}>
+                  <Link to="/billing" className={`app-shell__nav-item${location.pathname === "/billing" ? " app-shell__nav-item--active" : ""}`}>
                     Billing
                   </Link>
                 </>
@@ -976,9 +980,9 @@ const AppContent = () => {
             <Link to="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</Link>
           </div>
         </footer>
-        </div>
-      </>
-    );
+      </div>
+    </>
+  );
 }
 
 const App = () => (
