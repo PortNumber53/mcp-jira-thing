@@ -1394,6 +1394,138 @@ export async function registerTools() {
     console.log("[TOOLS] Registered generateImage tool (user-specific)");
   }
 
+  // Backend job queue integration
+  server.tool(
+    "enqueueBackendJob",
+    "Enqueue an asynchronous job on the Go backend. Jobs are processed by the backend worker with retry logic and priority scheduling. Use this to trigger long-running tasks like data migrations, bulk operations, or scheduled maintenance.",
+    {
+      jobType: z.string().describe("The type of job to enqueue (e.g., 'stripe_migration', 'data_export', 'cleanup')."),
+      payload: z.record(z.unknown()).optional().describe("JSON payload for the job handler."),
+      priority: z.enum(["low", "normal", "high", "critical"]).optional().default("normal").describe("Job priority level."),
+      maxAttempts: z.number().optional().default(3).describe("Maximum number of retry attempts."),
+    },
+    async ({ jobType, payload, priority, maxAttempts }) => {
+      try {
+        const backendBase = this.env.BACKEND_BASE_URL;
+        if (!backendBase) {
+          return { content: [{ text: "Error: BACKEND_BASE_URL is not configured.", type: "text" }], isError: true };
+        }
+
+        const url = new URL("/api/jobs", backendBase);
+        const response = await fetch(url.toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            job_type: jobType,
+            payload: payload || {},
+            priority: priority || "normal",
+            max_attempts: maxAttempts || 3,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          return { content: [{ text: `Error enqueuing job: ${response.status} - ${errorText}`, type: "text" }], isError: true };
+        }
+
+        const result = await response.json();
+        return {
+          content: [{ text: `Job enqueued successfully. ID: ${result.id}, Status: ${result.status}`, type: "text" }],
+        };
+      } catch (error) {
+        const msg = error?.message || String(error);
+        return { content: [{ text: `Error enqueuing job: ${msg}`, type: "text" }], isError: true };
+      }
+    },
+  );
+  registeredTools.push("enqueueBackendJob");
+
+  server.tool(
+    "getBackendJobStatus",
+    "Check the status of an asynchronous job on the Go backend.",
+    {
+      jobId: z.number().describe("The ID of the job to check."),
+    },
+    async ({ jobId }) => {
+      try {
+        const backendBase = this.env.BACKEND_BASE_URL;
+        if (!backendBase) {
+          return { content: [{ text: "Error: BACKEND_BASE_URL is not configured.", type: "text" }], isError: true };
+        }
+
+        const url = new URL("/api/jobs", backendBase);
+        url.searchParams.set("id", String(jobId));
+        const response = await fetch(url.toString(), {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          return { content: [{ text: `Error fetching job: ${response.status} - ${errorText}`, type: "text" }], isError: true };
+        }
+
+        const job = await response.json();
+        const lines = [
+          `Job #${job.id} (${job.job_type})`,
+          `Status: ${job.status}`,
+          `Priority: ${job.priority}`,
+          `Attempts: ${job.attempts}/${job.max_attempts}`,
+        ];
+        if (job.last_error) lines.push(`Last Error: ${job.last_error}`);
+        if (job.completed_at) lines.push(`Completed: ${job.completed_at}`);
+
+        return { content: [{ text: lines.join("\n"), type: "text" }] };
+      } catch (error) {
+        const msg = error?.message || String(error);
+        return { content: [{ text: `Error fetching job status: ${msg}`, type: "text" }], isError: true };
+      }
+    },
+  );
+  registeredTools.push("getBackendJobStatus");
+
+  server.tool(
+    "getBackendJobStats",
+    "Get statistics about the backend job queue (pending, processing, completed, failed counts).",
+    {},
+    async () => {
+      try {
+        const backendBase = this.env.BACKEND_BASE_URL;
+        if (!backendBase) {
+          return { content: [{ text: "Error: BACKEND_BASE_URL is not configured.", type: "text" }], isError: true };
+        }
+
+        const url = new URL("/api/jobs/stats", backendBase);
+        const response = await fetch(url.toString(), {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          return { content: [{ text: `Error fetching stats: ${response.status} - ${errorText}`, type: "text" }], isError: true };
+        }
+
+        const stats = await response.json();
+        const text = [
+          `Job Queue Statistics:`,
+          `  Pending: ${stats.pending}`,
+          `  Processing: ${stats.processing}`,
+          `  Completed: ${stats.completed}`,
+          `  Failed: ${stats.failed}`,
+          `  Cancelled: ${stats.cancelled}`,
+          `  Total: ${stats.total}`,
+        ].join("\n");
+
+        return { content: [{ text, type: "text" }] };
+      } catch (error) {
+        const msg = error?.message || String(error);
+        return { content: [{ text: `Error fetching job stats: ${msg}`, type: "text" }], isError: true };
+      }
+    },
+  );
+  registeredTools.push("getBackendJobStats");
+
   console.log(`[TOOLS] Tool registration complete - Version: ${TOOLS_VERSION}`);
   console.log(`[TOOLS] Total tools registered: ${registeredTools.length}`);
   console.log(`[TOOLS] Registered tools: ${registeredTools.join(", ")}`);
