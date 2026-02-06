@@ -31,9 +31,15 @@ const ALLOWED_USERNAMES = new Set([
   // For example: 'yourusername', 'coworkerusername'
 ]);
 
+// Version identifier to track deployments
+export const TOOLS_VERSION = "2026-02-05T23:26:00-08:00";
+
 export async function registerTools() {
   const server = this.server;
   const getJiraClient = () => this.getJiraClient();
+
+  console.log(`[TOOLS] Starting tool registration - Version: ${TOOLS_VERSION}`);
+  const registeredTools = [];
 
   server.tool(
     "add",
@@ -43,6 +49,7 @@ export async function registerTools() {
       content: [{ text: String(a + b), type: "text" }],
     }),
   );
+  registeredTools.push("add");
 
   const IssueActionEnum = z.enum([
     "createIssue",
@@ -86,6 +93,7 @@ export async function registerTools() {
       content: [{ text: `Jira Projects:\n${projectsText}`, type: "text" }],
     };
   });
+  registeredTools.push("getProjects");
 
   server.tool(
     "createJiraProject",
@@ -145,9 +153,9 @@ export async function registerTools() {
           description: newProject.description || null,
           lead: newProject.lead
             ? {
-                accountId: newProject.lead.accountId,
-                displayName: newProject.lead.displayName,
-              }
+              accountId: newProject.lead.accountId,
+              displayName: newProject.lead.displayName,
+            }
             : null,
           success: true,
         };
@@ -191,6 +199,7 @@ export async function registerTools() {
       }
     },
   );
+  registeredTools.push("createJiraProject");
 
   // Jira user search helper
   server.tool(
@@ -236,8 +245,7 @@ export async function registerTools() {
         const usersText = formattedUsers
           .map(
             (user) =>
-              `- ${user.displayName}\n  Account ID: ${user.accountId}\n  Email: ${user.email || "None"}\n  Active: ${
-                user.active ? "Yes" : "No"
+              `- ${user.displayName}\n  Account ID: ${user.accountId}\n  Email: ${user.email || "None"}\n  Active: ${user.active ? "Yes" : "No"
               }`,
           )
           .join("\n\n");
@@ -278,6 +286,7 @@ export async function registerTools() {
       }
     },
   );
+  registeredTools.push("getJiraUsers");
 
   // Detailed Jira project info
   server.tool(
@@ -309,9 +318,9 @@ export async function registerTools() {
           description: project.description || null,
           lead: project.lead
             ? {
-                accountId: project.lead.accountId,
-                displayName: project.lead.displayName,
-              }
+              accountId: project.lead.accountId,
+              displayName: project.lead.displayName,
+            }
             : null,
           success: true,
         };
@@ -360,6 +369,7 @@ export async function registerTools() {
       }
     },
   );
+  registeredTools.push("getJiraProject");
 
   // Jira issue types for a project
   server.tool(
@@ -470,6 +480,7 @@ export async function registerTools() {
       }
     },
   );
+  registeredTools.push("getJiraProjectIssueTypes");
 
   // Unified Jira issue toolkit
   server.tool(
@@ -1047,6 +1058,7 @@ export async function registerTools() {
       }
     },
   );
+  registeredTools.push("jiraIssueToolkit");
 
   server.tool(
     "createJiraSprint",
@@ -1080,6 +1092,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("createJiraSprint");
 
   server.tool(
     "startJiraSprint",
@@ -1101,6 +1114,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("startJiraSprint");
 
   server.tool(
     "completeJiraSprint",
@@ -1136,6 +1150,8 @@ export async function registerTools() {
       }
     },
   );
+  registeredTools.push("completeJiraSprint");
+  console.log("[TOOLS] Registered completeJiraSprint tool");
 
   server.tool(
     "getJiraSprint",
@@ -1151,6 +1167,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("getJiraSprint");
 
   server.tool(
     "updateJiraSprint",
@@ -1171,6 +1188,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("updateJiraSprint");
 
   server.tool(
     "deleteJiraSprint",
@@ -1186,6 +1204,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("deleteJiraSprint");
 
   server.tool(
     "getJiraBoardsForProject",
@@ -1209,6 +1228,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("getJiraBoardsForProject");
 
   server.tool(
     "getJiraSprintsForBoard",
@@ -1225,6 +1245,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("getJiraSprintsForBoard");
 
   server.tool(
     "getJiraIssuesForSprint",
@@ -1241,6 +1262,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("getJiraIssuesForSprint");
 
   server.tool(
     "moveJiraIssuesToSprint",
@@ -1257,6 +1279,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("moveJiraIssuesToSprint");
 
   server.tool(
     "moveJiraIssuesToBacklog",
@@ -1273,6 +1296,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("moveJiraIssuesToBacklog");
 
   server.tool(
     "getJiraUser",
@@ -1290,6 +1314,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("getJiraUser");
 
   server.tool(
     "createJiraUser",
@@ -1307,6 +1332,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("createJiraUser");
 
   server.tool(
     "deleteJiraUser",
@@ -1322,6 +1348,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("deleteJiraUser");
 
   server.tool(
     "userInfoOctokit",
@@ -1335,6 +1362,7 @@ export async function registerTools() {
       };
     },
   );
+  registeredTools.push("userInfoOctokit");
 
   const login = this.props && this.props.login;
   if (typeof login === "string" && ALLOWED_USERNAMES.has(login)) {
@@ -1362,5 +1390,12 @@ export async function registerTools() {
         };
       },
     );
+    registeredTools.push("generateImage");
+    console.log("[TOOLS] Registered generateImage tool (user-specific)");
   }
+
+  console.log(`[TOOLS] Tool registration complete - Version: ${TOOLS_VERSION}`);
+  console.log(`[TOOLS] Total tools registered: ${registeredTools.length}`);
+  console.log(`[TOOLS] Registered tools: ${registeredTools.join(", ")}`);
 }
+
