@@ -5,6 +5,7 @@ import {
   CreateUserPayload,
   JiraUser,
   JiraSprint,
+  JiraBoard,
   CreateSprintPayload,
   UpdateSprintPayload,
   JiraIssueType,
@@ -565,6 +566,10 @@ export class JiraClient extends JiraClientCore {
 
   public async completeSprint(sprintId: number, overrides: Partial<UpdateSprintPayload> = {}): Promise<JiraSprint> {
     return this.sprints.completeSprint(sprintId, overrides);
+  }
+
+  public async getBoardsForProject(projectKeyOrId: string): Promise<JiraBoard[]> {
+    return this.sprints.getBoardsForProject(projectKeyOrId);
   }
 
   public async getSprintsForBoard(boardId: number): Promise<JiraSprint[]> {

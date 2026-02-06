@@ -214,6 +214,19 @@ export interface JiraUser {
   timeZone?: string;
 }
 
+export interface JiraBoard {
+  id: number;
+  self: string;
+  name: string;
+  type: string;
+  location?: {
+    projectId?: number;
+    projectKey?: string;
+    projectName?: string;
+    displayName?: string;
+  };
+}
+
 export interface JiraSprint {
   id: number;
   self: string;

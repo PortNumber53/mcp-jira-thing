@@ -1,5 +1,5 @@
 import { JiraClientCore } from './core';
-import { JiraSprint, CreateSprintPayload, UpdateSprintPayload, JiraIssue } from '../interfaces';
+import { JiraSprint, JiraBoard, CreateSprintPayload, UpdateSprintPayload, JiraIssue } from '../interfaces';
 
 export class JiraSprints extends JiraClientCore {
   public async createSprint(payload: CreateSprintPayload): Promise<JiraSprint> {
@@ -44,6 +44,18 @@ export class JiraSprints extends JiraClientCore {
     overrides: Partial<UpdateSprintPayload> = {},
   ): Promise<JiraSprint> {
     const current = await this.getSprint(sprintId);
+
+    if (current.state === 'closed') {
+      throw new Error(
+        `Sprint ${sprintId} ("${current.name}") is already closed (completed on ${current.completeDate || 'unknown date'}). Sprints cannot be reopened.`,
+      );
+    }
+    if (current.state === 'future') {
+      throw new Error(
+        `Sprint ${sprintId} ("${current.name}") is in 'future' state. A sprint must be started (active) before it can be completed. Use startSprint first.`,
+      );
+    }
+
     const startDate = overrides.startDate || current.startDate || new Date().toISOString();
     const endDate = overrides.endDate || current.endDate || new Date().toISOString();
     const payload: Partial<UpdateSprintPayload> = {
@@ -54,6 +66,13 @@ export class JiraSprints extends JiraClientCore {
       completeDate: new Date().toISOString(),
     } as any;
     return this.updateSprint(sprintId, payload);
+  }
+
+  public async getBoardsForProject(projectKeyOrId: string): Promise<JiraBoard[]> {
+    const response = await this.makeRequest<{ values: JiraBoard[] }>(
+      `/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(projectKeyOrId)}`,
+    );
+    return response.values;
   }
 
   public async getSprintsForBoard(boardId: number): Promise<JiraSprint[]> {

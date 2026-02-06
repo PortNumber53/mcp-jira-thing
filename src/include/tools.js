@@ -1104,19 +1104,36 @@ export async function registerTools() {
 
   server.tool(
     "completeJiraSprint",
-    "Complete a Jira sprint. Some Jira instances require name, startDate, and endDate.",
+    "Complete a Jira sprint. The sprint must be in 'active' state — future sprints must be started first, and closed sprints cannot be reopened. Use getJiraSprintsForBoard to find sprint IDs, and getJiraBoardsForProject to find board IDs for a project.",
     {
-      sprintId: z.number().describe("ID of the sprint to complete"),
+      sprintId: z.number().describe("ID of the sprint to complete. Use getJiraSprintsForBoard to find sprint IDs for a board."),
       name: z.string().optional().describe("Sprint name (required on some instances)"),
       startDate: z.string().optional().describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
       endDate: z.string().optional().describe("End date in ISO format (e.g., 2025-11-09T00:00:00.000Z). Required on some instances."),
     },
     async ({ sprintId, name, startDate, endDate }) => {
-      const jiraClient = await getJiraClient();
-      await jiraClient.completeSprint(sprintId, { name, startDate, endDate });
-      return {
-        content: [{ text: `Sprint ${sprintId} completed successfully.`, type: "text" }],
-      };
+      try {
+        const jiraClient = await getJiraClient();
+        await jiraClient.completeSprint(sprintId, { name, startDate, endDate });
+        return {
+          content: [{ text: `Sprint ${sprintId} completed successfully.`, type: "text" }],
+        };
+      } catch (error) {
+        const msg = error?.message || String(error);
+        if (msg.includes("already closed")) {
+          return { content: [{ text: `Error: ${msg}`, type: "text" }], isError: true };
+        }
+        if (msg.includes("future")) {
+          return { content: [{ text: `Error: ${msg}`, type: "text" }], isError: true };
+        }
+        if (msg.includes("404")) {
+          return { content: [{ text: `Error: Sprint ${sprintId} not found. Use getJiraSprintsForBoard to list valid sprint IDs.`, type: "text" }], isError: true };
+        }
+        if (msg.includes("403") || msg.includes("permission")) {
+          return { content: [{ text: `Error: Permission denied. You need 'Manage Sprints' permission in the project to complete a sprint.`, type: "text" }], isError: true };
+        }
+        return { content: [{ text: `Error completing sprint ${sprintId}: ${msg}`, type: "text" }], isError: true };
+      }
     },
   );
 
@@ -1166,6 +1183,29 @@ export async function registerTools() {
       await jiraClient.deleteSprint(sprintId);
       return {
         content: [{ text: `Sprint ${sprintId} deleted successfully.`, type: "text" }],
+      };
+    },
+  );
+
+  server.tool(
+    "getJiraBoardsForProject",
+    "Get all Agile boards for a given Jira project. Use this to find the board ID needed for sprint operations like getJiraSprintsForBoard or completeJiraSprint.",
+    {
+      projectKeyOrId: z.string().describe("Project key (e.g., 'MJT') or numeric project ID to find boards for."),
+    },
+    async ({ projectKeyOrId }) => {
+      const jiraClient = await getJiraClient();
+      const boards = await jiraClient.getBoardsForProject(projectKeyOrId);
+      if (boards.length === 0) {
+        return {
+          content: [{ text: `No boards found for project ${projectKeyOrId}. The project may not have an Agile board configured.`, type: "text" }],
+        };
+      }
+      const boardsText = boards
+        .map((board) => `${board.name} (ID: ${board.id}, Type: ${board.type})`)
+        .join("\n");
+      return {
+        content: [{ text: `Boards for project ${projectKeyOrId}:\n${boardsText}`, type: "text" }],
       };
     },
   );
