@@ -138,10 +138,10 @@ If you support multiple Slack workspaces, store the workspace/team install info 
 
 ## Go Backend (`backend/`)
 
-The Go backend exposes REST endpoints that read from our Xata database and serve the data to the frontend (or other consumers). The initial implementation ships with:
+The Go backend exposes REST endpoints that serve data to the frontend (or other consumers). The initial implementation ships with:
 
 - `GET /healthz` — simple health probe for load balancers and Jenkins smoke checks.
-- `GET /api/users?limit=50` — returns a paginated list of NextAuth users pulled from Xata.
+- `GET /api/users?limit=50` — returns a paginated list of NextAuth users from the database.
 
 ### Environment variables
 
@@ -150,46 +150,10 @@ Create a copy of `backend/env.example` and provide the required values:
 | Variable                       | Required | Description                                                   |
 | ------------------------------ | -------- | ------------------------------------------------------------- |
 | `BACKEND_ADDR`                 | optional | Address the HTTP server listens on. Defaults to `:18111`.      |
-| `DATABASE_URL`                 | ✅       | **Primary** (non-Xata) Postgres DSN used by the backend at runtime. |
-| `XATA_DATABASE_URL`            | optional | Legacy Xata Postgres DSN (preferred when migrating).          |
-| `XATA_API_KEY`                 | optional | Xata API key (used only during migration/sync; required if you set other `XATA_*` pieces and do not set `XATA_DATABASE_URL`). |
-| `XATA_WORKSPACE`               | optional | Workspace slug (e.g. `acme-labs`).                            |
-| `XATA_DATABASE`                | optional | Database name (`dbjirathing`).                                |
-| `XATA_BRANCH`                  | optional | Database branch, defaults to `main`.                          |
-| `XATA_REGION`                  | optional | Workspace region (e.g. `us-east-1`); defaults to `us-east-1`. |
+| `DATABASE_URL`                 | ✅       | Postgres DSN used by the backend at runtime. |
 | `BACKEND_HTTP_TIMEOUT_SECONDS` | optional | Outbound request timeout, defaults to 15 seconds.             |
 
-During the Xata→new-DB migration period, the backend will:
 
-- Apply the same SQL migrations to **both** databases.
-- Copy data **table-by-table** from Xata → the primary DB.
-- Start serving traffic using **only** the primary (non-Xata) DB.
-
-You can re-run the copy step even when the primary DB already has data using `--force-migration`.
-
-To populate `XATA_*` manually from a Xata-style DSN you can parse it with a small helper script:
-
-```bash
-# Example XATA_DATABASE_URL
-xata_database_url='postgresql://workspace:<API_KEY>@us-east-1.sql.xata.sh/dbjirathing:main?sslmode=require'
-
-python3 - <<'PY'
-import os
-import urllib.parse
-
-url = urllib.parse.urlparse(os.environ.get('xata_database_url') or os.environ.get('XATA_DATABASE_URL'))
-if not url.username or not url.password:
-    raise SystemExit("XATA_DATABASE_URL must include username (workspace) and password (API key)")
-
-database, _, branch = url.path.lstrip('/').partition(':')
-branch = branch or 'main'
-
-print(f"export XATA_WORKSPACE={url.username}")
-print(f"export XATA_API_KEY={url.password}")
-print(f"export XATA_DATABASE={database}")
-print(f"export XATA_BRANCH={branch}")
-PY
-```
 
 `go test` and the runtime code expect the environment variables to be present. When running locally you can export them or use a dotenv loader (`direnv`, `dotenvx`, etc.).
 

@@ -67,9 +67,6 @@ if [[ "${DEPLOY_PUBLISH_CONFIG_INI:-}" == "1" ]]; then
     echo "# Managed by CI deploy script. Do not edit on the server; update Jenkins credentials and re-deploy."
     echo "BACKEND_ADDR=${BACKEND_ADDR:-:18111}"
     echo "DATABASE_URL=${DATABASE_URL}"
-    if [[ -n "${XATA_DATABASE_URL:-}" ]]; then
-      echo "XATA_DATABASE_URL=${XATA_DATABASE_URL}"
-    fi
     if [[ -n "${BACKEND_HTTP_TIMEOUT_SECONDS:-}" ]]; then
       echo "BACKEND_HTTP_TIMEOUT_SECONDS=${BACKEND_HTTP_TIMEOUT_SECONDS}"
     fi

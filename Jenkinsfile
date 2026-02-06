@@ -75,10 +75,8 @@ pipeline {
         branch 'master'
       }
       environment {
-        // Primary (non-Xata) database URL used by the backend at runtime.
+        // Primary database URL used by the backend at runtime.
         DATABASE_URL = credentials('prod-database-url-mcp-jira-thing')
-        // Legacy Xata database URL used temporarily for migrations + Xata -> primary sync.
-        XATA_DATABASE_URL = credentials('prod-xata-database-url-mcp-jira-thing')
       }
       steps {
         withEnv([
