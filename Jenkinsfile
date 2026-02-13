@@ -61,7 +61,7 @@ pipeline {
         // Remove COOKIE_DOMAIN secret (was mistakenly uploaded as a secret; now passed as a plain var).
         sh 'npx wrangler secret delete COOKIE_DOMAIN --env production --force || true'
         // Deploy the merged Worker (serves SPA at / and MCP at /sse).
-        sh 'npx wrangler deploy --env production --var BACKEND_BASE_URL:$BACKEND_BASE_URL --var GITHUB_CLIENT_ID:$GITHUB_CLIENT_ID --var GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID --var COOKIE_DOMAIN:$COOKIE_DOMAIN'
+        sh 'npx wrangler deploy --env production --var BACKEND_BASE_URL:$BACKEND_BASE_URL --var GITHUB_CLIENT_ID:$GITHUB_CLIENT_ID --var GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID --var COOKIE_DOMAIN:$COOKIE_DOMAIN --var INTEGRATION_GOOGLE_DOCS_ENABLED:true'
       }
     }
 
