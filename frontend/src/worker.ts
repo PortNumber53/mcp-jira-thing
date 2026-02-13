@@ -846,16 +846,15 @@ export async function handleFrontendFetch(
 
       const effectiveOrigin = getEffectiveOrigin(request, url);
       const redirectUri = `${effectiveOrigin}/callback/google-docs`;
-      const state = crypto.randomUUID();
+      const nonce = randomToken(32);
 
-      // Store state in a short-lived cookie
-      const stateCookie = serializeCookie("gdocs_state", state, {
-        httpOnly: true,
-        secure: url.protocol === "https:" || request.headers.get("x-forwarded-proto") === "https",
-        sameSite: "Lax",
-        path: "/",
-        maxAge: 600,
-      });
+      const statePayload: StatePayload = {
+        nonce,
+        redirect: "/integrations",
+        createdAt: Date.now(),
+      };
+
+      const stateCookieValue = await encodeSignedPayload(getCookieSecret(env), statePayload);
 
       const scopes = [
         "https://www.googleapis.com/auth/documents",
@@ -869,15 +868,24 @@ export async function handleFrontendFetch(
       authUrl.searchParams.set("scope", scopes);
       authUrl.searchParams.set("access_type", "offline");
       authUrl.searchParams.set("prompt", "consent");
-      authUrl.searchParams.set("state", state);
+      authUrl.searchParams.set("state", nonce);
 
-      return new Response(null, {
+      const response = new Response(null, {
         status: 302,
-        headers: {
-          Location: authUrl.toString(),
-          "Set-Cookie": stateCookie,
-        },
+        headers: { Location: authUrl.toString() },
       });
+      response.headers.append(
+        "Set-Cookie",
+        serializeCookie("mjt_gdocs_state", stateCookieValue, {
+          httpOnly: true,
+          secure: isSecureRequest(request, url),
+          sameSite: "Lax",
+          path: "/",
+          domain: getCookieDomain(env),
+          maxAge: STATE_TTL_SECONDS,
+        }),
+      );
+      return response;
     }
 
     // Google Docs OAuth callback
@@ -902,10 +910,23 @@ export async function handleFrontendFetch(
         return new Response("Missing code or state", { status: 400 });
       }
 
-      // Verify state cookie
-      const cookies = parseCookies(request.headers.get("Cookie") || "");
-      const savedState = cookies.gdocs_state;
-      if (!savedState || savedState !== state) {
+      // Verify signed state cookie
+      const cookies = parseCookies(request.headers.get("Cookie"));
+      const stateCookie = cookies["mjt_gdocs_state"];
+      if (!stateCookie) {
+        console.error("[google-docs-callback] missing state cookie", {
+          cookies: Object.keys(cookies),
+          host: request.headers.get("host"),
+        });
+        return new Response("OAuth state cookie is missing", { status: 400 });
+      }
+
+      const parsedState = await decodeSignedPayload<StatePayload>(getCookieSecret(env), stateCookie);
+      if (!parsedState || parsedState.nonce !== state) {
+        console.error("[google-docs-callback] state validation failed", {
+          parsed: parsedState,
+          receivedState: state,
+        });
         return new Response("Invalid state parameter", { status: 400 });
       }
 
@@ -970,21 +991,22 @@ export async function handleFrontendFetch(
       }
 
       // Clear state cookie and redirect to integrations page
-      const clearCookie = serializeCookie("gdocs_state", "", {
-        httpOnly: true,
-        secure: url.protocol === "https:" || request.headers.get("x-forwarded-proto") === "https",
-        sameSite: "Lax",
-        path: "/",
-        maxAge: 0,
-      });
-
-      return new Response(`<html><body><script>window.location.href="/integrations?connected=google_docs";</script></body></html>`, {
+      const response = new Response(`<html><body><script>window.location.href="/integrations?connected=google_docs";</script></body></html>`, {
         status: 200,
-        headers: {
-          "Content-Type": "text/html",
-          "Set-Cookie": clearCookie,
-        },
+        headers: { "Content-Type": "text/html" },
       });
+      response.headers.append(
+        "Set-Cookie",
+        serializeCookie("mjt_gdocs_state", "", {
+          httpOnly: true,
+          secure: isSecureRequest(request, url),
+          sameSite: "Lax",
+          path: "/",
+          domain: getCookieDomain(env),
+          maxAge: 0,
+        }),
+      );
+      return response;
     }
 
     if (url.pathname === "/api/billing/create-subscription" && request.method === "POST") {
