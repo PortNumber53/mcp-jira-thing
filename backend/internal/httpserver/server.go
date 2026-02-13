@@ -87,6 +87,14 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	router.Post("/api/settings/jira", handlers.UserSettings(settingsStore))
 	router.Get("/api/settings/jira", handlers.UserSettings(settingsStore))
 
+	// Integration token endpoints
+	integrationStore, _ := store.New(db)
+	if integrationStore != nil {
+		router.Get("/api/integrations/tokens", handlers.IntegrationTokens(integrationStore))
+		router.Post("/api/integrations/tokens", handlers.IntegrationTokens(integrationStore))
+		router.Delete("/api/integrations/tokens", handlers.IntegrationTokens(integrationStore))
+	}
+
 	// Billing endpoints
 	router.Post("/api/billing/save-subscription", handlers.SaveSubscription(billingStore, userStore))
 	router.Post("/api/billing/save-payment", handlers.SavePayment(billingStore, userStore))
@@ -101,6 +109,9 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 		r.Get("/api/settings/jira/tenant", handlers.TenantJiraSettings(settingsStore))
 		r.Get("/api/mcp/secret", handlers.MCPSecret(settingsStore))
 		r.Post("/api/mcp/secret", handlers.MCPSecret(settingsStore))
+		if integrationStore != nil {
+			r.Get("/api/integrations/tokens/tenant", handlers.TenantIntegrationToken(integrationStore))
+		}
 	})
 
 	// Metrics endpoints

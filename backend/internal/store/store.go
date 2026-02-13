@@ -1107,3 +1107,218 @@ ORDER BY uo.created_at ASC
 
 	return accounts, nil
 }
+
+// UpsertIntegrationToken creates or updates an OAuth token for a third-party
+// integration identified by (user_id, provider).
+func (s *Store) UpsertIntegrationToken(ctx context.Context, userEmail, provider, accessToken string, refreshToken *string, tokenType string, expiresAt *string, scopes *string, metadata *string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store: db cannot be nil")
+	}
+
+	var userID int64
+	if err := s.db.QueryRowContext(
+		ctx,
+		`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
+		userEmail,
+	).Scan(&userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("store: no local user found for email=%s", userEmail)
+		}
+		return fmt.Errorf("store: lookup user by email: %w", err)
+	}
+
+	var refreshTok sql.NullString
+	if refreshToken != nil {
+		refreshTok = sql.NullString{String: *refreshToken, Valid: true}
+	}
+	var scopesVal sql.NullString
+	if scopes != nil {
+		scopesVal = sql.NullString{String: *scopes, Valid: true}
+	}
+	var metadataVal sql.NullString
+	if metadata != nil {
+		metadataVal = sql.NullString{String: *metadata, Valid: true}
+	}
+	var expiresAtVal sql.NullString
+	if expiresAt != nil {
+		expiresAtVal = sql.NullString{String: *expiresAt, Valid: true}
+	}
+
+	query := `
+INSERT INTO integration_tokens (user_id, provider, access_token, refresh_token, token_type, expires_at, scopes, metadata)
+VALUES ($1, $2, $3, $4, $5, $6::timestamptz, $7, $8::jsonb)
+ON CONFLICT (user_id, provider) DO UPDATE
+SET access_token  = EXCLUDED.access_token,
+    refresh_token = EXCLUDED.refresh_token,
+    token_type    = EXCLUDED.token_type,
+    expires_at    = EXCLUDED.expires_at,
+    scopes        = EXCLUDED.scopes,
+    metadata      = EXCLUDED.metadata,
+    updated_at    = now()
+`
+	_, err := s.db.ExecContext(ctx, query, userID, provider, accessToken, refreshTok, tokenType, expiresAtVal, scopesVal, metadataVal)
+	if err != nil {
+		return fmt.Errorf("store: upsert integration token: %w", err)
+	}
+	return nil
+}
+
+// ListIntegrationTokens returns the public (non-secret) view of all
+// integration tokens for the user identified by email.
+func (s *Store) ListIntegrationTokens(ctx context.Context, email string) ([]models.IntegrationTokenPublic, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store: db cannot be nil")
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT it.provider, it.token_type, it.expires_at, it.scopes, it.created_at, it.updated_at
+FROM integration_tokens it
+JOIN users u ON it.user_id = u.id
+WHERE LOWER(u.email) = LOWER($1)
+ORDER BY it.provider ASC
+`, email)
+	if err != nil {
+		return nil, fmt.Errorf("store: list integration tokens: %w", err)
+	}
+	defer rows.Close()
+
+	var tokens []models.IntegrationTokenPublic
+	for rows.Next() {
+		var t models.IntegrationTokenPublic
+		var expiresAt sql.NullTime
+		var scopes sql.NullString
+
+		if err := rows.Scan(&t.Provider, &t.TokenType, &expiresAt, &scopes, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("store: scan integration token: %w", err)
+		}
+		if expiresAt.Valid {
+			t.ExpiresAt = &expiresAt.Time
+		}
+		if scopes.Valid {
+			t.Scopes = &scopes.String
+		}
+		t.Connected = true
+		tokens = append(tokens, t)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate integration tokens: %w", err)
+	}
+
+	return tokens, nil
+}
+
+// GetIntegrationToken returns the full integration token (including secrets)
+// for a specific user and provider. Used by trusted server-side callers only.
+func (s *Store) GetIntegrationToken(ctx context.Context, email, provider string) (*models.IntegrationToken, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store: db cannot be nil")
+	}
+
+	var t models.IntegrationToken
+	var refreshToken sql.NullString
+	var expiresAt sql.NullTime
+	var scopes sql.NullString
+	var metadata sql.NullString
+
+	err := s.db.QueryRowContext(ctx, `
+SELECT it.id, it.user_id, it.provider, it.access_token, it.refresh_token,
+       it.token_type, it.expires_at, it.scopes, it.metadata, it.created_at, it.updated_at
+FROM integration_tokens it
+JOIN users u ON it.user_id = u.id
+WHERE LOWER(u.email) = LOWER($1) AND it.provider = $2
+`, email, provider).Scan(
+		&t.ID, &t.UserID, &t.Provider, &t.AccessToken, &refreshToken,
+		&t.TokenType, &expiresAt, &scopes, &metadata, &t.CreatedAt, &t.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("store: get integration token: %w", err)
+	}
+
+	if refreshToken.Valid {
+		t.RefreshToken = &refreshToken.String
+	}
+	if expiresAt.Valid {
+		t.ExpiresAt = &expiresAt.Time
+	}
+	if scopes.Valid {
+		t.Scopes = &scopes.String
+	}
+	if metadata.Valid {
+		t.Metadata = &metadata.String
+	}
+
+	return &t, nil
+}
+
+// GetIntegrationTokenByMCPSecret returns the full integration token for a
+// provider, looking up the user by their mcp_secret. Used by the MCP worker.
+func (s *Store) GetIntegrationTokenByMCPSecret(ctx context.Context, secret, provider string) (*models.IntegrationToken, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store: db cannot be nil")
+	}
+
+	var t models.IntegrationToken
+	var refreshToken sql.NullString
+	var expiresAt sql.NullTime
+	var scopes sql.NullString
+	var metadata sql.NullString
+
+	err := s.db.QueryRowContext(ctx, `
+SELECT it.id, it.user_id, it.provider, it.access_token, it.refresh_token,
+       it.token_type, it.expires_at, it.scopes, it.metadata, it.created_at, it.updated_at
+FROM integration_tokens it
+JOIN users u ON it.user_id = u.id
+WHERE u.mcp_secret = $1 AND it.provider = $2
+`, secret, provider).Scan(
+		&t.ID, &t.UserID, &t.Provider, &t.AccessToken, &refreshToken,
+		&t.TokenType, &expiresAt, &scopes, &metadata, &t.CreatedAt, &t.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("store: get integration token by mcp_secret: %w", err)
+	}
+
+	if refreshToken.Valid {
+		t.RefreshToken = &refreshToken.String
+	}
+	if expiresAt.Valid {
+		t.ExpiresAt = &expiresAt.Time
+	}
+	if scopes.Valid {
+		t.Scopes = &scopes.String
+	}
+	if metadata.Valid {
+		t.Metadata = &metadata.String
+	}
+
+	return &t, nil
+}
+
+// DeleteIntegrationToken removes the integration token for a user and provider.
+func (s *Store) DeleteIntegrationToken(ctx context.Context, email, provider string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store: db cannot be nil")
+	}
+
+	result, err := s.db.ExecContext(ctx, `
+DELETE FROM integration_tokens
+WHERE user_id = (SELECT id FROM users WHERE LOWER(email) = LOWER($1))
+  AND provider = $2
+`, email, provider)
+	if err != nil {
+		return fmt.Errorf("store: delete integration token: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("store: no integration token found for provider=%s", provider)
+	}
+
+	return nil
+}

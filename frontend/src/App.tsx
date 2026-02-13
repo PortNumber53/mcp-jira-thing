@@ -5,6 +5,7 @@ import Billing from './pages/Billing';
 import Pricing from './pages/Pricing';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
+import Integrations from './pages/Integrations';
 
 type SessionUser = {
   id: number;
@@ -294,7 +295,7 @@ const AppContent = () => {
     }
 
     if (session.status === "unauthenticated") {
-      if (route === "/dashboard" || route === "/settings" || route === "/billing") {
+      if (route === "/dashboard" || route === "/settings" || route === "/billing" || route === "/integrations") {
         return (
           <div className="card card--center">
             <p>You need to sign in to access this page.</p>
@@ -872,6 +873,9 @@ const AppContent = () => {
                   <Link to="/settings" className={`app-shell__nav-item${location.pathname === "/settings" ? " app-shell__nav-item--active" : ""}`}>
                     Settings
                   </Link>
+                  <Link to="/integrations" className={`app-shell__nav-item${location.pathname === "/integrations" ? " app-shell__nav-item--active" : ""}`}>
+                    Integrations
+                  </Link>
                   <Link to="/billing" className={`app-shell__nav-item${location.pathname === "/billing" ? " app-shell__nav-item--active" : ""}`}>
                     Billing
                   </Link>
@@ -947,6 +951,16 @@ const AppContent = () => {
                       >
                         Billing
                       </button>
+                      <button
+                        type="button"
+                        className="account-menu__item"
+                        onClick={() => {
+                          navigate("/integrations");
+                          setAccountMenuOpen(false);
+                        }}
+                      >
+                        Integrations
+                      </button>
                       <button type="button" className="account-menu__item account-menu__item--danger" onClick={beginLogout}>
                         Sign out
                       </button>
@@ -963,6 +977,7 @@ const AppContent = () => {
             {session.status === "error" && <p className="app__status app__status--error">{session.message}</p>}
             <Routes>
               <Route path="/billing" element={<Billing />} />
+              <Route path="/integrations" element={<Integrations />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/privacy" element={<Privacy />} />

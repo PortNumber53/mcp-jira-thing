@@ -769,6 +769,224 @@ export async function handleFrontendFetch(
       return jsonResponse({ error: "Method not allowed" }, { status: 405 });
     }
 
+    // --- Integration tokens proxy ---
+    if (url.pathname === "/api/integrations/tokens") {
+      const session = await readSession(request, env);
+      if (!session) {
+        return jsonResponse({ error: "Not authenticated" }, { status: 401 });
+      }
+
+      if (!env.BACKEND_BASE_URL) {
+        return jsonResponse({ error: "Backend is not configured" }, { status: 500 });
+      }
+
+      const backendUrl = new URL("/api/integrations/tokens", env.BACKEND_BASE_URL);
+
+      if (request.method === "GET") {
+        if (session.email) {
+          backendUrl.searchParams.set("email", session.email);
+        }
+        const upstreamResp = await fetch(backendUrl.toString(), { method: "GET" });
+        const text = await upstreamResp.text();
+        return new Response(text, {
+          status: upstreamResp.status,
+          headers: { "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json" },
+        });
+      }
+
+      if (request.method === "POST") {
+        let body: Record<string, unknown>;
+        try {
+          body = (await request.json()) as Record<string, unknown>;
+        } catch {
+          return jsonResponse({ error: "Invalid JSON" }, { status: 400 });
+        }
+        body.user_email = session.email;
+        const upstreamResp = await fetch(backendUrl.toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const text = await upstreamResp.text();
+        return new Response(text, {
+          status: upstreamResp.status,
+          headers: { "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json" },
+        });
+      }
+
+      if (request.method === "DELETE") {
+        const provider = url.searchParams.get("provider");
+        if (!provider) {
+          return jsonResponse({ error: "provider query parameter is required" }, { status: 400 });
+        }
+        backendUrl.searchParams.set("email", session.email || "");
+        backendUrl.searchParams.set("provider", provider);
+        const upstreamResp = await fetch(backendUrl.toString(), { method: "DELETE" });
+        const text = await upstreamResp.text();
+        return new Response(text, {
+          status: upstreamResp.status,
+          headers: { "Content-Type": upstreamResp.headers.get("Content-Type") || "application/json" },
+        });
+      }
+
+      return jsonResponse({ error: "Method not allowed" }, { status: 405 });
+    }
+
+    // Google Docs OAuth connect flow
+    if (url.pathname === "/api/integrations/google-docs/connect") {
+      const session = await readSession(request, env);
+      if (!session) {
+        return jsonResponse({ error: "Not authenticated" }, { status: 401 });
+      }
+
+      const clientId = (env as unknown as Record<string, unknown>).GOOGLE_DOCS_CLIENT_ID as string | undefined;
+      if (!clientId) {
+        return jsonResponse({ error: "Google Docs integration is not configured" }, { status: 500 });
+      }
+
+      const effectiveOrigin = getEffectiveOrigin(request, url);
+      const redirectUri = `${effectiveOrigin}/callback/google-docs`;
+      const state = crypto.randomUUID();
+
+      // Store state in a short-lived cookie
+      const stateCookie = serializeCookie("gdocs_state", state, {
+        httpOnly: true,
+        secure: url.protocol === "https:" || request.headers.get("x-forwarded-proto") === "https",
+        sameSite: "Lax",
+        path: "/",
+        maxAge: 600,
+      });
+
+      const scopes = [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive.readonly",
+      ].join(" ");
+
+      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", scopes);
+      authUrl.searchParams.set("access_type", "offline");
+      authUrl.searchParams.set("prompt", "consent");
+      authUrl.searchParams.set("state", state);
+
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: authUrl.toString(),
+          "Set-Cookie": stateCookie,
+        },
+      });
+    }
+
+    // Google Docs OAuth callback
+    if (url.pathname === "/callback/google-docs") {
+      const session = await readSession(request, env);
+      if (!session) {
+        return new Response("Not authenticated", { status: 401 });
+      }
+
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      const error = url.searchParams.get("error");
+
+      if (error) {
+        return new Response(`<html><body><script>window.location.href="/integrations?error=${encodeURIComponent(error)}";</script></body></html>`, {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        });
+      }
+
+      if (!code || !state) {
+        return new Response("Missing code or state", { status: 400 });
+      }
+
+      // Verify state cookie
+      const cookies = parseCookies(request.headers.get("Cookie") || "");
+      const savedState = cookies.gdocs_state;
+      if (!savedState || savedState !== state) {
+        return new Response("Invalid state parameter", { status: 400 });
+      }
+
+      const clientId = (env as unknown as Record<string, unknown>).GOOGLE_DOCS_CLIENT_ID as string | undefined;
+      const clientSecret = (env as unknown as Record<string, unknown>).GOOGLE_DOCS_CLIENT_SECRET as string | undefined;
+      if (!clientId || !clientSecret) {
+        return new Response("Google Docs integration is not configured", { status: 500 });
+      }
+
+      const effectiveOrigin = getEffectiveOrigin(request, url);
+      const redirectUri = `${effectiveOrigin}/callback/google-docs`;
+
+      // Exchange code for tokens
+      const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+          grant_type: "authorization_code",
+        }),
+      });
+
+      if (!tokenResp.ok) {
+        const errText = await tokenResp.text();
+        console.error("[google-docs] Token exchange failed:", errText);
+        return new Response(`<html><body><script>window.location.href="/integrations?error=token_exchange_failed";</script></body></html>`, {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        });
+      }
+
+      const tokenData = (await tokenResp.json()) as {
+        access_token: string;
+        refresh_token?: string;
+        expires_in?: number;
+        token_type?: string;
+        scope?: string;
+      };
+
+      // Store the token in the backend
+      if (env.BACKEND_BASE_URL) {
+        const expiresAt = tokenData.expires_in
+          ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+          : undefined;
+
+        await fetch(new URL("/api/integrations/tokens", env.BACKEND_BASE_URL).toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_email: session.email,
+            provider: "google_docs",
+            access_token: tokenData.access_token,
+            refresh_token: tokenData.refresh_token || null,
+            token_type: tokenData.token_type || "Bearer",
+            expires_at: expiresAt,
+            scopes: tokenData.scope || null,
+          }),
+        });
+      }
+
+      // Clear state cookie and redirect to integrations page
+      const clearCookie = serializeCookie("gdocs_state", "", {
+        httpOnly: true,
+        secure: url.protocol === "https:" || request.headers.get("x-forwarded-proto") === "https",
+        sameSite: "Lax",
+        path: "/",
+        maxAge: 0,
+      });
+
+      return new Response(`<html><body><script>window.location.href="/integrations?connected=google_docs";</script></body></html>`, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html",
+          "Set-Cookie": clearCookie,
+        },
+      });
+    }
+
     if (url.pathname === "/api/billing/create-subscription" && request.method === "POST") {
       const session = await readSession(request, env);
       if (!session) {

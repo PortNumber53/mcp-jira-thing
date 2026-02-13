@@ -4,13 +4,13 @@ import "time"
 
 // User represents a sanitized view of a user record exposed by the backend API.
 type User struct {
-	ID        int64      `json:"id"`
-	Login     string     `json:"login"`
-	Email     *string    `json:"email,omitempty"`
-	Name      *string    `json:"name,omitempty"`
-	AvatarURL *string    `json:"avatar_url,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID        int64     `json:"id"`
+	Login     string    `json:"login"`
+	Email     *string   `json:"email,omitempty"`
+	Name      *string   `json:"name,omitempty"`
+	AvatarURL *string   `json:"avatar_url,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // PublicUser represents the external API view of a user with string ID
@@ -57,10 +57,10 @@ type JiraUserSettings struct {
 // returned to trusted server-side callers (e.g. the MCP Worker) and never to
 // the public frontend.
 type JiraUserSettingsWithSecret struct {
-	JiraBaseURL      string  `json:"jira_base_url"`
-	JiraEmail        string  `json:"jira_email"`
-	JiraCloudID      *string `json:"jira_cloud_id,omitempty"`
-	IsDefault        bool    `json:"is_default"`
+	JiraBaseURL       string  `json:"jira_base_url"`
+	JiraEmail         string  `json:"jira_email"`
+	JiraCloudID       *string `json:"jira_cloud_id,omitempty"`
+	IsDefault         bool    `json:"is_default"`
 	AtlassianAPIToken string  `json:"atlassian_api_key"`
 }
 
@@ -87,6 +87,33 @@ type RequestMetrics struct {
 	AvgResponseTimeMs int    `json:"avg_response_time_ms"`
 	TotalBytes        int    `json:"total_bytes"`
 	LastRequestAt     string `json:"last_request_at"`
+}
+
+// IntegrationToken represents an OAuth token for a third-party integration
+// (e.g. Google Docs, Slack) stored per user.
+type IntegrationToken struct {
+	ID           int64      `json:"id"`
+	UserID       int64      `json:"-"`
+	Provider     string     `json:"provider"`
+	AccessToken  string     `json:"access_token,omitempty"`
+	RefreshToken *string    `json:"refresh_token,omitempty"`
+	TokenType    string     `json:"token_type"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	Scopes       *string    `json:"scopes,omitempty"`
+	Metadata     *string    `json:"metadata,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+// IntegrationTokenPublic is a safe view of IntegrationToken that omits secrets.
+type IntegrationTokenPublic struct {
+	Provider  string     `json:"provider"`
+	TokenType string     `json:"token_type"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	Scopes    *string    `json:"scopes,omitempty"`
+	Connected bool       `json:"connected"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 // ConnectedAccount represents an OAuth provider connected to a user account
