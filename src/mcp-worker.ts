@@ -5,6 +5,7 @@ import { JiraClient } from "./tools/jira";
 import { GitHubHandler } from "./github-handler";
 import { registerTools } from "./include/tools";
 import type { Props } from "./utils";
+import { integrationRegistry } from "./integrations";
 
 export type McpEnv = Cloudflare.Env & {
   SESSION_SECRET?: string;
@@ -105,6 +106,36 @@ export class MyMCP extends McpAgent<McpEnv, Props> {
 
   async init() {
     await registerTools.call(this);
+
+    // Activate feature-flag gated integration modules
+    const props = (this.props as Props | undefined) ?? undefined;
+    await integrationRegistry.activateAll({
+      env: this.env as unknown as Record<string, unknown>,
+      backendBaseUrl: (this.env as McpEnv).BACKEND_BASE_URL,
+      userEmail: props?.login,
+    });
+
+    // Register integration status tool
+    this.server.tool(
+      "listIntegrations",
+      "List all registered third-party integration modules and their status (enabled, configured, errors).",
+      {},
+      async () => {
+        const statuses = await integrationRegistry.getStatuses({
+          env: this.env as unknown as Record<string, unknown>,
+          backendBaseUrl: (this.env as McpEnv).BACKEND_BASE_URL,
+          userEmail: props?.login,
+        });
+        const lines = statuses.map(
+          (s) =>
+            `${s.name} (${s.id}): ${s.enabled ? "enabled" : "disabled"}, ${s.configured ? "configured" : "not configured"}${s.error ? ` — ${s.error}` : ""}`,
+        );
+        return {
+          content: [{ text: lines.length > 0 ? lines.join("\n") : "No integrations registered.", type: "text" }],
+          data: { success: true, integrations: statuses },
+        };
+      },
+    );
   }
 
   private async buildTenantJiraEnv(): Promise<McpEnv> {

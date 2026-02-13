@@ -81,6 +81,8 @@ export async function registerTools() {
     "updateIssueType",
     "deleteIssueType",
     "getIssueTypeAlternatives",
+    "assignIssue",
+    "unassignIssue",
   ]);
   const IssueActionSchema = z.union([z.literal("/help"), IssueActionEnum]);
 
@@ -543,6 +545,7 @@ export async function registerTools() {
       filename: z.string().optional().describe("Filename when uploading an attachment."),
       fileBase64: z.string().optional().describe("Base64-encoded file contents for addAttachment."),
       contentType: z.string().optional().describe("Optional MIME type for uploaded attachment."),
+      assignee: z.string().optional().describe("Assignee account ID for assignIssue/unassignIssue, or when creating/updating an issue. Use getJiraUsers to find valid account IDs."),
       attachmentId: z.string().optional().describe("Attachment ID for deleteAttachment."),
       transitionId: z.string().optional().describe("Transition ID for transitionIssue."),
       priorityId: z.string().optional().describe("Priority ID for setPriority."),
@@ -575,6 +578,7 @@ export async function registerTools() {
 - getLabels | addLabels | removeLabels | setLabels: manage issue labels
 - listAttachments | addAttachment | deleteAttachment: work with attachments (attachments require base64 payload)
 - listPriorities | setPriority: inspect and set issue priority
+- assignIssue | unassignIssue: assign or unassign a user on an issue (use getJiraUsers to find account IDs)
 - listIssueTypes | createIssueType | getIssueType | updateIssueType | deleteIssueType | getIssueTypeAlternatives: manage issue types (set projectKey on listIssueTypes to scope results).`;
         return { content: [{ text: helpText, type: "text" }] };
       }
@@ -724,6 +728,9 @@ export async function registerTools() {
           const fields = { ...(extractFieldMapInput() || {}) };
           if (input.summary !== undefined) fields.summary = input.summary;
           if (input.description !== undefined) fields.description = input.description;
+          if (input.assignee !== undefined) {
+            fields.assignee = input.assignee === "" ? null : { accountId: input.assignee };
+          }
           if (Object.keys(fields).length === 0) {
             throw new Error("updateIssue requires at least one field to modify.");
           }
@@ -1051,6 +1058,23 @@ export async function registerTools() {
           return {
             content: [{ text: `Found ${alternatives.length} alternative issue types.`, type: "text" }],
             data: { success: true, alternatives },
+          };
+        }
+        case "assignIssue": {
+          const issueIdOrKey = ensureIssue();
+          if (!input.assignee) throw new Error("assignIssue requires the 'assignee' parameter (an accountId). Use getJiraUsers to find valid account IDs.");
+          await jiraClient.updateIssue(issueIdOrKey, { assignee: { accountId: input.assignee } });
+          return {
+            content: [{ text: `Issue ${issueIdOrKey} assigned to ${input.assignee}.`, type: "text" }],
+            data: { success: true, issueIdOrKey, assignee: input.assignee },
+          };
+        }
+        case "unassignIssue": {
+          const issueIdOrKey = ensureIssue();
+          await jiraClient.updateIssue(issueIdOrKey, { assignee: null });
+          return {
+            content: [{ text: `Issue ${issueIdOrKey} unassigned.`, type: "text" }],
+            data: { success: true, issueIdOrKey, assignee: null },
           };
         }
         default:
