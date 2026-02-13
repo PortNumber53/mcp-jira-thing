@@ -5,7 +5,7 @@
  * so their content can be read and modified through the platform.
  *
  * Feature flag: INTEGRATION_GOOGLE_DOCS_ENABLED=true
- * Required env vars: GOOGLE_DOCS_CLIENT_ID, GOOGLE_DOCS_CLIENT_SECRET
+ * Required env vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
  */
 
 import {
@@ -60,22 +60,22 @@ export class GoogleDocsIntegration implements IntegrationModule {
   id = "google_docs";
   name = "Google Docs";
   featureFlag = "INTEGRATION_GOOGLE_DOCS_ENABLED";
-  requiredEnvVars = ["GOOGLE_DOCS_CLIENT_ID", "GOOGLE_DOCS_CLIENT_SECRET"];
+  requiredEnvVars = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"];
 
   private clientId: string | null = null;
   private clientSecret: string | null = null;
 
   async initialize(ctx: IntegrationContext): Promise<void> {
-    this.clientId = ctx.env.GOOGLE_DOCS_CLIENT_ID as string;
-    this.clientSecret = ctx.env.GOOGLE_DOCS_CLIENT_SECRET as string;
+    this.clientId = ctx.env.GOOGLE_CLIENT_ID as string;
+    this.clientSecret = ctx.env.GOOGLE_CLIENT_SECRET as string;
     console.log(`[google-docs] Integration initialized`);
   }
 
   async getStatus(ctx: IntegrationContext): Promise<IntegrationStatus> {
     const flagValue = ctx.env[this.featureFlag];
     const enabled = flagValue === true || flagValue === "true" || flagValue === "1";
-    const hasClientId = !!ctx.env.GOOGLE_DOCS_CLIENT_ID;
-    const hasClientSecret = !!ctx.env.GOOGLE_DOCS_CLIENT_SECRET;
+    const hasClientId = !!ctx.env.GOOGLE_CLIENT_ID;
+    const hasClientSecret = !!ctx.env.GOOGLE_CLIENT_SECRET;
 
     return {
       id: this.id,
@@ -83,9 +83,9 @@ export class GoogleDocsIntegration implements IntegrationModule {
       enabled,
       configured: hasClientId && hasClientSecret,
       error: !hasClientId
-        ? "GOOGLE_DOCS_CLIENT_ID not set"
+        ? "GOOGLE_CLIENT_ID not set"
         : !hasClientSecret
-          ? "GOOGLE_DOCS_CLIENT_SECRET not set"
+          ? "GOOGLE_CLIENT_SECRET not set"
           : undefined,
     };
   }

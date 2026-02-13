@@ -839,8 +839,7 @@ export async function handleFrontendFetch(
         return jsonResponse({ error: "Not authenticated" }, { status: 401 });
       }
 
-      const clientId = (env as unknown as Record<string, unknown>).GOOGLE_DOCS_CLIENT_ID as string | undefined;
-      if (!clientId) {
+      if (!env.GOOGLE_CLIENT_ID) {
         return jsonResponse({ error: "Google Docs integration is not configured" }, { status: 500 });
       }
 
@@ -862,7 +861,7 @@ export async function handleFrontendFetch(
       ].join(" ");
 
       const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
       authUrl.searchParams.set("redirect_uri", redirectUri);
       authUrl.searchParams.set("response_type", "code");
       authUrl.searchParams.set("scope", scopes);
@@ -930,9 +929,7 @@ export async function handleFrontendFetch(
         return new Response("Invalid state parameter", { status: 400 });
       }
 
-      const clientId = (env as unknown as Record<string, unknown>).GOOGLE_DOCS_CLIENT_ID as string | undefined;
-      const clientSecret = (env as unknown as Record<string, unknown>).GOOGLE_DOCS_CLIENT_SECRET as string | undefined;
-      if (!clientId || !clientSecret) {
+      if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
         return new Response("Google Docs integration is not configured", { status: 500 });
       }
 
@@ -945,8 +942,8 @@ export async function handleFrontendFetch(
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           code,
-          client_id: clientId,
-          client_secret: clientSecret,
+          client_id: env.GOOGLE_CLIENT_ID,
+          client_secret: env.GOOGLE_CLIENT_SECRET,
           redirect_uri: redirectUri,
           grant_type: "authorization_code",
         }),
