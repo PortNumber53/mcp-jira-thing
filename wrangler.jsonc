@@ -43,7 +43,12 @@
   // production value configured via Wrangler environments/secrets.
   // Configure BACKEND_BASE_URL per-environment instead (e.g. [env.production].vars).
   "dev": {
-    "port": 18114
+    "ip": "0.0.0.0",
+    "port": 18114,
+    "assets": {
+      "directory": "frontend/dist/client",
+      "binding": "ASSETS"
+    }
   },
   "env": {
     "production": {

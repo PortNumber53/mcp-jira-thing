@@ -7,7 +7,7 @@ import (
 
 // Config captures runtime configuration values used by the backend service.
 type Config struct {
-	// ServerAddress is the host:port pair the HTTP server listens on. Defaults to ":18111".
+	// ServerAddress is the host:port pair the HTTP server listens on. Defaults to "0.0.0.0:18111".
 	ServerAddress string
 
 	// DatabaseURL is the Postgres DSN used by database/sql for the primary database.
@@ -15,7 +15,7 @@ type Config struct {
 }
 
 const (
-	defaultServerAddress = ":18111"
+	defaultServerAddress = "0.0.0.0:18111"
 	envServerAddress     = "BACKEND_ADDR"
 	envDatabaseURL       = "DATABASE_URL"
 )

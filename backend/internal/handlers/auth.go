@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/models"
 )
 
@@ -22,6 +24,9 @@ type OAuthStore interface {
 // configuration.
 func GitHubAuth(store OAuthStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		reqID := middleware.GetReqID(r.Context())
+		log.Printf("GitHubAuth: request received (req_id=%s, method=%s, content_length=%d)", reqID, r.Method, r.ContentLength)
+
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -30,25 +35,25 @@ func GitHubAuth(store OAuthStore) http.HandlerFunc {
 
 		var payload models.GitHubAuthUser
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			log.Printf("GitHubAuth: invalid JSON payload: %v", err)
+			log.Printf("GitHubAuth: invalid JSON payload (req_id=%s): %v", reqID, err)
 			http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 			return
 		}
 
 		if payload.GitHubID == 0 || payload.Login == "" || payload.AccessToken == "" {
-			log.Printf("GitHubAuth: missing required fields (github_id=%d, login=%q, access_token_empty=%t)",
-				payload.GitHubID, payload.Login, payload.AccessToken == "")
+			log.Printf("GitHubAuth: missing required fields (req_id=%s, github_id=%d, login=%q, access_token_empty=%t)",
+				reqID, payload.GitHubID, payload.Login, payload.AccessToken == "")
 			http.Error(w, "missing required fields", http.StatusBadRequest)
 			return
 		}
 
 		if err := store.UpsertGitHubUser(r.Context(), payload); err != nil {
-			log.Printf("GitHubAuth: failed to persist GitHub user %d (%s): %v", payload.GitHubID, payload.Login, err)
+			log.Printf("GitHubAuth: failed to persist GitHub user (req_id=%s, github_id=%d, login=%s): %v", reqID, payload.GitHubID, payload.Login, err)
 			http.Error(w, "failed to persist GitHub user", http.StatusBadGateway)
 			return
 		}
 
-		log.Printf("GitHubAuth: successfully upserted GitHub user %d (%s)", payload.GitHubID, payload.Login)
+		log.Printf("GitHubAuth: successfully upserted GitHub user (req_id=%s, github_id=%d, login=%s)", reqID, payload.GitHubID, payload.Login)
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]any{"ok": true}); err != nil {
@@ -63,6 +68,9 @@ func GitHubAuth(store OAuthStore) http.HandlerFunc {
 // configuration.
 func GoogleAuth(store OAuthStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		reqID := middleware.GetReqID(r.Context())
+		log.Printf("GoogleAuth: request received (req_id=%s, method=%s, content_length=%d)", reqID, r.Method, r.ContentLength)
+
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -71,25 +79,30 @@ func GoogleAuth(store OAuthStore) http.HandlerFunc {
 
 		var payload models.GoogleAuthUser
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			log.Printf("GoogleAuth: invalid JSON payload: %v", err)
+			log.Printf("GoogleAuth: invalid JSON payload (req_id=%s): %v", reqID, err)
 			http.Error(w, "invalid JSON payload", http.StatusBadRequest)
 			return
 		}
 
 		if payload.Sub == "" || payload.AccessToken == "" {
-			log.Printf("GoogleAuth: missing required fields (sub=%q, access_token_empty=%t)",
-				payload.Sub, payload.AccessToken == "")
+			log.Printf("GoogleAuth: missing required fields (req_id=%s, sub=%q, access_token_empty=%t)",
+				reqID, payload.Sub, payload.AccessToken == "")
 			http.Error(w, "missing required fields", http.StatusBadRequest)
 			return
 		}
 
+		email := ""
+		if payload.Email != nil {
+			email = *payload.Email
+		}
+
 		if err := store.UpsertGoogleUser(r.Context(), payload); err != nil {
-			log.Printf("GoogleAuth: failed to persist Google user %q: %v", payload.Sub, err)
+			log.Printf("GoogleAuth: failed to persist Google user (req_id=%s, sub=%q, email=%q): %v", reqID, payload.Sub, email, err)
 			http.Error(w, "failed to persist Google user", http.StatusBadGateway)
 			return
 		}
 
-		log.Printf("GoogleAuth: successfully upserted Google user %q", payload.Sub)
+		log.Printf("GoogleAuth: successfully upserted Google user (req_id=%s, sub=%q, email=%q)", reqID, payload.Sub, email)
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]any{"ok": true}); err != nil {

@@ -5,6 +5,7 @@ const SESSION_COOKIE = "mjt_session";
 const STATE_COOKIE = "mjt_oauth_state";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const STATE_TTL_SECONDS = 60 * 5;
+const DEFAULT_COOKIE_DOMAIN = ".example.com";
 
 type SameSite = "Strict" | "Lax" | "None";
 
@@ -14,6 +15,12 @@ interface CookieOptions {
   path?: string;
   maxAge?: number;
   sameSite?: SameSite;
+  domain?: string;
+}
+
+function getCookieDomain(env: Env): string | undefined {
+  const domain = (env as { COOKIE_DOMAIN?: string }).COOKIE_DOMAIN;
+  return domain ?? DEFAULT_COOKIE_DOMAIN;
 }
 
 type SessionPayload = {
@@ -189,14 +196,14 @@ function parseCookies(header: string | null): Record<string, string> {
   return header.split(";").reduce<Record<string, string>>((acc, pair) => {
     const [namePart, ...valueParts] = pair.split("=");
     if (!namePart || valueParts.length === 0) {
-      return acc;
-    }
-    const name = namePart.trim();
-    const value = valueParts.join("=").trim();
-    if (name) {
-      acc[name] = value;
-    }
     return acc;
+  }
+  const name = namePart.trim();
+  const value = valueParts.join("=").trim();
+  if (name) {
+    acc[name] = value;
+  }
+  return acc;
   }, {});
 }
 
@@ -216,6 +223,9 @@ function serializeCookie(name: string, value: string, options: CookieOptions = {
   }
   if (options.secure) {
     segments.push("Secure");
+  }
+  if (options.domain) {
+    segments.push(`Domain=${options.domain}`);
   }
   return segments.join("; ");
 }
@@ -302,18 +312,34 @@ function isLocalHost(url: URL): boolean {
   return url.hostname === "localhost" || url.hostname === "127.0.0.1";
 }
 
+function isSecureRequest(request: Request, url: URL): boolean {
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  if (forwardedProto) {
+    return forwardedProto === "https";
+  }
+  return url.protocol === "https:";
+}
+
+function getEffectiveOrigin(request: Request, url: URL): string {
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  const forwardedHost = request.headers.get("x-forwarded-host");
+
+  if (forwardedProto && forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return url.origin;
+}
+
 function acceptsHtml(request: Request): boolean {
   return (request.headers.get("Accept") ?? "").includes("text/html");
 }
 
 async function serveAsset(request: Request, env: Env, url: URL): Promise<Response> {
   if (!env.ASSETS || typeof env.ASSETS.fetch !== "function") {
-    if (isLocalHost(url)) {
-      const viteUrl = new URL(request.url);
-      viteUrl.host = "localhost:18110";
-      return fetch(viteUrl.toString(), request);
-    }
-    return new Response("Assets binding is not configured", { status: 500 });
+    const viteUrl = new URL(request.url);
+    viteUrl.host = "localhost:18110";
+    return fetch(viteUrl.toString(), request);
   }
 
   const response = await env.ASSETS.fetch(request);
@@ -377,8 +403,10 @@ export async function handleFrontendFetch(
         "Set-Cookie",
         serializeCookie(STATE_COOKIE, stateCookieValue, {
           httpOnly: true,
-          secure: !isLocalHost(url),
+          secure: isSecureRequest(request, url),
           sameSite: "Lax",
+          path: "/",
+          domain: getCookieDomain(env),
           maxAge: STATE_TTL_SECONDS,
         }),
       );
@@ -386,48 +414,64 @@ export async function handleFrontendFetch(
     }
 
     if (url.pathname === "/api/auth/google/login" && request.method === "GET") {
-      if (!env.GOOGLE_CLIENT_ID) {
-        return jsonResponse({ error: "Google OAuth is not configured" }, { status: 500 });
+      try {
+        if (!env.GOOGLE_CLIENT_ID) {
+          console.error("[google-login] Missing GOOGLE_CLIENT_ID");
+          return jsonResponse({ error: "Google OAuth is not configured" }, { status: 500 });
+        }
+
+        const redirectTarget = normalizeRedirectTarget(url.searchParams.get("redirect"));
+        const linkAccount = url.searchParams.get("link") === "true";
+        const nonce = randomToken(32);
+
+        const statePayload: StatePayload = {
+          nonce,
+          redirect: redirectTarget,
+          createdAt: Date.now(),
+          linkAccount,
+        };
+
+        const effectiveOrigin = getEffectiveOrigin(request, url);
+
+        const stateCookieValue = await encodeSignedPayload(getCookieSecret(env), statePayload);
+        console.log("[google-login] issuing state cookie", {
+          redirectTarget,
+          linkAccount,
+          nonce,
+          effectiveOrigin,
+        });
+
+        const authorizeUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+        authorizeUrl.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
+        authorizeUrl.searchParams.set("redirect_uri", `${effectiveOrigin}/callback/google`);
+        authorizeUrl.searchParams.set("response_type", "code");
+        authorizeUrl.searchParams.set("scope", "openid email profile");
+        authorizeUrl.searchParams.set("state", nonce);
+        // Always show the Google account chooser so you can switch accounts
+        authorizeUrl.searchParams.set("prompt", "select_account");
+
+        const response = new Response(null, {
+          status: 302,
+          headers: {
+            Location: authorizeUrl.toString(),
+          },
+        });
+        response.headers.append(
+          "Set-Cookie",
+          serializeCookie(STATE_COOKIE, stateCookieValue, {
+            httpOnly: true,
+            secure: isSecureRequest(request, url),
+            sameSite: "Lax",
+            path: "/",
+            domain: getCookieDomain(env),
+            maxAge: STATE_TTL_SECONDS,
+          }),
+        );
+        return response;
+      } catch (err) {
+        console.error("[google-login] Failed to start OAuth flow", err);
+        return jsonResponse({ error: "Failed to start Google OAuth" }, { status: 500 });
       }
-
-      const redirectTarget = normalizeRedirectTarget(url.searchParams.get("redirect"));
-      const linkAccount = url.searchParams.get("link") === "true";
-      const nonce = randomToken(32);
-
-      const statePayload: StatePayload = {
-        nonce,
-        redirect: redirectTarget,
-        createdAt: Date.now(),
-        linkAccount,
-      };
-
-      const stateCookieValue = await encodeSignedPayload(getCookieSecret(env), statePayload);
-
-      const authorizeUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-      authorizeUrl.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
-      authorizeUrl.searchParams.set("redirect_uri", `${url.origin}/callback/google`);
-      authorizeUrl.searchParams.set("response_type", "code");
-      authorizeUrl.searchParams.set("scope", "openid email profile");
-      authorizeUrl.searchParams.set("state", nonce);
-      // Always show the Google account chooser so you can switch accounts
-      authorizeUrl.searchParams.set("prompt", "select_account");
-
-      const response = new Response(null, {
-        status: 302,
-        headers: {
-          Location: authorizeUrl.toString(),
-        },
-      });
-      response.headers.append(
-        "Set-Cookie",
-        serializeCookie(STATE_COOKIE, stateCookieValue, {
-          httpOnly: true,
-          secure: !isLocalHost(url),
-          sameSite: "Lax",
-          maxAge: STATE_TTL_SECONDS,
-        }),
-      );
-      return response;
     }
 
     if (url.pathname === "/api/auth/connected-accounts" && request.method === "GET") {
@@ -437,6 +481,7 @@ export async function handleFrontendFetch(
       }
 
       if (!env.BACKEND_BASE_URL) {
+        console.error("[connected-accounts] BACKEND_BASE_URL missing");
         return jsonResponse({ error: "Backend is not configured" }, { status: 500 });
       }
 
@@ -554,6 +599,7 @@ export async function handleFrontendFetch(
       }
 
       if (!env.BACKEND_BASE_URL) {
+        console.error("[settings/jira] BACKEND_BASE_URL missing");
         return jsonResponse({ error: "Backend is not configured" }, { status: 500 });
       }
 
@@ -654,6 +700,7 @@ export async function handleFrontendFetch(
       }
 
       if (!env.BACKEND_BASE_URL) {
+        console.error("[mcp/secret] BACKEND_BASE_URL missing");
         return jsonResponse({ error: "Backend is not configured" }, { status: 500 });
       }
 
@@ -1239,8 +1286,10 @@ export async function handleFrontendFetch(
         "Set-Cookie",
         serializeCookie(SESSION_COOKIE, "", {
           httpOnly: true,
-          secure: !isLocalHost(url),
+          secure: isSecureRequest(request, url),
           sameSite: "Lax",
+          path: "/",
+          domain: getCookieDomain(env),
           maxAge: 0,
         }),
       );
@@ -1287,8 +1336,10 @@ export async function handleFrontendFetch(
           "Set-Cookie",
           serializeCookie(SESSION_COOKIE, "", {
             httpOnly: true,
-            secure: !isLocalHost(url),
+            secure: isSecureRequest(request, url),
             sameSite: "Lax",
+            path: "/",
+            domain: getCookieDomain(env),
             maxAge: 0,
           }),
         );
@@ -1314,11 +1365,21 @@ export async function handleFrontendFetch(
       const cookies = parseCookies(request.headers.get("Cookie"));
       const stateCookie = cookies[STATE_COOKIE];
       if (!stateCookie) {
+        console.error("[google-callback] missing state cookie", {
+          cookies: Object.keys(cookies),
+          host: request.headers.get("host"),
+          forwardedProto: request.headers.get("x-forwarded-proto"),
+          forwardedHost: request.headers.get("x-forwarded-host"),
+        });
         return jsonResponse({ error: "OAuth state cookie is missing" }, { status: 400 });
       }
 
       const parsedState = await decodeSignedPayload<StatePayload>(getCookieSecret(env), stateCookie);
       if (!parsedState || parsedState.nonce !== state) {
+        console.error("[google-callback] state validation failed", {
+          parsed: parsedState,
+          receivedState: state,
+        });
         return jsonResponse({ error: "OAuth state validation failed" }, { status: 400 });
       }
 
@@ -1326,6 +1387,7 @@ export async function handleFrontendFetch(
         return jsonResponse({ error: "OAuth state is expired" }, { status: 400 });
       }
 
+      const effectiveOrigin = getEffectiveOrigin(request, url);
       const googleCallbackPath = url.pathname === "/google/callback" ? "/google/callback" : "/callback/google";
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -1336,7 +1398,7 @@ export async function handleFrontendFetch(
           client_id: env.GOOGLE_CLIENT_ID!,
           client_secret: env.GOOGLE_CLIENT_SECRET!,
           code,
-          redirect_uri: `${url.origin}${googleCallbackPath}`,
+          redirect_uri: `${effectiveOrigin}${googleCallbackPath}`,
           grant_type: "authorization_code",
         }).toString(),
       });
@@ -1482,8 +1544,10 @@ export async function handleFrontendFetch(
         "Set-Cookie",
         serializeCookie(SESSION_COOKIE, sessionCookieValue, {
           httpOnly: true,
-          secure: !isLocalHost(url),
+          secure: isSecureRequest(request, url),
           sameSite: "Lax",
+          path: "/",
+          domain: getCookieDomain(env),
           maxAge: SESSION_TTL_SECONDS,
         }),
       );
@@ -1491,8 +1555,10 @@ export async function handleFrontendFetch(
         "Set-Cookie",
         serializeCookie(STATE_COOKIE, "", {
           httpOnly: true,
-          secure: !isLocalHost(url),
+          secure: isSecureRequest(request, url),
           sameSite: "Lax",
+          path: "/",
+          domain: getCookieDomain(env),
           maxAge: 0,
         }),
       );
@@ -1706,8 +1772,10 @@ export async function handleFrontendFetch(
         "Set-Cookie",
         serializeCookie(SESSION_COOKIE, sessionCookieValue, {
           httpOnly: true,
-          secure: !isLocalHost(url),
+          secure: isSecureRequest(request, url),
           sameSite: "Lax",
+          path: "/",
+          domain: ".dev.portnumber53.com",
           maxAge: SESSION_TTL_SECONDS,
         }),
       );
@@ -1715,7 +1783,7 @@ export async function handleFrontendFetch(
         "Set-Cookie",
         serializeCookie(STATE_COOKIE, "", {
           httpOnly: true,
-          secure: !isLocalHost(url),
+          secure: isSecureRequest(request, url),
           sameSite: "Lax",
           maxAge: 0,
         }),

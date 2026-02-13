@@ -9,15 +9,28 @@ export default defineConfig({
     emptyOutDir: false,
   },
   server: {
+    host: true,
     port: 18110,
+    hmr: {
+      protocol: "wss",
+      host: "jirathing14.dev.portnumber53.com",
+      port: 443,
+      clientPort: 443,
+    },
+    allowedHosts: [
+      "jirathing14.dev.portnumber53.com",
+      "jirathing16.dev.portnumber53.com",
+      "mcp-jirathing14.dev.portnumber53.com",
+      "mcp-jirathing16.dev.portnumber53.com",
+    ],
     proxy: {
       // Proxy API requests to the Cloudflare Worker
       '/api': {
-        target: 'http://localhost:18112',
+        target: 'https://mcp-jirathing14.dev.portnumber53.com',
         changeOrigin: true,
       },
       '/auth': {
-        target: 'http://localhost:18112',
+        target: 'https://mcp-jirathing14.dev.portnumber53.com',
         changeOrigin: true,
       },
     },
