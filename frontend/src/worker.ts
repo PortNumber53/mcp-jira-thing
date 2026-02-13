@@ -308,10 +308,6 @@ async function readSession(request: Request, env: Env): Promise<SessionPayload |
   }
 }
 
-function isLocalHost(url: URL): boolean {
-  return url.hostname === "localhost" || url.hostname === "127.0.0.1";
-}
-
 function isSecureRequest(request: Request, url: URL): boolean {
   const forwardedProto = request.headers.get("x-forwarded-proto");
   if (forwardedProto) {
