@@ -58,8 +58,8 @@ pipeline {
         sh 'echo "$SESSION_SECRET" | npx wrangler secret put SESSION_SECRET --env production'
         sh 'echo "$GITHUB_CLIENT_SECRET" | npx wrangler secret put GITHUB_CLIENT_SECRET --env production'
         sh 'echo "$GOOGLE_CLIENT_SECRET" | npx wrangler secret put GOOGLE_CLIENT_SECRET --env production'
-        sh 'echo "$COOKIE_DOMAIN" | npx wrangler secret put COOKIE_DOMAIN --env production'
-
+        // Remove COOKIE_DOMAIN secret (was mistakenly uploaded as a secret; now passed as a plain var).
+        sh 'npx wrangler secret delete COOKIE_DOMAIN --env production --force || true'
         // Deploy the merged Worker (serves SPA at / and MCP at /sse).
         sh 'npx wrangler deploy --env production --var BACKEND_BASE_URL:$BACKEND_BASE_URL --var GITHUB_CLIENT_ID:$GITHUB_CLIENT_ID --var GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID --var COOKIE_DOMAIN:$COOKIE_DOMAIN'
       }
