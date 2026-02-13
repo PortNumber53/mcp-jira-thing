@@ -353,7 +353,7 @@ const AppContent = () => {
     if (session.status === "authenticated") {
       if (route === "/settings") {
         const mcpSecretExample = mcpSecret ?? "<YOUR_SECRET>";
-        const mcpSseUrlExample = `${window.location.origin}/sse?query=MCP_SECRET=${mcpSecretExample}`;
+        const mcpHttpUrlExample = `${window.location.origin}/mcp?mcp_secret=${mcpSecretExample}`;
         const platformToNpxPath: Record<typeof mcpInstructionsPlatform, string> = {
           osx: "/opt/homebrew/bin/npx",
           linux: "npx",
@@ -546,8 +546,8 @@ const AppContent = () => {
             <div className="settings-form settings-form--secondary">
               <h3 className="app__section-title">Instructions</h3>
               <p className="app__status">
-                Use the MCP secret above to connect your editor to this server. The MCP SSE endpoint for your tenant is
-                <code style={{ marginLeft: "0.35rem" }}>{mcpSseUrlExample}</code>.
+                Use the MCP secret above to connect your editor to this server. The MCP endpoint for your tenant is
+                <code style={{ marginLeft: "0.35rem" }}>{mcpHttpUrlExample}</code>.
               </p>
               <p className="app__status" style={{ marginTop: "-0.5rem", fontWeight: 600 }}>
                 IMPORTANT: make sure to adjust these examples to your system.
@@ -583,11 +583,11 @@ const AppContent = () => {
               <ol className="app__status" style={{ paddingLeft: "1.25rem", margin: 0 }}>
                 <li>Open Cursor settings for MCP servers (or edit <code>.cursor/mcp.json</code>).</li>
                 <li>
-                  Add a server entry using <code>npx</code> and the SSE URL:
+                  Add a server entry using <code>npx</code> and the MCP endpoint:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
                     {`"jira-thing": {
   "command": "${npxPathForPlatform}",
-  "args": ["mcp-remote", "${mcpSseUrlExample}"],
+  "args": ["mcp-remote", "${mcpHttpUrlExample}"],
   "env": {
     "PATH": "${pathEnvForPlatform}"
   }
@@ -605,14 +605,14 @@ const AppContent = () => {
               </h4>
               <ul className="app__status" style={{ paddingLeft: "1.25rem", margin: 0 }}>
                 <li>
-                  Any MCP client that supports SSE can connect to the same URL. Example:
+                  Any MCP client that supports HTTP or SSE can connect. Example:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-                    {`npx mcp-remote "${mcpSseUrlExample}"`}
+                    {`npx mcp-remote "${mcpHttpUrlExample}"`}
                   </pre>
                 </li>
                 <li>
-                  Some clients try an HTTP transport first and then fall back to SSE. This server supports that flow,
-                  so you can ignore an initial retry as long as it connects via SSE.
+                  This server supports both HTTP (<code>/mcp</code>) and SSE (<code>/sse</code>) transports.
+                  The HTTP endpoint is recommended as it works reliably through reverse proxies.
                 </li>
               </ul>
             </div>

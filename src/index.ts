@@ -31,6 +31,13 @@ export default {
       return new Response(null, { status: 404 });
     }
 
+    // Fast 404 for OAuth discovery so mcp-remote skips the timeout
+    if (url.pathname.startsWith("/.well-known/oauth-protected-resource") ||
+        url.pathname.startsWith("/.well-known/oauth-authorization-server") ||
+        url.pathname === "/.well-known/openid-configuration") {
+      return new Response(null, { status: 404 });
+    }
+
     // Temporary bypass for testing MCP tool invocation without authentication
     if (env.TEST_MODE_TOOL_INVOCATION === 'true' && (url.pathname.startsWith("/mcp") || url.pathname.startsWith("/sse"))) {
       if (url.pathname.startsWith("/sse")) {
@@ -99,7 +106,7 @@ export default {
       const hasBearer = request.headers.get("authorization")?.toLowerCase().startsWith("bearer ");
       const hasMcpSecret = !!extractMcpSecretFromRequest(request);
       if (!hasBearer && hasMcpSecret) {
-        return handleMcpWithoutOAuth(request, env, ctx, env.TEST_MODE_TOOL_INVOCATION === 'true');
+        return handleMcpWithoutOAuth(request, env, ctx);
       }
     }
 
