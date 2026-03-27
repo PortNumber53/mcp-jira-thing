@@ -1,6 +1,6 @@
 import { unstable_dev } from 'wrangler';
 
-describe('MCP Add Tool', () => {
+describe('MCP manageJiraProject Tool', () => {
   let worker;
 
   beforeAll(async () => {
@@ -16,23 +16,27 @@ describe('MCP Add Tool', () => {
     await worker.stop();
   });
 
-  it('should return the sum of two numbers', async () => {
+  it('should list projects via manageJiraProject', async () => {
     const resp = await worker.fetch('/mcp', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        toolName: 'add',
+        toolName: 'manageJiraProject',
         args: {
-          a: 5,
-          b: 3,
+          command: 'listProjects',
         },
       }),
     });
     const json = await resp.json();
 
     expect(resp.status).toBe(200);
-    expect(json.result).toBe(8);
+    expect(json.content).toBeDefined();
+    expect(json.content[0].type).toBe('text');
+    const parsed = JSON.parse(json.content[0].text);
+    expect(parsed.success).toBe(true);
+    expect(parsed.projects).toHaveLength(1);
+    expect(parsed.projects[0].key).toBe('TEST');
   });
 });

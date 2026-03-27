@@ -17,33 +17,35 @@ describe('MCP Jira Tools', () => {
     await worker.stop();
   });
 
-  it('should successfully get Jira projects', async () => {
+  it('should successfully list Jira projects via manageJiraProject', async () => {
     const resp = await worker.fetch('/mcp', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        toolName: 'getProjects',
-        args: {},
+        toolName: 'manageJiraProject',
+        args: { command: 'listProjects' },
       }),
     });
     const json = await resp.json();
 
     expect(resp.status).toBe(200);
-    expect(json.data.success).toBe(true);
-    expect(json.data.projects).toEqual([{ id: '1', key: 'TEST', name: 'Test Project' }]);
+    const parsed = JSON.parse(json.content[0].text);
+    expect(parsed.success).toBe(true);
+    expect(parsed.projects).toEqual([{ id: '1', key: 'TEST', name: 'Test Project', projectTypeKey: 'software' }]);
   });
 
-  it('should successfully list Jira issue types', async () => {
+  it('should successfully list Jira issue types via manageJiraProject', async () => {
     const resp = await worker.fetch('/mcp', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        toolName: 'listJiraIssueTypes',
+        toolName: 'manageJiraProject',
         args: {
+          command: 'getIssueTypes',
           projectIdOrKey: 'TEST',
         },
       }),
@@ -51,8 +53,12 @@ describe('MCP Jira Tools', () => {
     const json = await resp.json();
 
     expect(resp.status).toBe(200);
-    expect(json.data.success).toBe(true);
-    expect(json.data.projectKey).toBe('TEST');
-    expect(json.data.issueTypes).toEqual([{ id: '10001', name: 'Task', subtask: false }, { id: '10002', name: 'Sub-task', subtask: true }]);
+    const parsed = JSON.parse(json.content[0].text);
+    expect(parsed.success).toBe(true);
+    expect(parsed.projectKey).toBe('TEST');
+    expect(parsed.issueTypes).toEqual([
+      { id: '10001', name: 'Task', subtask: false, default: true },
+      { id: '10002', name: 'Sub-task', subtask: true, default: false },
+    ]);
   });
 });

@@ -47,15 +47,7 @@ export default {
         });
       } else if (url.pathname.startsWith("/mcp")) {
         const requestBody = await request.json();
-        if (requestBody.toolName === 'add' && requestBody.args) {
-          const { a, b } = requestBody.args;
-          if (typeof a === 'number' && typeof b === 'number') {
-            return new Response(JSON.stringify({ result: a + b }), {
-              headers: { 'Content-Type': 'application/json' },
-              status: 200,
-            });
-          }
-        } else if (requestBody.toolName === 'generateImage' && requestBody.args) {
+        if (requestBody.toolName === 'generateImage' && requestBody.args) {
           const { prompt, steps } = requestBody.args;
           const simulatedLogin = request.headers.get('X-MCP-User-Login');
           // For testing, hardcode ALLOWED_USERNAMES as they are in src/include/tools.js
@@ -75,26 +67,23 @@ export default {
               return new Response(JSON.stringify({ error: "Unauthorized access to generateImage tool" }), { status: 403 });
             }
           }
-        } else if (requestBody.toolName === 'getProjects') {
-          return new Response(JSON.stringify({
-            content: [{ text: `Jira Projects:\nTEST (TEST)`, type: "text" }],
-            data: { success: true, projects: [{ id: '1', key: 'TEST', name: 'Test Project' }] },
-          }), {
-            headers: { 'Content-Type': 'application/json' },
-            status: 200,
-          });
-        } else if (requestBody.toolName === 'listJiraIssueTypes' && requestBody.args && requestBody.args.projectIdOrKey) {
-          return new Response(JSON.stringify({
-            content: [{ text: `Issue types for project ${requestBody.args.projectIdOrKey}:\n\nStandard Issue Types:\n- Task (ID: 10001)\n\nSubtask Issue Types:\n- Sub-task (ID: 10002)`, type: "text" }],
-            data: {
-              success: true,
-              projectKey: requestBody.args.projectIdOrKey,
-              issueTypes: [{ id: '10001', name: 'Task', subtask: false }, { id: '10002', name: 'Sub-task', subtask: true }],
-            },
-          }), {
-            headers: { 'Content-Type': 'application/json' },
-            status: 200,
-          });
+        } else if (requestBody.toolName === 'manageJiraProject' && requestBody.args) {
+          if (requestBody.args.command === 'listProjects') {
+            return new Response(JSON.stringify({
+              content: [{ text: JSON.stringify({ success: true, projects: [{ id: '1', key: 'TEST', name: 'Test Project', projectTypeKey: 'software' }] }, null, 2), type: "text" }],
+            }), {
+              headers: { 'Content-Type': 'application/json' },
+              status: 200,
+            });
+          }
+          if (requestBody.args.command === 'getIssueTypes' && requestBody.args.projectIdOrKey) {
+            return new Response(JSON.stringify({
+              content: [{ text: JSON.stringify({ success: true, projectKey: requestBody.args.projectIdOrKey, issueTypes: [{ id: '10001', name: 'Task', subtask: false, default: true }, { id: '10002', name: 'Sub-task', subtask: true, default: false }] }, null, 2), type: "text" }],
+            }), {
+              headers: { 'Content-Type': 'application/json' },
+              status: 200,
+            });
+          }
         }
         return new Response(JSON.stringify({ error: "Tool invocation failed in test mode" }), { status: 400 });
       }

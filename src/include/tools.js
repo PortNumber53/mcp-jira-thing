@@ -41,15 +41,63 @@ export async function registerTools() {
   console.log(`[TOOLS] Starting tool registration - Version: ${TOOLS_VERSION}`);
   const registeredTools = [];
 
-  server.tool(
-    "add",
-    "Add two numbers the way only MCP can",
-    { a: z.number(), b: z.number() },
-    async ({ a, b }) => ({
-      content: [{ text: String(a + b), type: "text" }],
-    }),
-  );
-  registeredTools.push("add");
+  // --- Response normalization helpers ---
+  // Strip avatarUrls from any object tree (AI agents don't need visual data)
+  const stripAvatarUrls = (obj) => {
+    if (!obj || typeof obj !== "object") return obj;
+    if (Array.isArray(obj)) return obj.map(stripAvatarUrls);
+    const result = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (key === "avatarUrls") continue;
+      if (key === "self" && typeof value === "string" && value.includes("/rest/api/")) continue;
+      result[key] = stripAvatarUrls(value);
+    }
+    return result;
+  };
+
+  // Extract a compact user reference { accountId, displayName, email }
+  const normalizeUser = (user) => {
+    if (!user) return null;
+    return {
+      accountId: user.accountId,
+      displayName: user.displayName,
+      email: user.emailAddress || undefined,
+    };
+  };
+
+  // Deduplicate users from an issue list and replace inline user objects with accountId refs
+  const normalizeResponse = (data) => {
+    const cleaned = stripAvatarUrls(data);
+    if (!cleaned) return cleaned;
+
+    // If it has an issues array, deduplicate users
+    if (Array.isArray(cleaned.issues)) {
+      const usersMap = new Map();
+      const collectUser = (user) => {
+        if (user && user.accountId && !usersMap.has(user.accountId)) {
+          usersMap.set(user.accountId, normalizeUser(user));
+        }
+      };
+      const replaceUser = (user) => {
+        if (!user || !user.accountId) return user;
+        collectUser(user);
+        return user.accountId;
+      };
+
+      for (const issue of cleaned.issues) {
+        if (!issue.fields) continue;
+        if (issue.fields.assignee) issue.fields.assignee = replaceUser(issue.fields.assignee);
+        if (issue.fields.reporter) issue.fields.reporter = replaceUser(issue.fields.reporter);
+        if (issue.fields.creator) issue.fields.creator = replaceUser(issue.fields.creator);
+      }
+
+      if (usersMap.size > 0) {
+        cleaned._users = Array.from(usersMap.values());
+      }
+    }
+
+    return cleaned;
+  };
 
   const IssueActionEnum = z.enum([
     "createIssue",
@@ -83,406 +131,118 @@ export async function registerTools() {
     "getIssueTypeAlternatives",
     "assignIssue",
     "unassignIssue",
+    "moveToBacklog",
   ]);
   const IssueActionSchema = z.union([z.literal("/help"), IssueActionEnum]);
 
-  // Basic Jira project utilities
-  server.tool("getProjects", "Get a list of all Jira projects", {}, async () => {
-    const jiraClient = await getJiraClient();
-    const projects = await jiraClient.getProjects();
-    const projectsText = projects.map((project) => `${project.name} (${project.key})`).join("\n");
-    return {
-      content: [{ text: `Jira Projects:\n${projectsText}`, type: "text" }],
-    };
-  });
-  registeredTools.push("getProjects");
-
+  // --- manageJiraProject: unified project management ---
   server.tool(
-    "createJiraProject",
-    "Create a new Jira project",
+    "manageJiraProject",
+    "Unified Jira project tool. Commands: listProjects, getProject, createProject, getIssueTypes, getBoards. Pass command='/help' for usage.",
     {
-      key: z
-        .string()
-        .describe(
-          "[REQUIRED] Project key - must be uppercase, unique, and contain only letters and numbers (e.g., 'TEST', 'DEV', 'PROD'). Maximum 10 characters.",
-        ),
-      name: z.string().describe("[REQUIRED] Project name - descriptive name for the project (e.g., 'Test Project', 'Development Team')."),
-      projectTypeKey: z
-        .string()
-        .describe(
-          "[REQUIRED] Project type key - common values are 'software', 'business', or 'service_desk'. Check with your Jira admin for valid values.",
-        ),
-      leadAccountId: z
-        .string()
-        .describe(
-          "[REQUIRED] Account ID of the project lead - use the 'getJiraUsers' tool to find valid account IDs. This is required by the Jira API.",
-        ),
-      projectTemplateKey: z
-        .string()
-        .optional()
-        .describe(
-          "[OPTIONAL/REQUIRED] Project template key - may be required depending on your Jira configuration. Common values include 'com.pyxis.greenhopper.jira:gh-scrum-template', 'com.pyxis.greenhopper.jira:gh-kanban-template'.",
-        ),
-      description: z
-        .string()
-        .optional()
-        .describe("[OPTIONAL] Project description - detailed information about the project's purpose and scope."),
-      url: z
-        .string()
-        .optional()
-        .describe("[OPTIONAL] Project URL - web address associated with the project (e.g., 'https://example.com/project')."),
-      assigneeType: z
-        .string()
-        .optional()
-        .describe(
-          "[OPTIONAL] Assignee type - determines default assignee behavior. Valid values: 'PROJECT_LEAD', 'UNASSIGNED'. Default is 'PROJECT_LEAD'.",
-        ),
-      avatarId: z
-        .number()
-        .optional()
-        .describe("[OPTIONAL] Avatar ID - numeric ID of the avatar to use for the project. Omit to use default avatar."),
-      categoryId: z.number().optional().describe("[OPTIONAL] Category ID - numeric ID of the project category to assign this project to."),
+      command: z.enum(["listProjects", "getProject", "createProject", "getIssueTypes", "getBoards", "/help"])
+        .describe("The operation to perform."),
+      projectIdOrKey: z.string().optional().describe("Project key or ID (required for getProject, getIssueTypes, getBoards)."),
+      expand: z.string().optional().describe("Comma-separated expansions for getProject (e.g. 'description,lead,issueTypes')."),
+      // createProject fields
+      key: z.string().optional().describe("Project key for createProject (uppercase, max 10 chars, e.g. 'TEST')."),
+      name: z.string().optional().describe("Project name for createProject."),
+      projectTypeKey: z.string().optional().describe("Project type for createProject ('software', 'business', 'service_desk')."),
+      leadAccountId: z.string().optional().describe("Lead account ID for createProject. Use manageJiraUsers to find IDs."),
+      projectTemplateKey: z.string().optional().describe("Template key for createProject (may be required by your Jira instance)."),
+      description: z.string().optional().describe("Project description for createProject."),
+      url: z.string().optional().describe("Project URL for createProject."),
+      assigneeType: z.string().optional().describe("Assignee type for createProject ('PROJECT_LEAD' or 'UNASSIGNED')."),
+      categoryId: z.number().optional().describe("Category ID for createProject."),
     },
-    async (payload) => {
-      try {
-        const jiraClient = await getJiraClient();
-        const newProject = await jiraClient.createProject(payload);
-        const projectData = {
-          id: newProject.id,
-          key: newProject.key,
-          name: newProject.name,
-          projectTypeKey: newProject.projectTypeKey,
-          description: newProject.description || null,
-          lead: newProject.lead
-            ? {
-              accountId: newProject.lead.accountId,
-              displayName: newProject.lead.displayName,
-            }
-            : null,
-          success: true,
-        };
-        const projectJson = JSON.stringify(projectData, null, 2);
+    async (input) => {
+      if (input.command === "/help") {
         return {
-          content: [
-            { text: `Project created: ${newProject.name} (${newProject.key})`, type: "text" },
-            { text: `MACHINE_PARSEABLE_DATA:\n${projectJson}`, type: "text" },
-          ],
-        };
-      } catch (error) {
-        const location = extractFirstAppLocation(error);
-        let errorMessage = `Error creating project: ${error && error.message ? error.message : "Unknown error"}`;
-        let errorType = "unknown";
-        if (error && typeof error.message === "string") {
-          if (error.message.includes("projectLead")) {
-            errorMessage += "\n\nYou must specify a valid leadAccountId. Use the 'getJiraUsers' tool to find valid account IDs.";
-            errorType = "missing_lead";
-          } else if (error.message.includes("projectTypeKey")) {
-            errorMessage += "\n\nInvalid projectTypeKey. Common values are 'software', 'business', or 'service_desk'.";
-            errorType = "invalid_project_type";
-          } else if (error.message.includes("projectTemplateKey")) {
-            errorMessage += "\n\nYour Jira instance requires a projectTemplateKey. Contact your Jira admin for valid template keys.";
-            errorType = "missing_template";
-          }
-        }
-        const errorData = {
-          success: false,
-          errorType,
-          message: (error && error.message) || "Unknown error",
-          payload,
-          location,
-        };
-        const errorJson = JSON.stringify(errorData, null, 2);
-        return {
-          content: [
-            { text: location ? `${errorMessage} (at ${location})` : errorMessage, type: "text" },
-            { text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" },
-          ],
+          content: [{
+            text: `manageJiraProject commands:
+- listProjects: list all Jira projects
+- getProject: get project details (requires projectIdOrKey, optional expand)
+- createProject: create a project (requires key, name, projectTypeKey, leadAccountId)
+- getIssueTypes: list issue types for a project (requires projectIdOrKey)
+- getBoards: list Agile boards for a project (requires projectIdOrKey)`,
+            type: "text",
+          }],
         };
       }
-    },
-  );
-  registeredTools.push("createJiraProject");
 
-  // Jira user search helper
-  server.tool(
-    "getJiraUsers",
-    "Find Jira users to get valid account IDs for project creation",
-    {
-      query: z
-        .string()
-        .describe(
-          '[REQUIRED] Search query for users - can be a name, email, or username. Partial matches are supported (e.g., "john", "smith@example.com").',
-        ),
-      maxResults: z
-        .number()
-        .optional()
-        .describe(
-          "[OPTIONAL] Maximum number of results to return. Default is 50 if not specified. Use a smaller number for more focused results.",
-        ),
-    },
-    async ({ query, maxResults }) => {
-      try {
-        const jiraClient = await getJiraClient();
-        console.log("[mcp] getJiraUsers: received request", { query, maxResults });
-        const response = await jiraClient.searchUsers(query, maxResults ?? 10);
-        console.log("[mcp] getJiraUsers: Jira responded", {
-          query,
-          count: Array.isArray(response) ? response.length : null,
-          type: typeof response,
-        });
+      const jiraClient = await getJiraClient();
 
-        if (!Array.isArray(response) || response.length === 0) {
+      switch (input.command) {
+        case "listProjects": {
+          const projects = await jiraClient.getProjects();
+          const normalized = stripAvatarUrls(projects.map((p) => ({
+            id: p.id, key: p.key, name: p.name, projectTypeKey: p.projectTypeKey,
+          })));
           return {
-            content: [{ text: `No users found matching "${query}"`, type: "text" }],
+            content: [{ text: JSON.stringify({ success: true, projects: normalized }, null, 2), type: "text" }],
           };
         }
-
-        const formattedUsers = response.map((user) => ({
-          displayName: user.displayName,
-          email: user.emailAddress || null,
-          accountId: user.accountId,
-          active: user.active,
-        }));
-
-        const usersText = formattedUsers
-          .map(
-            (user) =>
-              `- ${user.displayName}\n  Account ID: ${user.accountId}\n  Email: ${user.email || "None"}\n  Active: ${user.active ? "Yes" : "No"
-              }`,
-          )
-          .join("\n\n");
-
-        const usersJson = JSON.stringify(formattedUsers, null, 2);
-
-        return {
-          content: [
-            {
-              text: `Found ${response.length} users matching "${query}":\n\n${usersText}\n\nUse the accountId value when creating projects.`,
-              type: "text",
-            },
-            {
-              text: `MACHINE_PARSEABLE_DATA:\n${usersJson}`,
-              type: "text",
-            },
-          ],
-        };
-      } catch (error) {
-        const location = extractFirstAppLocation(error);
-        const errorMessage = `Error searching for users: ${(error && error.message) || "Unknown error"}`;
-        const errorJson = JSON.stringify(
-          {
-            error: true,
-            message: (error && error.message) || "Unknown error",
-            query,
-            location,
-          },
-          null,
-          2,
-        );
-        return {
-          content: [
-            { text: location ? `${errorMessage} (at ${location})` : errorMessage, type: "text" },
-            { text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" },
-          ],
-        };
-      }
-    },
-  );
-  registeredTools.push("getJiraUsers");
-
-  // Detailed Jira project info
-  server.tool(
-    "getJiraProject",
-    "Get details of a specific Jira project",
-    {
-      projectIdOrKey: z
-        .string()
-        .describe(
-          "[REQUIRED] Project ID or key - either the numeric ID or the project key (e.g., 'TEST', '10000'). Project key is preferred.",
-        ),
-      expand: z
-        .string()
-        .optional()
-        .describe(
-          "[OPTIONAL] Comma-separated list of project properties to expand. Valid values include: 'description', 'lead', 'issueTypes', 'url', 'projectKeys', 'permissions', 'insight'",
-        ),
-    },
-    async ({ projectIdOrKey, expand }) => {
-      try {
-        const jiraClient = await getJiraClient();
-        const project = await jiraClient.getProject(projectIdOrKey, expand);
-
-        const projectData = {
-          id: project.id,
-          key: project.key,
-          name: project.name,
-          projectTypeKey: project.projectTypeKey,
-          description: project.description || null,
-          lead: project.lead
-            ? {
-              accountId: project.lead.accountId,
-              displayName: project.lead.displayName,
-            }
-            : null,
-          success: true,
-        };
-
-        const projectJson = JSON.stringify(projectData, null, 2);
-
-        return {
-          content: [
-            {
-              text:
-                `Project: ${project.name} (${project.key})\n` +
-                `ID: ${project.id}\n` +
-                `Description: ${project.description || "N/A"}\n` +
-                `Project Type: ${project.projectTypeKey}\n` +
-                `Lead: ${project.lead?.displayName || "N/A"}`,
-              type: "text",
-            },
-            {
-              text: `MACHINE_PARSEABLE_DATA:\n${projectJson}`,
-              type: "text",
-            },
-          ],
-        };
-      } catch (error) {
-        const location = extractFirstAppLocation(error);
-        const message = (error && error.message) || "Unknown error";
-        const errorJson = JSON.stringify(
-          {
-            success: false,
-            message,
-            projectIdOrKey,
-            location,
-          },
-          null,
-          2,
-        );
-        return {
-          content: [
-            {
-              text: location ? `Error retrieving project: ${message} (at ${location})` : `Error retrieving project: ${message}`,
-              type: "text",
-            },
-            { text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" },
-          ],
-        };
-      }
-    },
-  );
-  registeredTools.push("getJiraProject");
-
-  // Jira issue types for a project
-  server.tool(
-    "getJiraProjectIssueTypes",
-    "Get all available issue types for a Jira project, including subtask types",
-    {
-      projectIdOrKey: z.string().describe("[REQUIRED] ID or key of the project to retrieve issue types for"),
-    },
-    async ({ projectIdOrKey }) => {
-      try {
-        const jiraClient = await getJiraClient();
-        const issueTypes = await jiraClient.getProjectIssueTypes(projectIdOrKey);
-
-        if (!issueTypes || issueTypes.length === 0) {
+        case "getProject": {
+          if (!input.projectIdOrKey) throw new Error("getProject requires projectIdOrKey.");
+          const project = await jiraClient.getProject(input.projectIdOrKey, input.expand);
+          const data = stripAvatarUrls({
+            id: project.id, key: project.key, name: project.name,
+            projectTypeKey: project.projectTypeKey,
+            description: project.description || null,
+            lead: normalizeUser(project.lead),
+          });
           return {
-            content: [{ text: `No issue types found for project ${projectIdOrKey}.`, type: "text" }],
-            data: {
-              success: true,
-              projectKey: projectIdOrKey,
-              issueTypes: [],
-              subtaskTypes: [],
-              standardTypes: [],
-            },
+            content: [{ text: JSON.stringify({ success: true, ...data }, null, 2), type: "text" }],
           };
         }
-
-        const subtaskTypes = issueTypes.filter((type) => type && type.subtask === true);
-        const standardTypes = issueTypes.filter((type) => type && type.subtask !== true);
-
-        let result = `Issue types for project ${projectIdOrKey}:\n\n`;
-
-        result += "Standard Issue Types:\n";
-        if (standardTypes.length > 0) {
-          standardTypes.forEach((type) => {
-            result += `- ${type.name} (ID: ${type.id})${type.default ? " [DEFAULT]" : ""}\n`;
+        case "createProject": {
+          if (!input.key) throw new Error("createProject requires key.");
+          if (!input.name) throw new Error("createProject requires name.");
+          if (!input.projectTypeKey) throw new Error("createProject requires projectTypeKey.");
+          if (!input.leadAccountId) throw new Error("createProject requires leadAccountId. Use manageJiraUsers to find valid account IDs.");
+          const payload = {
+            key: input.key, name: input.name, projectTypeKey: input.projectTypeKey,
+            leadAccountId: input.leadAccountId,
+          };
+          if (input.projectTemplateKey) payload.projectTemplateKey = input.projectTemplateKey;
+          if (input.description) payload.description = input.description;
+          if (input.url) payload.url = input.url;
+          if (input.assigneeType) payload.assigneeType = input.assigneeType;
+          if (input.categoryId) payload.categoryId = input.categoryId;
+          const newProject = await jiraClient.createProject(payload);
+          const data = stripAvatarUrls({
+            id: newProject.id, key: newProject.key, name: newProject.name,
+            projectTypeKey: newProject.projectTypeKey,
+            lead: normalizeUser(newProject.lead),
           });
-        } else {
-          result += "- None found\n";
+          return {
+            content: [{ text: JSON.stringify({ success: true, ...data }, null, 2), type: "text" }],
+          };
         }
-
-        result += "\nSubtask Issue Types:\n";
-        if (subtaskTypes.length > 0) {
-          subtaskTypes.forEach((type) => {
-            result += `- ${type.name} (ID: ${type.id})${type.default ? " [DEFAULT]" : ""}\n`;
-          });
-        } else {
-          result += "- None found (this project may not support subtasks)\n";
+        case "getIssueTypes": {
+          if (!input.projectIdOrKey) throw new Error("getIssueTypes requires projectIdOrKey.");
+          const issueTypes = await jiraClient.getProjectIssueTypes(input.projectIdOrKey);
+          const types = (issueTypes || []).map((t) => ({
+            id: t.id, name: t.name, subtask: t.subtask === true, default: t.default === true,
+          }));
+          return {
+            content: [{ text: JSON.stringify({ success: true, projectKey: input.projectIdOrKey, issueTypes: types }, null, 2), type: "text" }],
+          };
         }
-
-        const responseData = {
-          success: true,
-          projectKey: projectIdOrKey,
-          issueTypes: issueTypes.map((type) => ({
-            id: type.id,
-            name: type.name,
-            subtask: type.subtask === true,
-            default: type.default === true,
-          })),
-          subtaskTypes: subtaskTypes.map((type) => ({
-            id: type.id,
-            name: type.name,
-            default: type.default === true,
-          })),
-          standardTypes: standardTypes.map((type) => ({
-            id: type.id,
-            name: type.name,
-            default: type.default === true,
-          })),
-        };
-
-        const responseJson = JSON.stringify(responseData, null, 2);
-
-        return {
-          content: [
-            { text: result, type: "text" },
-            { text: `MACHINE_PARSEABLE_DATA:\n${responseJson}`, type: "text" },
-          ],
-          data: responseData,
-        };
-      } catch (error) {
-        const location = extractFirstAppLocation(error);
-        const message = (error && error.message) || "Unknown error";
-        const errorJson = JSON.stringify(
-          {
-            success: false,
-            error: message,
-            projectKey: projectIdOrKey,
-            location,
-          },
-          null,
-          2,
-        );
-
-        return {
-          content: [
-            {
-              text: location ? `Error retrieving issue types: ${message} (at ${location})` : `Error retrieving issue types: ${message}`,
-              type: "text",
-            },
-            { text: `MACHINE_PARSEABLE_DATA:\n${errorJson}`, type: "text" },
-          ],
-          data: {
-            success: false,
-            error: message,
-            projectKey: projectIdOrKey,
-          },
-        };
+        case "getBoards": {
+          if (!input.projectIdOrKey) throw new Error("getBoards requires projectIdOrKey.");
+          const boards = await jiraClient.getBoardsForProject(input.projectIdOrKey);
+          const data = boards.map((b) => ({ id: b.id, name: b.name, type: b.type }));
+          return {
+            content: [{ text: JSON.stringify({ success: true, projectKey: input.projectIdOrKey, boards: data }, null, 2), type: "text" }],
+          };
+        }
+        default:
+          throw new Error(`Unknown command: ${input.command}`);
       }
     },
   );
-  registeredTools.push("getJiraProjectIssueTypes");
+  registeredTools.push("manageJiraProject");
 
   // Unified Jira issue toolkit
   server.tool(
@@ -545,8 +305,10 @@ export async function registerTools() {
       filename: z.string().optional().describe("Filename when uploading an attachment."),
       fileBase64: z.string().optional().describe("Base64-encoded file contents for addAttachment."),
       contentType: z.string().optional().describe("Optional MIME type for uploaded attachment."),
-      assignee: z.string().optional().describe("Assignee account ID for assignIssue/unassignIssue, or when creating/updating an issue. Use getJiraUsers to find valid account IDs."),
+      assignee: z.string().optional().describe("Assignee account ID for assignIssue/unassignIssue, or when creating/updating an issue. Use manageJiraUsers to find valid account IDs."),
       attachmentId: z.string().optional().describe("Attachment ID for deleteAttachment."),
+      boardId: z.number().optional().describe("Board ID for moveToBacklog."),
+      issueIdsOrKeys: z.array(z.string()).optional().describe("Array of issue IDs or keys for moveToBacklog."),
       transitionId: z.string().optional().describe("Transition ID for transitionIssue."),
       priorityId: z.string().optional().describe("Priority ID for setPriority."),
       priorityName: z.string().optional().describe("Priority name for setPriority when ID is unknown."),
@@ -578,7 +340,8 @@ export async function registerTools() {
 - getLabels | addLabels | removeLabels | setLabels: manage issue labels
 - listAttachments | addAttachment | deleteAttachment: work with attachments (attachments require base64 payload)
 - listPriorities | setPriority: inspect and set issue priority
-- assignIssue | unassignIssue: assign or unassign a user on an issue (use getJiraUsers to find account IDs)
+- assignIssue | unassignIssue: assign or unassign a user on an issue (use manageJiraUsers to find account IDs)
+- moveToBacklog: move issues to the backlog (requires boardId + issueIdsOrKeys)
 - listIssueTypes | createIssueType | getIssueType | updateIssueType | deleteIssueType | getIssueTypeAlternatives: manage issue types (set projectKey on listIssueTypes to scope results).`;
         return { content: [{ text: helpText, type: "text" }] };
       }
@@ -703,7 +466,7 @@ export async function registerTools() {
           const issueType = issue.fields?.issuetype?.name ?? undefined;
           const descriptionText = jiraClient.documentToPlainText(issue.fields?.description) ?? "No description provided.";
           const labels = Array.isArray(issue.fields?.labels) && issue.fields.labels.length > 0 ? issue.fields.labels.join(", ") : "None";
-          const responseData = {
+          const responseData = normalizeResponse({
             key: issue.key,
             summary,
             status,
@@ -716,11 +479,10 @@ export async function registerTools() {
             description: descriptionText,
             created: issue.fields?.created,
             updated: issue.fields?.updated,
-            raw: issue,
-          };
+          });
           return {
             content: [{ text: JSON.stringify(responseData, null, 2), type: "text" }],
-            data: { success: true, issue },
+            data: { success: true },
           };
         }
         case "updateIssue": {
@@ -780,6 +542,7 @@ export async function registerTools() {
             return `${key ?? "?"}: ${summary ?? "<no summary>"}`;
           });
 
+          const normalized = normalizeResponse(results);
           return {
             content: [
               {
@@ -787,7 +550,7 @@ export async function registerTools() {
                 type: "text",
               },
             ],
-            data: { success: true, ...results },
+            data: { success: true, ...normalized },
           };
         }
         case "listComments": {
@@ -1077,6 +840,15 @@ export async function registerTools() {
             data: { success: true, issueIdOrKey, assignee: null },
           };
         }
+        case "moveToBacklog": {
+          if (!input.boardId) throw new Error("moveToBacklog requires boardId.");
+          if (!input.issueIdsOrKeys || input.issueIdsOrKeys.length === 0) throw new Error("moveToBacklog requires issueIdsOrKeys.");
+          await jiraClient.moveIssuesToBacklog(input.boardId, input.issueIdsOrKeys);
+          return {
+            content: [{ text: `Moved ${input.issueIdsOrKeys.length} issue(s) to backlog for board ${input.boardId}.`, type: "text" }],
+            data: { success: true, boardId: input.boardId, issueIdsOrKeys: input.issueIdsOrKeys },
+          };
+        }
         default:
           throw new Error(`Unsupported action: ${action}`);
       }
@@ -1084,295 +856,206 @@ export async function registerTools() {
   );
   registeredTools.push("jiraIssueToolkit");
 
+  // --- manageJiraSprint: unified sprint management ---
   server.tool(
-    "createJiraSprint",
-    "Create a new Jira sprint",
+    "manageJiraSprint",
+    "Unified Jira sprint tool. Commands: listSprints, getSprint, createSprint, startSprint, completeSprint, updateSprint, deleteSprint, getIssues, moveIssues. Pass command='/help' for usage.",
     {
-      name: z
-        .string()
-        .describe("[REQUIRED] Sprint name - descriptive name for the sprint (e.g., 'Sprint 1', 'June Release')."),
-      originBoardId: z
-        .number()
-        .describe("[REQUIRED] Board ID to create the sprint in - numeric ID of the Scrum board (e.g., 123). Get this from your board URL."),
-      startDate: z
-        .string()
-        .optional()
-        .describe("[OPTIONAL] Start date in ISO format (e.g., '2025-06-30T08:00:00.000Z'). If not provided, sprint will be created in future state."),
-      endDate: z
-        .string()
-        .optional()
-        .describe("[OPTIONAL] End date in ISO format (e.g., '2025-07-14T17:00:00.000Z'). Should be after startDate."),
-      goal: z.string().optional().describe("[OPTIONAL] Sprint goal - brief description of what the team aims to achieve in this sprint."),
+      command: z.enum(["listSprints", "getSprint", "createSprint", "startSprint", "completeSprint", "updateSprint", "deleteSprint", "getIssues", "moveIssues", "/help"])
+        .describe("The operation to perform."),
+      sprintId: z.number().optional().describe("Sprint ID (required for most commands except listSprints and createSprint)."),
+      boardId: z.number().optional().describe("Board ID (required for listSprints, also used as originBoardId for createSprint)."),
+      name: z.string().optional().describe("Sprint name (required for createSprint, optional for start/complete/update)."),
+      startDate: z.string().optional().describe("Start date in ISO format (e.g. '2025-06-30T08:00:00.000Z')."),
+      endDate: z.string().optional().describe("End date in ISO format (e.g. '2025-07-14T17:00:00.000Z')."),
+      goal: z.string().optional().describe("Sprint goal (for createSprint or updateSprint)."),
+      state: z.enum(["future", "active", "closed"]).optional().describe("New state for updateSprint."),
+      issueIdsOrKeys: z.array(z.string()).optional().describe("Array of issue IDs or keys (for moveIssues)."),
     },
-    async ({ name, startDate, endDate, originBoardId, goal }) => {
-      const jiraClient = await getJiraClient();
-      const payload = { name, originBoardId };
-      if (startDate) payload.startDate = startDate;
-      if (endDate) payload.endDate = endDate;
-      if (goal) payload.goal = goal;
-      const newSprint = await jiraClient.createSprint(payload);
-      return {
-        content: [{ text: `Sprint created: ${newSprint.id} - ${newSprint.name}`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("createJiraSprint");
-
-  server.tool(
-    "startJiraSprint",
-    "Start a Jira sprint. Some Jira instances require name, startDate, and endDate.",
-    {
-      sprintId: z.number().describe("ID of the sprint to start"),
-      name: z.string().optional().describe("Sprint name (required on some instances)"),
-      startDate: z.string().optional().describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
-      endDate: z
-        .string()
-        .optional()
-        .describe("End date in ISO format (e.g., 2025-11-09T00:00:00.000Z). Required on some instances. Defaults to ~2 weeks after start if omitted."),
-    },
-    async ({ sprintId, name, startDate, endDate }) => {
-      const jiraClient = await getJiraClient();
-      await jiraClient.startSprint(sprintId, { name, startDate, endDate });
-      return {
-        content: [{ text: `Sprint ${sprintId} started successfully.`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("startJiraSprint");
-
-  server.tool(
-    "completeJiraSprint",
-    "Complete a Jira sprint. The sprint must be in 'active' state — future sprints must be started first, and closed sprints cannot be reopened. Use getJiraSprintsForBoard to find sprint IDs, and getJiraBoardsForProject to find board IDs for a project.",
-    {
-      sprintId: z.number().describe("ID of the sprint to complete. Use getJiraSprintsForBoard to find sprint IDs for a board."),
-      name: z.string().optional().describe("Sprint name (required on some instances)"),
-      startDate: z.string().optional().describe("Start date in ISO format (e.g., 2025-10-26T00:00:00.000Z). Required on some instances."),
-      endDate: z.string().optional().describe("End date in ISO format (e.g., 2025-11-09T00:00:00.000Z). Required on some instances."),
-    },
-    async ({ sprintId, name, startDate, endDate }) => {
-      try {
-        const jiraClient = await getJiraClient();
-        await jiraClient.completeSprint(sprintId, { name, startDate, endDate });
+    async (input) => {
+      if (input.command === "/help") {
         return {
-          content: [{ text: `Sprint ${sprintId} completed successfully.`, type: "text" }],
+          content: [{
+            text: `manageJiraSprint commands:
+- listSprints: list all sprints for a board (requires boardId)
+- getSprint: get sprint details (requires sprintId)
+- createSprint: create a sprint (requires boardId + name, optional startDate/endDate/goal)
+- startSprint: start a sprint (requires sprintId, optional name/startDate/endDate)
+- completeSprint: complete an active sprint (requires sprintId, optional name/startDate/endDate)
+- updateSprint: update sprint metadata (requires sprintId, optional name/startDate/endDate/state/goal)
+- deleteSprint: delete a sprint (requires sprintId)
+- getIssues: list issues in a sprint (requires sprintId)
+- moveIssues: move issues to a sprint (requires sprintId + issueIdsOrKeys)`,
+            type: "text",
+          }],
         };
-      } catch (error) {
-        const msg = error?.message || String(error);
-        if (msg.includes("already closed")) {
-          return { content: [{ text: `Error: ${msg}`, type: "text" }], isError: true };
+      }
+
+      const jiraClient = await getJiraClient();
+
+      switch (input.command) {
+        case "listSprints": {
+          if (!input.boardId) throw new Error("listSprints requires boardId. Use manageJiraProject command=getBoards to find board IDs.");
+          const sprints = await jiraClient.getSprintsForBoard(input.boardId);
+          const data = sprints.map((s) => ({ id: s.id, name: s.name, state: s.state, startDate: s.startDate, endDate: s.endDate, goal: s.goal }));
+          return {
+            content: [{ text: JSON.stringify({ success: true, boardId: input.boardId, sprints: data }, null, 2), type: "text" }],
+          };
         }
-        if (msg.includes("future")) {
-          return { content: [{ text: `Error: ${msg}`, type: "text" }], isError: true };
+        case "getSprint": {
+          if (!input.sprintId) throw new Error("getSprint requires sprintId.");
+          const sprint = await jiraClient.getSprint(input.sprintId);
+          const data = stripAvatarUrls({ id: sprint.id, name: sprint.name, state: sprint.state, startDate: sprint.startDate, endDate: sprint.endDate, goal: sprint.goal, originBoardId: sprint.originBoardId });
+          return {
+            content: [{ text: JSON.stringify({ success: true, ...data }, null, 2), type: "text" }],
+          };
         }
-        if (msg.includes("404")) {
-          return { content: [{ text: `Error: Sprint ${sprintId} not found. Use getJiraSprintsForBoard to list valid sprint IDs.`, type: "text" }], isError: true };
+        case "createSprint": {
+          if (!input.boardId) throw new Error("createSprint requires boardId.");
+          if (!input.name) throw new Error("createSprint requires name.");
+          const payload = { name: input.name, originBoardId: input.boardId };
+          if (input.startDate) payload.startDate = input.startDate;
+          if (input.endDate) payload.endDate = input.endDate;
+          if (input.goal) payload.goal = input.goal;
+          const newSprint = await jiraClient.createSprint(payload);
+          return {
+            content: [{ text: JSON.stringify({ success: true, id: newSprint.id, name: newSprint.name, state: newSprint.state }, null, 2), type: "text" }],
+          };
         }
-        if (msg.includes("403") || msg.includes("permission")) {
-          return { content: [{ text: `Error: Permission denied. You need 'Manage Sprints' permission in the project to complete a sprint.`, type: "text" }], isError: true };
+        case "startSprint": {
+          if (!input.sprintId) throw new Error("startSprint requires sprintId.");
+          await jiraClient.startSprint(input.sprintId, { name: input.name, startDate: input.startDate, endDate: input.endDate });
+          return {
+            content: [{ text: JSON.stringify({ success: true, sprintId: input.sprintId, action: "started" }, null, 2), type: "text" }],
+          };
         }
-        return { content: [{ text: `Error completing sprint ${sprintId}: ${msg}`, type: "text" }], isError: true };
+        case "completeSprint": {
+          if (!input.sprintId) throw new Error("completeSprint requires sprintId.");
+          try {
+            await jiraClient.completeSprint(input.sprintId, { name: input.name, startDate: input.startDate, endDate: input.endDate });
+            return {
+              content: [{ text: JSON.stringify({ success: true, sprintId: input.sprintId, action: "completed" }, null, 2), type: "text" }],
+            };
+          } catch (error) {
+            const msg = error?.message || String(error);
+            return { content: [{ text: `Error completing sprint ${input.sprintId}: ${msg}`, type: "text" }], isError: true };
+          }
+        }
+        case "updateSprint": {
+          if (!input.sprintId) throw new Error("updateSprint requires sprintId.");
+          const updatedSprint = await jiraClient.updateSprint(input.sprintId, { name: input.name, startDate: input.startDate, endDate: input.endDate, state: input.state, goal: input.goal });
+          return {
+            content: [{ text: JSON.stringify({ success: true, id: updatedSprint.id, name: updatedSprint.name }, null, 2), type: "text" }],
+          };
+        }
+        case "deleteSprint": {
+          if (!input.sprintId) throw new Error("deleteSprint requires sprintId.");
+          await jiraClient.deleteSprint(input.sprintId);
+          return {
+            content: [{ text: JSON.stringify({ success: true, sprintId: input.sprintId, action: "deleted" }, null, 2), type: "text" }],
+          };
+        }
+        case "getIssues": {
+          if (!input.sprintId) throw new Error("getIssues requires sprintId.");
+          const issues = await jiraClient.getIssuesForSprint(input.sprintId);
+          const normalized = normalizeResponse({ issues });
+          return {
+            content: [{ text: JSON.stringify({ success: true, sprintId: input.sprintId, count: issues.length, ...normalized }, null, 2), type: "text" }],
+          };
+        }
+        case "moveIssues": {
+          if (!input.sprintId) throw new Error("moveIssues requires sprintId.");
+          if (!input.issueIdsOrKeys || input.issueIdsOrKeys.length === 0) throw new Error("moveIssues requires issueIdsOrKeys.");
+          await jiraClient.moveIssuesToSprint(input.sprintId, input.issueIdsOrKeys);
+          return {
+            content: [{ text: JSON.stringify({ success: true, sprintId: input.sprintId, moved: input.issueIdsOrKeys }, null, 2), type: "text" }],
+          };
+        }
+        default:
+          throw new Error(`Unknown command: ${input.command}`);
       }
     },
   );
-  registeredTools.push("completeJiraSprint");
-  console.log("[TOOLS] Registered completeJiraSprint tool");
+  registeredTools.push("manageJiraSprint");
 
+  // --- manageJiraUsers: unified user management ---
   server.tool(
-    "getJiraSprint",
-    "Get details of a Jira sprint",
+    "manageJiraUsers",
+    "Unified Jira user tool. Commands: searchUsers, getUser, createUser, deleteUser. Pass command='/help' for usage.",
     {
-      sprintId: z.number().describe("ID of the sprint to retrieve"),
+      command: z.enum(["searchUsers", "getUser", "createUser", "deleteUser", "/help"])
+        .describe("The operation to perform."),
+      accountId: z.string().optional().describe("Account ID (required for getUser, deleteUser)."),
+      query: z.string().optional().describe("Search query for searchUsers (name, email, or username; partial matches supported)."),
+      maxResults: z.number().optional().describe("Max results for searchUsers (default 10)."),
+      emailAddress: z.string().optional().describe("Email for createUser."),
+      password: z.string().optional().describe("Password for createUser."),
+      displayName: z.string().optional().describe("Display name for createUser."),
     },
-    async ({ sprintId }) => {
-      const jiraClient = await getJiraClient();
-      const sprint = await jiraClient.getSprint(sprintId);
-      return {
-        content: [{ text: `Sprint ${sprint.name} (ID: ${sprint.id}, State: ${sprint.state})`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("getJiraSprint");
-
-  server.tool(
-    "updateJiraSprint",
-    "Update details of a Jira sprint",
-    {
-      sprintId: z.number().describe("ID of the sprint to update"),
-      name: z.string().optional().describe("New name for the sprint"),
-      startDate: z.string().optional().describe("New start date for the sprint (YYYY-MM-DD)"),
-      endDate: z.string().optional().describe("New end date for the sprint (YYYY-MM-DD)"),
-      state: z.enum(["future", "active", "closed"]).optional().describe("New state for the sprint"),
-      goal: z.string().optional().describe("New goal for the sprint"),
-    },
-    async ({ sprintId, name, startDate, endDate, state, goal }) => {
-      const jiraClient = await getJiraClient();
-      const updatedSprint = await jiraClient.updateSprint(sprintId, { name, startDate, endDate, state, goal });
-      return {
-        content: [{ text: `Sprint updated: ${updatedSprint.name} (ID: ${updatedSprint.id})`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("updateJiraSprint");
-
-  server.tool(
-    "deleteJiraSprint",
-    "Delete a Jira sprint",
-    {
-      sprintId: z.number().describe("ID of the sprint to delete"),
-    },
-    async ({ sprintId }) => {
-      const jiraClient = await getJiraClient();
-      await jiraClient.deleteSprint(sprintId);
-      return {
-        content: [{ text: `Sprint ${sprintId} deleted successfully.`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("deleteJiraSprint");
-
-  server.tool(
-    "getJiraBoardsForProject",
-    "Get all Agile boards for a given Jira project. Use this to find the board ID needed for sprint operations like getJiraSprintsForBoard or completeJiraSprint.",
-    {
-      projectKeyOrId: z.string().describe("Project key (e.g., 'MJT') or numeric project ID to find boards for."),
-    },
-    async ({ projectKeyOrId }) => {
-      const jiraClient = await getJiraClient();
-      const boards = await jiraClient.getBoardsForProject(projectKeyOrId);
-      if (boards.length === 0) {
+    async (input) => {
+      if (input.command === "/help") {
         return {
-          content: [{ text: `No boards found for project ${projectKeyOrId}. The project may not have an Agile board configured.`, type: "text" }],
+          content: [{
+            text: `manageJiraUsers commands:
+- searchUsers: find users by name/email/username (requires query, optional maxResults)
+- getUser: get user details (requires accountId)
+- createUser: create a user (requires emailAddress, password, displayName)
+- deleteUser: delete a user (requires accountId)`,
+            type: "text",
+          }],
         };
       }
-      const boardsText = boards
-        .map((board) => `${board.name} (ID: ${board.id}, Type: ${board.type})`)
-        .join("\n");
-      return {
-        content: [{ text: `Boards for project ${projectKeyOrId}:\n${boardsText}`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("getJiraBoardsForProject");
 
-  server.tool(
-    "getJiraSprintsForBoard",
-    "Get all sprints for a given Jira board",
-    {
-      boardId: z.number().describe("ID of the Jira board"),
-    },
-    async ({ boardId }) => {
       const jiraClient = await getJiraClient();
-      const sprints = await jiraClient.getSprintsForBoard(boardId);
-      const sprintsText = sprints.map((sprint) => `${sprint.name} (ID: ${sprint.id}, State: ${sprint.state})`).join("\n");
-      return {
-        content: [{ text: `Sprints for board ${boardId}:\n${sprintsText}`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("getJiraSprintsForBoard");
 
-  server.tool(
-    "getJiraIssuesForSprint",
-    "Get all issues for a given Jira sprint",
-    {
-      sprintId: z.number().describe("ID of the Jira sprint"),
-    },
-    async ({ sprintId }) => {
-      const jiraClient = await getJiraClient();
-      const issues = await jiraClient.getIssuesForSprint(sprintId);
-      const issuesText = issues.map((issue) => `${issue.key}: ${issue.fields.summary}`).join("\n");
-      return {
-        content: [{ text: `Issues for sprint ${sprintId}:\n${issuesText}`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("getJiraIssuesForSprint");
-
-  server.tool(
-    "moveJiraIssuesToSprint",
-    "Move issues to a Jira sprint",
-    {
-      sprintId: z.number().describe("ID of the target sprint"),
-      issueIdsOrKeys: z.array(z.string()).describe("Array of issue IDs or keys to move"),
-    },
-    async ({ sprintId, issueIdsOrKeys }) => {
-      const jiraClient = await getJiraClient();
-      await jiraClient.moveIssuesToSprint(sprintId, issueIdsOrKeys);
-      return {
-        content: [{ text: `Moved issues ${issueIdsOrKeys.join(", ")} to sprint ${sprintId}.`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("moveJiraIssuesToSprint");
-
-  server.tool(
-    "moveJiraIssuesToBacklog",
-    "Move issues to the Jira backlog",
-    {
-      boardId: z.number().describe("ID of the Jira board"),
-      issueIdsOrKeys: z.array(z.string()).describe("Array of issue IDs or keys to move"),
-    },
-    async ({ boardId, issueIdsOrKeys }) => {
-      const jiraClient = await getJiraClient();
-      await jiraClient.moveIssuesToBacklog(boardId, issueIdsOrKeys);
-      return {
-        content: [{ text: `Moved issues ${issueIdsOrKeys.join(", ")} to backlog for board ${boardId}.`, type: "text" }],
-      };
+      switch (input.command) {
+        case "searchUsers": {
+          if (!input.query) throw new Error("searchUsers requires query.");
+          const response = await jiraClient.searchUsers(input.query, input.maxResults ?? 10);
+          if (!Array.isArray(response) || response.length === 0) {
+            return { content: [{ text: JSON.stringify({ success: true, query: input.query, users: [] }, null, 2), type: "text" }] };
+          }
+          const users = response.map((u) => ({
+            accountId: u.accountId, displayName: u.displayName,
+            email: u.emailAddress || null, active: u.active,
+          }));
+          return {
+            content: [{ text: JSON.stringify({ success: true, query: input.query, users }, null, 2), type: "text" }],
+          };
+        }
+        case "getUser": {
+          if (!input.accountId) throw new Error("getUser requires accountId.");
+          const user = await jiraClient.getUser(input.accountId);
+          const data = stripAvatarUrls({
+            accountId: user.accountId, displayName: user.displayName,
+            email: user.emailAddress, active: user.active, timeZone: user.timeZone,
+          });
+          return {
+            content: [{ text: JSON.stringify({ success: true, ...data }, null, 2), type: "text" }],
+          };
+        }
+        case "createUser": {
+          if (!input.emailAddress) throw new Error("createUser requires emailAddress.");
+          if (!input.password) throw new Error("createUser requires password.");
+          if (!input.displayName) throw new Error("createUser requires displayName.");
+          const newUser = await jiraClient.createUser({ emailAddress: input.emailAddress, password: input.password, displayName: input.displayName });
+          return {
+            content: [{ text: JSON.stringify({ success: true, accountId: newUser.accountId, displayName: newUser.displayName }, null, 2), type: "text" }],
+          };
+        }
+        case "deleteUser": {
+          if (!input.accountId) throw new Error("deleteUser requires accountId.");
+          await jiraClient.deleteUser(input.accountId);
+          return {
+            content: [{ text: JSON.stringify({ success: true, accountId: input.accountId, action: "deleted" }, null, 2), type: "text" }],
+          };
+        }
+        default:
+          throw new Error(`Unknown command: ${input.command}`);
+      }
     },
   );
-  registeredTools.push("moveJiraIssuesToBacklog");
-
-  server.tool(
-    "getJiraUser",
-    "Get details of a Jira user",
-    {
-      accountId: z.string().describe("Account ID of the user to retrieve"),
-    },
-    async ({ accountId }) => {
-      const jiraClient = await getJiraClient();
-      const user = await jiraClient.getUser(accountId);
-      return {
-        content: [
-          { text: `User: ${user.displayName} (Account ID: ${user.accountId}, Email: ${user.emailAddress})`, type: "text" },
-        ],
-      };
-    },
-  );
-  registeredTools.push("getJiraUser");
-
-  server.tool(
-    "createJiraUser",
-    "Create a new Jira user",
-    {
-      emailAddress: z.string().describe("Email address of the new user"),
-      password: z.string().describe("Password for the new user"),
-      displayName: z.string().describe("Display name of the new user"),
-    },
-    async ({ emailAddress, password, displayName }) => {
-      const jiraClient = await getJiraClient();
-      const newUser = await jiraClient.createUser({ emailAddress, password, displayName });
-      return {
-        content: [{ text: `User created: ${newUser.displayName} (Account ID: ${newUser.accountId})`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("createJiraUser");
-
-  server.tool(
-    "deleteJiraUser",
-    "Delete a Jira user",
-    {
-      accountId: z.string().describe("Account ID of the user to delete"),
-    },
-    async ({ accountId }) => {
-      const jiraClient = await getJiraClient();
-      await jiraClient.deleteUser(accountId);
-      return {
-        content: [{ text: `User ${accountId} deleted successfully.`, type: "text" }],
-      };
-    },
-  );
-  registeredTools.push("deleteJiraUser");
+  registeredTools.push("manageJiraUsers");
 
   server.tool(
     "userInfoOctokit",
@@ -1418,137 +1101,92 @@ export async function registerTools() {
     console.log("[TOOLS] Registered generateImage tool (user-specific)");
   }
 
-  // Backend job queue integration
+  // --- manageBackendJobs: unified backend job queue management ---
   server.tool(
-    "enqueueBackendJob",
-    "Enqueue an asynchronous job on the Go backend. Jobs are processed by the backend worker with retry logic and priority scheduling. Use this to trigger long-running tasks like data migrations, bulk operations, or scheduled maintenance.",
+    "manageBackendJobs",
+    "Unified backend job queue tool. Commands: enqueue, getStatus, getStats. Pass command='/help' for usage.",
     {
-      jobType: z.string().describe("The type of job to enqueue (e.g., 'stripe_migration', 'data_export', 'cleanup')."),
-      payload: z.record(z.unknown()).optional().describe("JSON payload for the job handler."),
-      priority: z.enum(["low", "normal", "high", "critical"]).optional().default("normal").describe("Job priority level."),
-      maxAttempts: z.number().optional().default(3).describe("Maximum number of retry attempts."),
+      command: z.enum(["enqueue", "getStatus", "getStats", "/help"])
+        .describe("The operation to perform."),
+      jobId: z.number().optional().describe("Job ID (required for getStatus)."),
+      jobType: z.string().optional().describe("Job type for enqueue (e.g. 'stripe_migration', 'data_export', 'cleanup')."),
+      payload: z.record(z.unknown()).optional().describe("JSON payload for enqueue."),
+      priority: z.enum(["low", "normal", "high", "critical"]).optional().describe("Priority for enqueue (default 'normal')."),
+      maxAttempts: z.number().optional().describe("Max retry attempts for enqueue (default 3)."),
     },
-    async ({ jobType, payload, priority, maxAttempts }) => {
-      try {
-        const backendBase = this.env.BACKEND_BASE_URL;
-        if (!backendBase) {
-          return { content: [{ text: "Error: BACKEND_BASE_URL is not configured.", type: "text" }], isError: true };
-        }
-
-        const url = new URL("/api/jobs", backendBase);
-        const response = await fetch(url.toString(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            job_type: jobType,
-            payload: payload || {},
-            priority: priority || "normal",
-            max_attempts: maxAttempts || 3,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          return { content: [{ text: `Error enqueuing job: ${response.status} - ${errorText}`, type: "text" }], isError: true };
-        }
-
-        const result = await response.json();
+    async (input) => {
+      if (input.command === "/help") {
         return {
-          content: [{ text: `Job enqueued successfully. ID: ${result.id}, Status: ${result.status}`, type: "text" }],
+          content: [{
+            text: `manageBackendJobs commands:
+- enqueue: enqueue a job (requires jobType, optional payload/priority/maxAttempts)
+- getStatus: check job status (requires jobId)
+- getStats: get queue statistics (no params)`,
+            type: "text",
+          }],
         };
-      } catch (error) {
-        const msg = error?.message || String(error);
-        return { content: [{ text: `Error enqueuing job: ${msg}`, type: "text" }], isError: true };
+      }
+
+      const backendBase = this.env.BACKEND_BASE_URL;
+      if (!backendBase) {
+        return { content: [{ text: "Error: BACKEND_BASE_URL is not configured.", type: "text" }], isError: true };
+      }
+
+      switch (input.command) {
+        case "enqueue": {
+          if (!input.jobType) throw new Error("enqueue requires jobType.");
+          const url = new URL("/api/jobs", backendBase);
+          const response = await fetch(url.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              job_type: input.jobType,
+              payload: input.payload || {},
+              priority: input.priority || "normal",
+              max_attempts: input.maxAttempts || 3,
+            }),
+          });
+          if (!response.ok) {
+            const errorText = await response.text();
+            return { content: [{ text: `Error enqueuing job: ${response.status} - ${errorText}`, type: "text" }], isError: true };
+          }
+          const result = await response.json();
+          return {
+            content: [{ text: JSON.stringify({ success: true, id: result.id, status: result.status }, null, 2), type: "text" }],
+          };
+        }
+        case "getStatus": {
+          if (!input.jobId) throw new Error("getStatus requires jobId.");
+          const url = new URL("/api/jobs", backendBase);
+          url.searchParams.set("id", String(input.jobId));
+          const response = await fetch(url.toString(), { method: "GET", headers: { Accept: "application/json" } });
+          if (!response.ok) {
+            const errorText = await response.text();
+            return { content: [{ text: `Error fetching job: ${response.status} - ${errorText}`, type: "text" }], isError: true };
+          }
+          const job = await response.json();
+          return {
+            content: [{ text: JSON.stringify({ success: true, id: job.id, jobType: job.job_type, status: job.status, priority: job.priority, attempts: job.attempts, maxAttempts: job.max_attempts, lastError: job.last_error || null, completedAt: job.completed_at || null }, null, 2), type: "text" }],
+          };
+        }
+        case "getStats": {
+          const url = new URL("/api/jobs/stats", backendBase);
+          const response = await fetch(url.toString(), { method: "GET", headers: { Accept: "application/json" } });
+          if (!response.ok) {
+            const errorText = await response.text();
+            return { content: [{ text: `Error fetching stats: ${response.status} - ${errorText}`, type: "text" }], isError: true };
+          }
+          const stats = await response.json();
+          return {
+            content: [{ text: JSON.stringify({ success: true, ...stats }, null, 2), type: "text" }],
+          };
+        }
+        default:
+          throw new Error(`Unknown command: ${input.command}`);
       }
     },
   );
-  registeredTools.push("enqueueBackendJob");
-
-  server.tool(
-    "getBackendJobStatus",
-    "Check the status of an asynchronous job on the Go backend.",
-    {
-      jobId: z.number().describe("The ID of the job to check."),
-    },
-    async ({ jobId }) => {
-      try {
-        const backendBase = this.env.BACKEND_BASE_URL;
-        if (!backendBase) {
-          return { content: [{ text: "Error: BACKEND_BASE_URL is not configured.", type: "text" }], isError: true };
-        }
-
-        const url = new URL("/api/jobs", backendBase);
-        url.searchParams.set("id", String(jobId));
-        const response = await fetch(url.toString(), {
-          method: "GET",
-          headers: { Accept: "application/json" },
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          return { content: [{ text: `Error fetching job: ${response.status} - ${errorText}`, type: "text" }], isError: true };
-        }
-
-        const job = await response.json();
-        const lines = [
-          `Job #${job.id} (${job.job_type})`,
-          `Status: ${job.status}`,
-          `Priority: ${job.priority}`,
-          `Attempts: ${job.attempts}/${job.max_attempts}`,
-        ];
-        if (job.last_error) lines.push(`Last Error: ${job.last_error}`);
-        if (job.completed_at) lines.push(`Completed: ${job.completed_at}`);
-
-        return { content: [{ text: lines.join("\n"), type: "text" }] };
-      } catch (error) {
-        const msg = error?.message || String(error);
-        return { content: [{ text: `Error fetching job status: ${msg}`, type: "text" }], isError: true };
-      }
-    },
-  );
-  registeredTools.push("getBackendJobStatus");
-
-  server.tool(
-    "getBackendJobStats",
-    "Get statistics about the backend job queue (pending, processing, completed, failed counts).",
-    {},
-    async () => {
-      try {
-        const backendBase = this.env.BACKEND_BASE_URL;
-        if (!backendBase) {
-          return { content: [{ text: "Error: BACKEND_BASE_URL is not configured.", type: "text" }], isError: true };
-        }
-
-        const url = new URL("/api/jobs/stats", backendBase);
-        const response = await fetch(url.toString(), {
-          method: "GET",
-          headers: { Accept: "application/json" },
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          return { content: [{ text: `Error fetching stats: ${response.status} - ${errorText}`, type: "text" }], isError: true };
-        }
-
-        const stats = await response.json();
-        const text = [
-          `Job Queue Statistics:`,
-          `  Pending: ${stats.pending}`,
-          `  Processing: ${stats.processing}`,
-          `  Completed: ${stats.completed}`,
-          `  Failed: ${stats.failed}`,
-          `  Cancelled: ${stats.cancelled}`,
-          `  Total: ${stats.total}`,
-        ].join("\n");
-
-        return { content: [{ text, type: "text" }] };
-      } catch (error) {
-        const msg = error?.message || String(error);
-        return { content: [{ text: `Error fetching job stats: ${msg}`, type: "text" }], isError: true };
-      }
-    },
-  );
-  registeredTools.push("getBackendJobStats");
+  registeredTools.push("manageBackendJobs");
 
   // --- Helper: fetch an integration token from the backend by mcp_secret ---
   const fetchIntegrationToken = async (provider) => {
