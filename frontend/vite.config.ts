@@ -21,22 +21,13 @@ export default defineConfig({
       "mcp-jirathing16.dev.portnumber53.com",
     ],
     proxy: {
-      // Auth routes are handled by the wrangler worker (handleFrontendFetch)
-      '/api/auth': {
-        target: 'http://localhost:18112',
-        changeOrigin: true,
-      },
-      '/callback': {
-        target: 'http://localhost:18112',
-        changeOrigin: true,
-      },
-      // Other API routes go to the Go backend
+      // All API and auth routes go to the Go backend
       '/api': {
         target: 'https://api-jirathing14.dev.portnumber53.com',
         changeOrigin: true,
       },
-      '/auth': {
-        target: 'http://localhost:18112',
+      '/callback': {
+        target: 'https://api-jirathing14.dev.portnumber53.com',
         changeOrigin: true,
       },
     },

@@ -84,8 +84,16 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	router.Post("/api/auth/github", handlers.GitHubAuth(authStore))
 	router.Post("/api/auth/google", handlers.GoogleAuth(authStore))
 	router.Get("/api/auth/connected-accounts", handlers.ConnectedAccounts(authStore))
-	router.Post("/api/settings/jira", handlers.UserSettings(settingsStore))
-	router.Get("/api/settings/jira", handlers.UserSettings(settingsStore))
+
+	// Google OAuth flow (browser-based login + callback)
+	router.Get("/api/auth/google/login", handlers.GoogleOAuthLogin(cfg))
+	router.Get("/callback/google", handlers.GoogleOAuthCallback(cfg, authStore))
+	router.Get("/api/auth/session", handlers.SessionCheck(cfg))
+	router.Post("/api/auth/logout", handlers.SessionLogout(cfg))
+	jiraSettingsHandler := handlers.UserSettings(settingsStore, cfg.CookieSecret)
+	router.Post("/api/settings/jira", jiraSettingsHandler)
+	router.Get("/api/settings/jira", jiraSettingsHandler)
+	router.Post("/api/settings/jira/test", handlers.TestJiraSettings(cfg.CookieSecret))
 
 	// Integration token endpoints
 	integrationStore, _ := store.New(db)
@@ -107,8 +115,9 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	router.Group(func(r chi.Router) {
 		r.Use(mcpAuthMiddleware(db, s)) // Apply MCP auth middleware to this group
 		r.Get("/api/settings/jira/tenant", handlers.TenantJiraSettings(settingsStore))
-		r.Get("/api/mcp/secret", handlers.MCPSecret(settingsStore))
-		r.Post("/api/mcp/secret", handlers.MCPSecret(settingsStore))
+		mcpSecretHandler := handlers.MCPSecret(settingsStore, cfg.CookieSecret)
+		r.Get("/api/mcp/secret", mcpSecretHandler)
+		r.Post("/api/mcp/secret", mcpSecretHandler)
 		if integrationStore != nil {
 			r.Get("/api/integrations/tokens/tenant", handlers.TenantIntegrationToken(integrationStore))
 		}

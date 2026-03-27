@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/models"
+	"github.com/PortNumber53/mcp-jira-thing/backend/internal/session"
 )
 
 // UserSettingsStore defines the behaviour required from the storage client
@@ -28,10 +29,16 @@ type jiraSettingsPayload struct {
 }
 
 // UserSettings creates an HTTP handler that upserts Jira settings for a user.
-// The calling layer (e.g. the SPA Worker) is responsible for providing the
-// authenticated GitHub ID in the payload.
-func UserSettings(store UserSettingsStore) http.HandlerFunc {
+// It reads the session cookie to identify the authenticated user, falling back
+// to user_email in the request body for backward compatibility.
+func UserSettings(store UserSettingsStore, cookieSecret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Try to resolve user email from session cookie first.
+		sessionEmail := ""
+		if sess, err := session.ReadSession(r, cookieSecret); err == nil && sess.Email != nil {
+			sessionEmail = *sess.Email
+		}
+
 		switch r.Method {
 		case http.MethodPost:
 			var payload jiraSettingsPayload
@@ -41,8 +48,11 @@ func UserSettings(store UserSettingsStore) http.HandlerFunc {
 				return
 			}
 
-			// userEmail identifies the owning user (from session, not the Jira email).
-			userEmail := strings.TrimSpace(payload.UserEmail)
+			// userEmail: prefer session, then payload, then jira email as last resort.
+			userEmail := sessionEmail
+			if userEmail == "" {
+				userEmail = strings.TrimSpace(payload.UserEmail)
+			}
 			if userEmail == "" {
 				userEmail = strings.TrimSpace(payload.JiraEmail)
 			}
@@ -66,9 +76,13 @@ func UserSettings(store UserSettingsStore) http.HandlerFunc {
 				return
 			}
 		case http.MethodGet:
-			email := strings.TrimSpace(r.URL.Query().Get("email"))
+			// Prefer session email, fall back to query param.
+			email := sessionEmail
 			if email == "" {
-				http.Error(w, "email query parameter is required", http.StatusBadRequest)
+				email = strings.TrimSpace(r.URL.Query().Get("email"))
+			}
+			if email == "" {
+				http.Error(w, "not authenticated", http.StatusUnauthorized)
 				return
 			}
 

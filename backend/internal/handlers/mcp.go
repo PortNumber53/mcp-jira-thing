@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/PortNumber53/mcp-jira-thing/backend/internal/session"
 )
 
 type mcpSecretPayload struct {
@@ -13,21 +15,30 @@ type mcpSecretPayload struct {
 
 // MCPSecret creates an HTTP handler that allows a user to fetch or rotate
 // their MCP tenant secret, which is used to identify the tenant when an MCP
-// client connects.
-func MCPSecret(store UserSettingsStore) http.HandlerFunc {
+// client connects. It reads the session cookie to identify the user, falling
+// back to the request body/query param for backward compatibility.
+func MCPSecret(store UserSettingsStore, cookieSecret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		sessionEmail := ""
+		if sess, err := session.ReadSession(r, cookieSecret); err == nil && sess.Email != nil {
+			sessionEmail = *sess.Email
+		}
+
 		switch r.Method {
 		case http.MethodPost:
-			var payload mcpSecretPayload
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				log.Printf("MCPSecret: invalid JSON payload: %v", err)
-				http.Error(w, "invalid JSON payload", http.StatusBadRequest)
-				return
+			email := sessionEmail
+			if email == "" {
+				var payload mcpSecretPayload
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					log.Printf("MCPSecret: invalid JSON payload: %v", err)
+					http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+					return
+				}
+				email = strings.TrimSpace(payload.UserEmail)
 			}
 
-			email := strings.TrimSpace(payload.UserEmail)
 			if email == "" {
-				http.Error(w, "user_email is required", http.StatusBadRequest)
+				http.Error(w, "not authenticated", http.StatusUnauthorized)
 				return
 			}
 
@@ -44,9 +55,12 @@ func MCPSecret(store UserSettingsStore) http.HandlerFunc {
 				return
 			}
 		case http.MethodGet:
-			email := strings.TrimSpace(r.URL.Query().Get("email"))
+			email := sessionEmail
 			if email == "" {
-				http.Error(w, "email query parameter is required", http.StatusBadRequest)
+				email = strings.TrimSpace(r.URL.Query().Get("email"))
+			}
+			if email == "" {
+				http.Error(w, "not authenticated", http.StatusUnauthorized)
 				return
 			}
 
