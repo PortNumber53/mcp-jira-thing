@@ -6,8 +6,8 @@ BACKEND_DIR="$ROOT_DIR/backend"
 BUILD_DIR="$BACKEND_DIR/bin"
 BINARY_NAME="mcp-backend"
 ARCHIVE_NAME="$BINARY_NAME.tar.gz"
-CONFIG_DIR="/etc/mcp-jira-thing"
-CONFIG_SAMPLE_LOCAL="$ROOT_DIR/etc/mcp-jira-thing/config.ini.sample"
+CONFIG_DIR="/etc/api-jira-thing.truvis.co"
+CONFIG_SAMPLE_LOCAL="$ROOT_DIR/etc/api-jira-thing.truvis.co/config.ini.sample"
 SYSTEMD_UNIT_LOCAL="$ROOT_DIR/scripts/systemd/mcp-backend.service"
 CONFIG_REMOTE_PATH="$CONFIG_DIR/config.ini"
 
@@ -34,8 +34,7 @@ scp "$BUILD_DIR/$ARCHIVE_NAME" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
 echo "[deploy] Extracting archive on remote host"
 ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; cd '$DEPLOY_PATH'; tar -xzf '$ARCHIVE_NAME'; rm -f '$ARCHIVE_NAME'"
 
-# Deploy /etc/mcp-jira-thing/config.ini.sample.
-# NOTE: We avoid touching /etc/mcp-jira-thing/config.ini to preserve local overrides.
+# Always deploy config.ini.sample as a reference.
 if [[ -f "$CONFIG_SAMPLE_LOCAL" ]]; then
   echo "[deploy] Ensuring remote config directory $CONFIG_DIR exists"
   ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mkdir -pv '$CONFIG_DIR'"
@@ -47,17 +46,14 @@ if [[ -f "$CONFIG_SAMPLE_LOCAL" ]]; then
   echo "[deploy] Installing config.ini.sample under $CONFIG_DIR"
   ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mv '$TMP_CONFIG' '$CONFIG_DIR/config.ini.sample'; sudo chown root:root '$CONFIG_DIR/config.ini.sample'; sudo chmod 640 '$CONFIG_DIR/config.ini.sample'"
 else
-  echo "[deploy] WARNING: $CONFIG_SAMPLE_LOCAL not found; skipping config.ini deployment" >&2
+  echo "[deploy] WARNING: $CONFIG_SAMPLE_LOCAL not found; skipping config.ini.sample deployment" >&2
 fi
 
-# Optionally publish /etc/mcp-jira-thing/config.ini on every deploy so secrets can be rotated
-# by updating CI credentials and re-running the deploy (no code change required).
-#
-# Enable by setting DEPLOY_PUBLISH_CONFIG_INI=1 in the environment.
+# Generate config.ini from CI environment when DEPLOY_PUBLISH_CONFIG_INI=1.
+# Only creates the file if it does not already exist on the remote host;
+# subsequent deploys update it so secrets can be rotated via Jenkins.
 if [[ "${DEPLOY_PUBLISH_CONFIG_INI:-}" == "1" ]]; then
   : "${DATABASE_URL:?DATABASE_URL must be set to publish $CONFIG_REMOTE_PATH}"
-
-  echo "[deploy] Publishing $CONFIG_REMOTE_PATH from CI environment (DEPLOY_PUBLISH_CONFIG_INI=1)"
 
   LOCAL_TMP_CONFIG="$(mktemp)"
   cleanup() { rm -f "$LOCAL_TMP_CONFIG"; }
@@ -73,16 +69,38 @@ if [[ "${DEPLOY_PUBLISH_CONFIG_INI:-}" == "1" ]]; then
     if [[ -n "${LOG_LEVEL:-}" ]]; then
       echo "LOG_LEVEL=${LOG_LEVEL}"
     fi
+    # Google OAuth
+    if [[ -n "${GOOGLE_CLIENT_ID:-}" ]]; then
+      echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"
+    fi
+    if [[ -n "${GOOGLE_CLIENT_SECRET:-}" ]]; then
+      echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}"
+    fi
+    # Session/cookie management
+    if [[ -n "${COOKIE_SECRET:-}" ]]; then
+      echo "COOKIE_SECRET=${COOKIE_SECRET}"
+    fi
+    if [[ -n "${COOKIE_DOMAIN:-}" ]]; then
+      echo "COOKIE_DOMAIN=${COOKIE_DOMAIN}"
+    fi
+    if [[ -n "${FRONTEND_URL:-}" ]]; then
+      echo "FRONTEND_URL=${FRONTEND_URL}"
+    fi
+    if [[ -n "${BACKEND_URL:-}" ]]; then
+      echo "BACKEND_URL=${BACKEND_URL}"
+    fi
   } > "$LOCAL_TMP_CONFIG"
 
   ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mkdir -pv '$CONFIG_DIR'"
 
-  REMOTE_TMP_CONFIG="/tmp/mcp-jira-thing.config.ini.$$"
+  REMOTE_TMP_CONFIG="/tmp/api-jira-thing.config.ini.$$"
   scp "$LOCAL_TMP_CONFIG" "$DEPLOY_USER@$DEPLOY_HOST:$REMOTE_TMP_CONFIG"
   ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mv '$REMOTE_TMP_CONFIG' '$CONFIG_REMOTE_PATH'; sudo chown root:root '$CONFIG_REMOTE_PATH'; sudo chmod 640 '$CONFIG_REMOTE_PATH'"
+
+  echo "[deploy] Published $CONFIG_REMOTE_PATH"
 fi
 
-# Deploy /etc/systemd/system/mcp-backend.service unit file if available
+# Deploy /etc/systemd/system/<service>.service unit file if available
 if [[ -f "$SYSTEMD_UNIT_LOCAL" ]]; then
   echo "[deploy] Uploading systemd unit for mcp-backend"
   TMP_UNIT="/tmp/mcp-backend.service.$$"

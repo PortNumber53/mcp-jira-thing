@@ -6,13 +6,11 @@ After=network.target
 Type=simple
 User=grimlock
 Group=grimlock
-WorkingDirectory=/var/www/vhosts/mcp-jira-thing.truvis.co
-EnvironmentFile=/etc/mcp-jira-thing/config.ini
-ExecStart=/var/www/vhosts/mcp-jira-thing.truvis.co/mcp-backend
+WorkingDirectory=/var/www/vhosts/api-jira-thing.truvis.co
+EnvironmentFile=/etc/api-jira-thing.truvis.co/config.ini
+ExecStart=/var/www/vhosts/api-jira-thing.truvis.co/mcp-backend
 Restart=on-failure
 RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
-
-

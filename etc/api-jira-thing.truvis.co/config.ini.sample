@@ -1,0 +1,24 @@
+# Environment variables for the MCP Jira Thing backend service.
+# Copy this file to /etc/api-jira-thing.truvis.co/config.ini and adjust values
+# for your environment.
+#
+# NOTE: In production, Jenkins publishes /etc/api-jira-thing.truvis.co/config.ini
+# on each deploy to support secret rotation without code changes.
+
+# Address the backend HTTP server should bind to.
+BACKEND_ADDR=:18003
+
+# Primary database connection string.
+#DATABASE_URL=postgresql://user:password@localhost:5432/mcp_jira_thing?sslmode=disable
+
+# Google OAuth (required for Google sign-in)
+#GOOGLE_CLIENT_ID=
+#GOOGLE_CLIENT_SECRET=
+
+# Session/cookie signing key (must match the Cloudflare Worker's SESSION_SECRET)
+#COOKIE_SECRET=
+#COOKIE_DOMAIN=.example.com
+
+# Origins for OAuth redirects
+#FRONTEND_URL=https://example.com
+#BACKEND_URL=https://api.example.com

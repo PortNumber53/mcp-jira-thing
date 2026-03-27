@@ -79,16 +79,25 @@ pipeline {
       environment {
         // Primary database URL used by the backend at runtime.
         DATABASE_URL = credentials('prod-database-url-mcp-jira-thing')
+        // Google OAuth credentials (shared with Cloudflare Worker stage).
+        GOOGLE_CLIENT_ID = credentials('prod-google-client-id-mcp-jira-thing')
+        GOOGLE_CLIENT_SECRET = credentials('prod-google-client-secret-mcp-jira-thing')
+        // Cookie/session signing key (shared with Cloudflare Worker).
+        COOKIE_SECRET = credentials('prod-jwt-secret-truvisco-website')
+        COOKIE_DOMAIN = credentials('prod-cookie-domain-mcp-jira-thing')
       }
       steps {
         withEnv([
           'DEPLOY_HOST=web1',
           'DEPLOY_USER=grimlock',
-          'DEPLOY_PATH=/var/www/vhosts/mcp-jira-thing.truvis.co',
+          'DEPLOY_PATH=/var/www/vhosts/api-jira-thing.truvis.co',
           'SERVICE_NAME=mcp-backend',
-          // Always publish /etc/mcp-jira-thing/config.ini from Jenkins env/credentials
+          // Always publish /etc/api-jira-thing.truvis.co/config.ini from Jenkins env/credentials
           // so secrets can be rotated by updating credentials and re-deploying.
           'DEPLOY_PUBLISH_CONFIG_INI=1',
+          // Frontend and API origins for OAuth redirects.
+          'FRONTEND_URL=https://jira-thing.truvis.co',
+          'BACKEND_URL=https://api-jira-thing.truvis.co',
         ]) {
           sh 'scripts/deploy-backend.sh'
         }
