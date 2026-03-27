@@ -11,12 +11,9 @@ export default defineConfig({
   server: {
     host: true,
     port: 18110,
-    hmr: {
-      protocol: "wss",
-      host: "jirathing14.dev.portnumber53.com",
-      port: 443,
-      clientPort: 443,
-    },
+    hmr: process.env.VITE_HMR_HOST
+      ? { protocol: "wss", host: process.env.VITE_HMR_HOST, port: 443, clientPort: 443 }
+      : true,
     allowedHosts: [
       "jirathing14.dev.portnumber53.com",
       "jirathing16.dev.portnumber53.com",
@@ -24,13 +21,22 @@ export default defineConfig({
       "mcp-jirathing16.dev.portnumber53.com",
     ],
     proxy: {
-      // Proxy API requests to the Cloudflare Worker
+      // Auth routes are handled by the wrangler worker (handleFrontendFetch)
+      '/api/auth': {
+        target: 'http://localhost:18112',
+        changeOrigin: true,
+      },
+      '/callback': {
+        target: 'http://localhost:18112',
+        changeOrigin: true,
+      },
+      // Other API routes go to the Go backend
       '/api': {
-        target: 'https://mcp-jirathing14.dev.portnumber53.com',
+        target: 'https://api-jirathing14.dev.portnumber53.com',
         changeOrigin: true,
       },
       '/auth': {
-        target: 'https://mcp-jirathing14.dev.portnumber53.com',
+        target: 'http://localhost:18112',
         changeOrigin: true,
       },
     },
