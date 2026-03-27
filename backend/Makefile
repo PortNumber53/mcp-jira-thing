@@ -1,4 +1,4 @@
-BINARY ?= bin/mcp-backend
+BINARY ?= bin/api-backend
 GOOS ?= linux
 GOARCH ?= amd64
 CGO_ENABLED ?= 0

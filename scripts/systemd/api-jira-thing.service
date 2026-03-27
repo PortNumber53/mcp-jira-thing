@@ -8,7 +8,7 @@ User=grimlock
 Group=grimlock
 WorkingDirectory=/var/www/vhosts/api-jira-thing.truvis.co
 EnvironmentFile=/etc/api-jira-thing.truvis.co/config.ini
-ExecStart=/var/www/vhosts/api-jira-thing.truvis.co/mcp-backend
+ExecStart=/var/www/vhosts/api-jira-thing.truvis.co/api-backend
 Restart=on-failure
 RestartSec=5s
 

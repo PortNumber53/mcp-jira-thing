@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 BUILD_DIR="$BACKEND_DIR/bin"
-BINARY_NAME="mcp-backend"
+BINARY_NAME="api-backend"
 ARCHIVE_NAME="$BINARY_NAME.tar.gz"
 CONFIG_DIR="/etc/api-jira-thing.truvis.co"
 CONFIG_SAMPLE_LOCAL="$ROOT_DIR/etc/api-jira-thing.truvis.co/config.ini.sample"

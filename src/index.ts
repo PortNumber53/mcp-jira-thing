@@ -36,7 +36,7 @@ export default {
         url.pathname.startsWith("/.well-known/oauth-authorization-server") ||
         url.pathname === "/.well-known/openid-configuration") {
       return new Response(null, { status: 404 });
-    }
+  }
 
     // Temporary bypass for testing MCP tool invocation without authentication
     if (env.TEST_MODE_TOOL_INVOCATION === 'true' && (url.pathname.startsWith("/mcp") || url.pathname.startsWith("/sse"))) {

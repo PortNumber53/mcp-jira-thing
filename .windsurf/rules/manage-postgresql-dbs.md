@@ -4,7 +4,7 @@ trigger: model_decision
 
 Run all dbtool commands from the project root unless a task specifies otherwise. The binary is already on the PATH, so invoke it directly as dbtool ….
 Supported subcommands (see dbtool --help for details):
-dbtool database list (ls) — list all Xata databases in the workspace.
+dbtool database list (ls) — list all Postgresql databases in the workspace.
 dbtool database dump (export) <dbname> <filepath> [--structure-only] — export the database to a local file.
 dbtool database import (load) <dbname> <filepath> [--overwrite] — import a dump file into the named database.
 dbtool database reset (wipe) <dbname> [--noconfirm] — wipe a database (use only when explicitly approved).

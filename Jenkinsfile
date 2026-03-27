@@ -44,8 +44,8 @@ pipeline {
         // Production Worker configuration.
         BACKEND_BASE_URL = credentials('prod-backend-url-api-jira-thing')
         SESSION_SECRET = credentials('prod-jwt-secret-api-jira-thing')
-        GITHUB_CLIENT_ID = credentials('prod-githuib-client-id-api-jira-thing')
-        GITHUB_CLIENT_SECRET = credentials('prod-githuib-client-secret-api-jira-thing')
+        GITHUB_CLIENT_ID = credentials('prod-github-client-id-api-jira-thing')
+        GITHUB_CLIENT_SECRET = credentials('prod-github-client-secret-api-jira-thing')
         GOOGLE_CLIENT_ID = credentials('prod-google-client-id-api-jira-thing')
         GOOGLE_CLIENT_SECRET = credentials('prod-google-client-secret-api-jira-thing')
         COOKIE_DOMAIN = credentials('prod-cookie-domain-api-jira-thing')
@@ -67,8 +67,8 @@ pipeline {
 
     stage('Archive Artifact') {
       steps {
-        sh 'tar -czf backend/bin/mcp-backend.tar.gz -C backend/bin mcp-backend'
-        archiveArtifacts artifacts: 'backend/bin/mcp-backend.tar.gz', fingerprint: true
+        sh 'tar -czf backend/bin/api-backend.tar.gz -C backend/bin api-backend'
+        archiveArtifacts artifacts: 'backend/bin/api-backend.tar.gz', fingerprint: true
       }
     }
 
