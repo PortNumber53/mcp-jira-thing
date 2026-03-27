@@ -1,5 +1,5 @@
 [Unit]
-Description=MCP Jira Thing backend API
+Description=Jira Thing backend API (api-jira-thing)
 After=network.target
 
 [Service]

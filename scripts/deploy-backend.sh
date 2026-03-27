@@ -8,7 +8,7 @@ BINARY_NAME="mcp-backend"
 ARCHIVE_NAME="$BINARY_NAME.tar.gz"
 CONFIG_DIR="/etc/api-jira-thing.truvis.co"
 CONFIG_SAMPLE_LOCAL="$ROOT_DIR/etc/api-jira-thing.truvis.co/config.ini.sample"
-SYSTEMD_UNIT_LOCAL="$ROOT_DIR/scripts/systemd/mcp-backend.service"
+SYSTEMD_UNIT_LOCAL="$ROOT_DIR/scripts/systemd/api-jira-thing.service"
 CONFIG_REMOTE_PATH="$CONFIG_DIR/config.ini"
 
 : "${DEPLOY_HOST:?DEPLOY_HOST must be set (e.g. production.example.com)}"
@@ -109,7 +109,7 @@ if [[ -f "$SYSTEMD_UNIT_LOCAL" ]]; then
   # Use SERVICE_NAME (minus optional .service suffix) as the unit base name, defaulting to mcp-backend.
   UNIT_BASE_NAME="${SERVICE_NAME%%.service}"
   if [[ -z "$UNIT_BASE_NAME" ]]; then
-    UNIT_BASE_NAME="mcp-backend"
+    UNIT_BASE_NAME="api-jira-thing"
   fi
   UNIT_PATH="/etc/systemd/system/${UNIT_BASE_NAME}.service"
 
