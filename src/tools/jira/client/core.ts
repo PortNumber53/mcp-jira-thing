@@ -69,7 +69,10 @@ export class JiraClientCore {
       }
 
       try {
-        const response = await fetch(`${this.baseUrl}${endpoint}`, requestOptions);
+        const response = await fetch(`${this.baseUrl}${endpoint}`, {
+          ...requestOptions,
+          signal: AbortSignal.timeout(30_000),
+        });
 
         if (!response.ok) {
           const retryAfter = response.headers.get("Retry-After");
@@ -112,6 +115,8 @@ function shouldRetry(status: number): boolean {
 
 function isRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
+    // Timeouts should not be retried — they indicate the API is slow or unreachable
+    if (error.name === "TimeoutError") return false;
     // Some environments wrap network failures in TypeError or FetchError.
     return error.name === "TypeError" || error.name === "FetchError";
   }

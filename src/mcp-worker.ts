@@ -149,6 +149,8 @@ export class MyMCP extends McpAgent<McpEnv, Props> {
       throw new Error("BACKEND_BASE_URL must be configured when using MCP_SECRET for tenant resolution");
     }
 
+    const BACKEND_TIMEOUT_MS = 10_000;
+
     if (!mcpSecret) {
       const userEmail = props?.email?.trim();
 
@@ -165,10 +167,19 @@ export class MyMCP extends McpAgent<McpEnv, Props> {
       const secretUrl = new URL("/api/mcp/secret", backendBase);
       secretUrl.searchParams.set("email", userEmail);
 
-      const secretResponse = await fetch(secretUrl.toString(), {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      });
+      let secretResponse: Response;
+      try {
+        secretResponse = await fetch(secretUrl.toString(), {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+        });
+      } catch (err: any) {
+        if (err.name === "TimeoutError") {
+          throw new Error(`[mcp] Timed out resolving MCP secret after ${BACKEND_TIMEOUT_MS}ms`);
+        }
+        throw err;
+      }
       if (!secretResponse.ok) {
         throw new Error(
           `[mcp] Failed to resolve MCP secret by email: ${secretResponse.status} ${secretResponse.statusText}`,
@@ -188,10 +199,19 @@ export class MyMCP extends McpAgent<McpEnv, Props> {
     const url = new URL("/api/settings/jira/tenant", backendBase);
     url.searchParams.set("mcp_secret", mcpSecret);
 
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      headers: { Accept: "application/json" },
-    });
+    let response: Response;
+    try {
+      response = await fetch(url.toString(), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+      });
+    } catch (err: any) {
+      if (err.name === "TimeoutError") {
+        throw new Error(`[mcp] Timed out resolving Jira settings after ${BACKEND_TIMEOUT_MS}ms`);
+      }
+      throw err;
+    }
     if (!response.ok) {
       throw new Error(
         `[mcp] Failed to resolve Jira settings by MCP secret: ${response.status} ${response.statusText}`,
