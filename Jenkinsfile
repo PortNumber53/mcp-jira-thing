@@ -39,8 +39,9 @@ pipeline {
         branch 'master'
       }
       environment {
-        // Cloudflare API token for Wrangler deploys.
+        // Cloudflare API token and account ID for Wrangler deploys.
         CLOUDFLARE_API_TOKEN = credentials('cloudflare-api-token')
+        CLOUDFLARE_ACCOUNT_ID = credentials('cloudflare-account-id')
         // Production Worker configuration.
         BACKEND_BASE_URL = credentials('prod-backend-url-api-jira-thing')
         SESSION_SECRET = credentials('prod-jwt-secret-api-jira-thing')
