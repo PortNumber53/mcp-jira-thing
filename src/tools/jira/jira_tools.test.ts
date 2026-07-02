@@ -17,48 +17,45 @@ describe('MCP Jira Tools', () => {
     await worker.stop();
   });
 
-  it('should successfully list Jira projects via manageJiraProject', async () => {
+  it('should successfully list Jira projects via getProjectOverview', async () => {
     const resp = await worker.fetch('/mcp', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        toolName: 'manageJiraProject',
-        args: { command: 'listProjects' },
+        toolName: 'getProjectOverview',
+        args: { listProjects: true },
       }),
     });
     const json = await resp.json();
 
     expect(resp.status).toBe(200);
-    const parsed = JSON.parse(json.content[0].text);
-    expect(parsed.success).toBe(true);
-    expect(parsed.projects).toEqual([{ id: '1', key: 'TEST', name: 'Test Project', projectTypeKey: 'software' }]);
+    expect(json.data.success).toBe(true);
+    expect(json.data.projects).toEqual([{ id: '1', key: 'TEST', name: 'Test Project', projectTypeKey: 'software' }]);
   });
 
-  it('should successfully list Jira issue types via manageJiraProject', async () => {
+  it('should successfully get project overview with issue types via getProjectOverview', async () => {
     const resp = await worker.fetch('/mcp', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        toolName: 'manageJiraProject',
+        toolName: 'getProjectOverview',
         args: {
-          command: 'getIssueTypes',
-          projectIdOrKey: 'TEST',
+          projectKey: 'TEST',
         },
       }),
     });
     const json = await resp.json();
 
     expect(resp.status).toBe(200);
-    const parsed = JSON.parse(json.content[0].text);
-    expect(parsed.success).toBe(true);
-    expect(parsed.projectKey).toBe('TEST');
-    expect(parsed.issueTypes).toEqual([
-      { id: '10001', name: 'Task', subtask: false, default: true },
-      { id: '10002', name: 'Sub-task', subtask: true, default: false },
+    expect(json.data.success).toBe(true);
+    expect(json.data.project.key).toBe('TEST');
+    expect(json.data.issueTypes).toEqual([
+      { id: '10001', name: 'Task', subtask: false },
+      { id: '10002', name: 'Bug', subtask: false },
     ]);
   });
 });

@@ -67,18 +67,20 @@ export default {
               return new Response(JSON.stringify({ error: "Unauthorized access to generateImage tool" }), { status: 403 });
             }
           }
-        } else if (requestBody.toolName === 'manageJiraProject' && requestBody.args) {
-          if (requestBody.args.command === 'listProjects') {
+        } else if (requestBody.toolName === 'getProjectOverview' && requestBody.args) {
+          if (requestBody.args.listProjects === true) {
             return new Response(JSON.stringify({
-              content: [{ text: JSON.stringify({ success: true, projects: [{ id: '1', key: 'TEST', name: 'Test Project', projectTypeKey: 'software' }] }, null, 2), type: "text" }],
+              content: [{ text: 'Found 1 projects:\n- TEST: Test Project', type: "text" }],
+              data: { success: true, projects: [{ id: '1', key: 'TEST', name: 'Test Project', projectTypeKey: 'software' }] },
             }), {
               headers: { 'Content-Type': 'application/json' },
               status: 200,
             });
           }
-          if (requestBody.args.command === 'getIssueTypes' && requestBody.args.projectIdOrKey) {
+          if (requestBody.args.projectKey) {
             return new Response(JSON.stringify({
-              content: [{ text: JSON.stringify({ success: true, projectKey: requestBody.args.projectIdOrKey, issueTypes: [{ id: '10001', name: 'Task', subtask: false, default: true }, { id: '10002', name: 'Sub-task', subtask: true, default: false }] }, null, 2), type: "text" }],
+              content: [{ text: `Project: Test Project (${requestBody.args.projectKey})\nLead: Test Lead\n\nNo active sprint.\n\nBacklog: 3 issues\nIssue types: Task, Bug, Story`, type: "text" }],
+              data: { success: true, project: { key: requestBody.args.projectKey, name: 'Test Project' }, backlogCount: 3, issueTypes: [{ id: '10001', name: 'Task', subtask: false }, { id: '10002', name: 'Bug', subtask: false }] },
             }), {
               headers: { 'Content-Type': 'application/json' },
               status: 200,
