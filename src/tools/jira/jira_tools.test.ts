@@ -58,4 +58,24 @@ describe('MCP Jira Tools', () => {
       { id: '10002', name: 'Bug', subtask: false },
     ]);
   });
+
+  it('should successfully delete a comment via deleteComment', async () => {
+    const resp = await worker.fetch('/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        toolName: 'deleteComment',
+        args: { issueKey: 'TEST-1', commentId: '10001' },
+      }),
+    });
+    const json = await resp.json();
+
+    expect(resp.status).toBe(200);
+    expect(json.data.success).toBe(true);
+    expect(json.data.issueKey).toBe('TEST-1');
+    expect(json.data.commentId).toBe('10001');
+    expect(json.data.deleted).toBe(true);
+  });
 });

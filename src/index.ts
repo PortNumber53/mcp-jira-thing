@@ -86,6 +86,17 @@ export default {
               status: 200,
             });
           }
+        } else if (requestBody.toolName === 'deleteComment' && requestBody.args) {
+          const { issueKey, commentId } = requestBody.args;
+          if (typeof issueKey === 'string' && typeof commentId === 'string') {
+            return new Response(JSON.stringify({
+              content: [{ text: `Comment ${commentId} deleted from issue ${issueKey}.`, type: "text" }],
+              data: { success: true, issueKey, commentId, deleted: true },
+            }), {
+              headers: { 'Content-Type': 'application/json' },
+              status: 200,
+            });
+          }
         }
         return new Response(JSON.stringify({ error: "Tool invocation failed in test mode" }), { status: 400 });
       }

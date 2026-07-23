@@ -774,7 +774,33 @@ export async function registerJiraWorkflowTools(server, getJiraClient, helpers) 
   );
   registeredTools.push("getWorkItemDetails");
 
-  // ── 8. planSprint ─────────────────────────────────────────
+  // ── 8. deleteComment ──────────────────────────────────────
+
+  server.tool(
+    "deleteComment",
+    "Delete a comment from a Jira issue by comment ID. Use getWorkItemDetails to find comment IDs. Returns confirmation of deletion.",
+    {
+      issueKey: z.string().describe("Issue key (e.g. 'ENG-123')."),
+      commentId: z.string().describe("ID of the comment to delete."),
+    },
+    async (input) => {
+      const jiraClient = await getJiraClient();
+      const { issueKey, commentId } = input;
+
+      if (!issueKey) throw new Error("issueKey is required.");
+      if (!commentId) throw new Error("commentId is required.");
+
+      await jiraClient.deleteIssueComment(issueKey, commentId);
+
+      return {
+        content: [{ text: `Comment ${commentId} deleted from issue ${issueKey}.`, type: "text" }],
+        data: { success: true, issueKey, commentId, deleted: true },
+      };
+    },
+  );
+  registeredTools.push("deleteComment");
+
+  // ── 9. planSprint ─────────────────────────────────────────
 
   server.tool(
     "planSprint",
@@ -834,7 +860,7 @@ export async function registerJiraWorkflowTools(server, getJiraClient, helpers) 
   );
   registeredTools.push("planSprint");
 
-  // ── 9. completeSprintReport ───────────────────────────────
+  // ── 10. completeSprintReport ───────────────────────────────
 
   server.tool(
     "completeSprintReport",
@@ -908,7 +934,7 @@ export async function registerJiraWorkflowTools(server, getJiraClient, helpers) 
   );
   registeredTools.push("completeSprintReport");
 
-  // ── 10. findPeople ────────────────────────────────────────
+  // ── 11. findPeople ────────────────────────────────────────
 
   server.tool(
     "findPeople",
