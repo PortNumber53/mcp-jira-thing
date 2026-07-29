@@ -10,31 +10,12 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "migrations": [
-    {
-      "new_sqlite_classes": [
-        "MyMCP"
-      ],
-      "tag": "v1"
-    }
-  ],
-  "durable_objects": {
-    "bindings": [
-      {
-        "class_name": "MyMCP",
-        "name": "MCP_OBJECT"
-      }
-    ]
-  },
   "kv_namespaces": [
     {
       "binding": "OAUTH_KV",
       "id": "50f7d3c0b1f94315856ba4d31ae5f381"
     }
   ],
-  "ai": {
-    "binding": "AI"
-  },
   "observability": {
     "enabled": true
   },
@@ -42,6 +23,8 @@
   // Do NOT set BACKEND_BASE_URL at the root here, to avoid overwriting the
   // production value configured via Wrangler environments/secrets.
   // Configure BACKEND_BASE_URL per-environment instead (e.g. [env.production].vars).
+  // MCP_SERVER_URL points at the Node.js MCP server (replaces Durable Objects).
+  // Configure per-environment; do NOT set at root to avoid overwriting production.
   "dev": {
     "ip": "0.0.0.0",
     "port": 18114,
@@ -52,31 +35,12 @@
   },
   "env": {
     "production": {
-      "migrations": [
-        {
-          "new_sqlite_classes": [
-            "MyMCP"
-          ],
-          "tag": "v1"
-        }
-      ],
-      "durable_objects": {
-        "bindings": [
-          {
-            "class_name": "MyMCP",
-            "name": "MCP_OBJECT"
-          }
-        ]
-      },
       "kv_namespaces": [
         {
           "binding": "OAUTH_KV",
           "id": "50f7d3c0b1f94315856ba4d31ae5f381"
         }
       ],
-      "ai": {
-        "binding": "AI"
-      },
       "observability": {
         "enabled": true
       },

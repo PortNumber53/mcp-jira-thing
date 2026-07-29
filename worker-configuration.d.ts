@@ -10,8 +10,6 @@ declare namespace Cloudflare {
 		JIRA_BASE_URL: string;
 		JIRA_EMAIL: string;
 		ATLASSIAN_API_KEY: string;
-		MCP_OBJECT: DurableObjectNamespace<import("./src/index").MyMCP>;
-		AI: Ai;
 	}
 }
 interface Env extends Cloudflare.Env {}

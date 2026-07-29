@@ -6,9 +6,6 @@ describe('MCP getProjectOverview Tool', () => {
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
-      vars: {
-        TEST_MODE_TOOL_INVOCATION: 'true',
-      },
     });
   });
 
@@ -16,7 +13,7 @@ describe('MCP getProjectOverview Tool', () => {
     await worker.stop();
   });
 
-  it('should list projects via getProjectOverview', async () => {
+  it('should return 500 for /mcp when MCP_SERVER_URL is not configured', async () => {
     const resp = await worker.fetch('/mcp', {
       method: 'POST',
       headers: {
@@ -29,13 +26,8 @@ describe('MCP getProjectOverview Tool', () => {
         },
       }),
     });
+    expect(resp.status).toBe(500);
     const json = await resp.json();
-
-    expect(resp.status).toBe(200);
-    expect(json.content).toBeDefined();
-    expect(json.content[0].type).toBe('text');
-    expect(json.data.success).toBe(true);
-    expect(json.data.projects).toHaveLength(1);
-    expect(json.data.projects[0].key).toBe('TEST');
+    expect(json.error).toContain('MCP_SERVER_URL');
   });
 });

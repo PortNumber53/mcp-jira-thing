@@ -19,14 +19,10 @@ describe('GitHub OAuth Flow', () => {
     await worker.stop();
   });
 
-  it('should redirect to GitHub for /authorize', async () => {
+  it('should not return 200 for /authorize (OAuth provider removed)', async () => {
     const resp = await worker.fetch('/authorize?client_id=test_client', {
       method: 'GET',
     });
-    
-    // This test is expected to pass with a 200 because the OAuth provider is not fully mocked yet.
-    // TODO: Fix this test to expect a 302 and to correctly mock the OAuth provider.
-    expect(resp.status).toBe(200);
-    // expect(resp.headers.get('location')).toMatch(/github\.com\/login\/oauth\/authorize/);
+    expect(resp.status).not.toBe(200);
   });
 });

@@ -1,40 +1,12 @@
-import OAuthProvider from "@cloudflare/workers-oauth-provider";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { McpAgent } from "agents/mcp";
-import { JiraClient } from "./tools/jira";
-import { GitHubHandler } from "./github-handler";
-import { registerTools } from "./include/tools";
 import type { Props } from "./utils";
-import { integrationRegistry } from "./integrations";
 
 export type McpEnv = Cloudflare.Env & {
   SESSION_SECRET?: string;
-  AI: any;
-  MCP_OBJECT: DurableObjectNamespace<MyMCP>;
   MCP_SECRET?: string;
   BACKEND_BASE_URL?: string;
+  MCP_SERVER_URL?: string;
   LOG_LEVEL?: string;
 };
-
-type LogLevel = "debug" | "info" | "warn" | "error";
-const logLevels: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
-
-function logMessage(env: any, level: LogLevel, message: string, ...args: any[]) {
-  const logLevelStr = (env?.LOG_LEVEL as LogLevel | undefined) || "info";
-  const logLevelsOrder: Record<LogLevel, number> = logLevels;
-  if (logLevelsOrder[level] >= logLevelsOrder[logLevelStr]) {
-    if (level === "error") {
-      console.error(`[${level.toUpperCase()}] ${message}`, ...args);
-    } else {
-      console.log(`[${level.toUpperCase()}] ${message}`, ...args);
-    }
-  }
-}
 
 export function extractMcpSecretFromRequest(request: Request): string | undefined {
   const headerSecret = request.headers.get("x-mcp-secret") || request.headers.get("X-MCP-SECRET");
@@ -85,213 +57,54 @@ export function extractMcpSecretFromRequest(request: Request): string | undefine
   return undefined;
 }
 
-export class MyMCP extends McpAgent<McpEnv, Props> {
-  private jiraClient: JiraClient | null = null;
+export { type Props };
 
-  constructor(state: DurableObjectState, env: McpEnv) {
-    super(state, env);
-  }
+export function getMcpServerUrl(env: McpEnv): string | undefined {
+  const url = env.MCP_SERVER_URL;
+  if (!url) return undefined;
+  return url.endsWith("/") ? url.slice(0, -1) : url;
+}
 
-  private async getJiraClient(): Promise<JiraClient> {
-    if (this.jiraClient) return this.jiraClient;
-    const jiraEnv = await this.buildTenantJiraEnv();
-    this.jiraClient = new JiraClient(jiraEnv as any);
-    return this.jiraClient;
-  }
-
-  server = new McpServer({
-    name: "Github OAuth Proxy Demo",
-    version: "1.0.0",
-  });
-
-  async init() {
-    await registerTools.call(this);
-
-    // Activate feature-flag gated integration modules
-    const props = (this.props as Props | undefined) ?? undefined;
-    await integrationRegistry.activateAll({
-      env: this.env as unknown as Record<string, unknown>,
-      backendBaseUrl: (this.env as McpEnv).BACKEND_BASE_URL,
-      userEmail: props?.login,
-    });
-
-    // Register integration status tool
-    this.server.tool(
-      "listIntegrations",
-      "List all registered third-party integration modules and their status (enabled, configured, errors).",
-      {},
-      async () => {
-        const statuses = await integrationRegistry.getStatuses({
-          env: this.env as unknown as Record<string, unknown>,
-          backendBaseUrl: (this.env as McpEnv).BACKEND_BASE_URL,
-          userEmail: props?.login,
-        });
-        const lines = statuses.map(
-          (s) =>
-            `${s.name} (${s.id}): ${s.enabled ? "enabled" : "disabled"}, ${s.configured ? "configured" : "not configured"}${s.error ? ` — ${s.error}` : ""}`,
-        );
-        return {
-          content: [{ text: lines.length > 0 ? lines.join("\n") : "No integrations registered.", type: "text" }],
-          data: { success: true, integrations: statuses },
-        };
-      },
+export async function proxyToMcpServer(
+  request: Request,
+  env: McpEnv,
+): Promise<Response> {
+  const mcpServerUrl = getMcpServerUrl(env);
+  if (!mcpServerUrl) {
+    return new Response(
+      JSON.stringify({ error: "MCP_SERVER_URL is not configured" }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
 
-  private async buildTenantJiraEnv(): Promise<McpEnv> {
-    const baseEnv = this.env as McpEnv;
-
-    const backendBase = baseEnv.BACKEND_BASE_URL;
-    const props = (this.props as Props | undefined) ?? undefined;
-    let mcpSecret = props?.mcpSecret;
-
-    if (!backendBase) {
-      throw new Error("BACKEND_BASE_URL must be configured when using MCP_SECRET for tenant resolution");
-    }
-
-    const BACKEND_TIMEOUT_MS = 10_000;
-
-    if (!mcpSecret) {
-      const userEmail = props?.email?.trim();
-
-      logMessage(this.env, "debug", "No MCP_SECRET on props, attempting to resolve by user email", {
-        backendBase,
-        userEmail_present: !!userEmail,
-      });
-
-      if (!userEmail) {
-        throw new Error("MCP_SECRET is required and could not be resolved for the current user (missing email on props)");
-      }
-
-      logMessage(this.env, "debug", "Sending request to /api/mcp/secret to resolve MCP secret");
-      const secretUrl = new URL("/api/mcp/secret", backendBase);
-      secretUrl.searchParams.set("email", userEmail);
-
-      let secretResponse: Response;
-      try {
-        secretResponse = await fetch(secretUrl.toString(), {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
-        });
-      } catch (err: any) {
-        if (err.name === "TimeoutError") {
-          throw new Error(`[mcp] Timed out resolving MCP secret after ${BACKEND_TIMEOUT_MS}ms`);
-        }
-        throw err;
-      }
-      if (!secretResponse.ok) {
-        throw new Error(
-          `[mcp] Failed to resolve MCP secret by email: ${secretResponse.status} ${secretResponse.statusText}`,
-        );
-      }
-      const secretData = (await secretResponse.json()) as { mcp_secret?: string | null };
-      const resolvedSecret = secretData.mcp_secret ?? undefined;
-      if (!resolvedSecret) {
-        throw new Error("[mcp] No MCP secret configured for current user");
-      }
-
-      mcpSecret = resolvedSecret;
-      if (props) (props as Props).mcpSecret = resolvedSecret;
-    }
-
-    logMessage(this.env, "debug", "Sending request to /api/settings/jira/tenant to resolve Jira settings");
-    const url = new URL("/api/settings/jira/tenant", backendBase);
-    url.searchParams.set("mcp_secret", mcpSecret);
-
-    let response: Response;
-    try {
-      response = await fetch(url.toString(), {
-        method: "GET",
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
-      });
-    } catch (err: any) {
-      if (err.name === "TimeoutError") {
-        throw new Error(`[mcp] Timed out resolving Jira settings after ${BACKEND_TIMEOUT_MS}ms`);
-      }
-      throw err;
-    }
-    if (!response.ok) {
-      throw new Error(
-        `[mcp] Failed to resolve Jira settings by MCP secret: ${response.status} ${response.statusText}`,
-      );
-    }
-    const data = (await response.json()) as {
-      jira_base_url?: string;
-      jira_email?: string;
-      atlassian_api_key?: string;
-    };
-
-    if (!data.jira_base_url || !data.jira_email || !data.atlassian_api_key) {
-      throw new Error("[mcp] Incomplete Jira settings resolved by MCP secret");
-    }
-
-    return {
-      ...baseEnv,
-      JIRA_BASE_URL: data.jira_base_url,
-      JIRA_EMAIL: data.jira_email,
-      ATLASSIAN_API_KEY: data.atlassian_api_key,
-    } as McpEnv;
-  }
-}
-
-const sseHandler = MyMCP.serveSSE("/sse") as any;
-const mcpHandler = MyMCP.serve("/mcp") as any;
-
-function withMcpSecret(handler: any): any {
-  return {
-    async fetch(request: Request, env: McpEnv, ctx: ExecutionContext) {
-      const mcpSecret = extractMcpSecretFromRequest(request);
-      if (mcpSecret) {
-        const existingProps = (ctx as any).props ?? {};
-        (ctx as any).props = { ...existingProps, mcpSecret } as Props;
-      }
-
-      if (typeof handler === "function") {
-        return handler(request, env, ctx);
-      }
-      if (handler && typeof handler.fetch === "function") {
-        return handler.fetch(request, env, ctx);
-      }
-
-      return new Response("Not Found", { status: 404 });
-    },
-  };
-}
-
-export function createMcpOAuthProvider() {
-  return new OAuthProvider({
-    apiHandlers: {
-      "/sse": withMcpSecret(sseHandler),
-      "/sse/message": withMcpSecret(sseHandler),
-      "/mcp": withMcpSecret(mcpHandler),
-    },
-    authorizeEndpoint: "/authorize",
-    clientRegistrationEndpoint: "/register",
-    defaultHandler: GitHubHandler as any,
-    tokenEndpoint: "/token",
-  });
-}
-
-export async function handleMcpWithoutOAuth(
-  request: Request,
-  env: McpEnv,
-  ctx: ExecutionContext,
-): Promise<Response> {
   const url = new URL(request.url);
+  const targetUrl = new URL(url.pathname + url.search, mcpServerUrl);
+
+  const headers = new Headers(request.headers);
+  headers.set("Host", new URL(mcpServerUrl).host);
+
   const mcpSecret = extractMcpSecretFromRequest(request);
-  if (mcpSecret) {
-    const existingProps = (ctx as any).props ?? {};
-    (ctx as any).props = { ...existingProps, mcpSecret } as Props;
+  if (mcpSecret && !headers.has("x-mcp-secret")) {
+    headers.set("x-mcp-secret", mcpSecret);
   }
 
-  if (url.pathname.startsWith("/sse")) {
-    return (sseHandler.fetch ? sseHandler.fetch(request, env, ctx) : sseHandler(request, env, ctx)) as Response;
-  }
-  if (url.pathname.startsWith("/mcp")) {
-    return (mcpHandler.fetch ? mcpHandler.fetch(request, env, ctx) : mcpHandler(request, env, ctx)) as Response;
+  const init: RequestInit = {
+    method: request.method,
+    headers,
+  };
+
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    init.body = request.body;
   }
 
-  return new Response("Not Found", { status: 404 });
+  const response = await fetch(targetUrl.toString(), init);
+
+  const respHeaders = new Headers(response.headers);
+  respHeaders.delete("transfer-encoding");
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: respHeaders,
+  });
 }

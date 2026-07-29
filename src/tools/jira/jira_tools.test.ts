@@ -1,5 +1,4 @@
 import { unstable_dev } from 'wrangler';
-import { vi } from 'vitest'; // Keep vi import for global.fetch mock
 
 describe('MCP Jira Tools', () => {
   let worker;
@@ -7,9 +6,6 @@ describe('MCP Jira Tools', () => {
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
-      vars: {
-        TEST_MODE_TOOL_INVOCATION: 'true', // Temporarily bypass OAuth for direct tool invocation
-      },
     });
   });
 
@@ -17,7 +13,7 @@ describe('MCP Jira Tools', () => {
     await worker.stop();
   });
 
-  it('should successfully list Jira projects via getProjectOverview', async () => {
+  it('should return 500 for /mcp when MCP_SERVER_URL is not configured (listProjects)', async () => {
     const resp = await worker.fetch('/mcp', {
       method: 'POST',
       headers: {
@@ -28,14 +24,12 @@ describe('MCP Jira Tools', () => {
         args: { listProjects: true },
       }),
     });
+    expect(resp.status).toBe(500);
     const json = await resp.json();
-
-    expect(resp.status).toBe(200);
-    expect(json.data.success).toBe(true);
-    expect(json.data.projects).toEqual([{ id: '1', key: 'TEST', name: 'Test Project', projectTypeKey: 'software' }]);
+    expect(json.error).toContain('MCP_SERVER_URL');
   });
 
-  it('should successfully get project overview with issue types via getProjectOverview', async () => {
+  it('should return 500 for /mcp when MCP_SERVER_URL is not configured (projectKey)', async () => {
     const resp = await worker.fetch('/mcp', {
       method: 'POST',
       headers: {
@@ -48,18 +42,12 @@ describe('MCP Jira Tools', () => {
         },
       }),
     });
+    expect(resp.status).toBe(500);
     const json = await resp.json();
-
-    expect(resp.status).toBe(200);
-    expect(json.data.success).toBe(true);
-    expect(json.data.project.key).toBe('TEST');
-    expect(json.data.issueTypes).toEqual([
-      { id: '10001', name: 'Task', subtask: false },
-      { id: '10002', name: 'Bug', subtask: false },
-    ]);
+    expect(json.error).toContain('MCP_SERVER_URL');
   });
 
-  it('should successfully delete a comment via deleteComment', async () => {
+  it('should return 500 for /mcp when MCP_SERVER_URL is not configured (deleteComment)', async () => {
     const resp = await worker.fetch('/mcp', {
       method: 'POST',
       headers: {
@@ -70,12 +58,8 @@ describe('MCP Jira Tools', () => {
         args: { issueKey: 'TEST-1', commentId: '10001' },
       }),
     });
+    expect(resp.status).toBe(500);
     const json = await resp.json();
-
-    expect(resp.status).toBe(200);
-    expect(json.data.success).toBe(true);
-    expect(json.data.issueKey).toBe('TEST-1');
-    expect(json.data.commentId).toBe('10001');
-    expect(json.data.deleted).toBe(true);
+    expect(json.error).toContain('MCP_SERVER_URL');
   });
 });

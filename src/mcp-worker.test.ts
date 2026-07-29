@@ -6,9 +6,6 @@ describe('MCP Worker', () => {
   beforeAll(async () => {
     worker = await unstable_dev('src/index.ts', {
       experimental: { disableExperimentalWarning: true },
-      vars: {
-        TEST_MODE_TOOL_INVOCATION: 'true',
-      },
     });
   });
 
@@ -16,9 +13,10 @@ describe('MCP Worker', () => {
     await worker.stop();
   });
 
-  it('should establish an SSE connection for /sse', async () => {
+  it('should return 500 for /sse when MCP_SERVER_URL is not configured', async () => {
     const resp = await worker.fetch('/sse');
-    expect(resp.status).toBe(200);
-    expect(resp.headers.get('Content-Type')).toBe('text/event-stream');
+    expect(resp.status).toBe(500);
+    const json = await resp.json();
+    expect(json.error).toContain('MCP_SERVER_URL');
   });
 });
