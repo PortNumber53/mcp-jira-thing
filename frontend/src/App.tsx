@@ -354,7 +354,8 @@ const AppContent = () => {
     if (session.status === "authenticated") {
       if (route === "/settings") {
         const mcpSecretExample = mcpSecret ?? "<YOUR_SECRET>";
-        const mcpHttpUrlExample = `${window.location.origin}/mcp?mcp_secret=${mcpSecretExample}`;
+        const mcpHttpUrlExample = `${window.location.origin}/mcp`;
+        const mcpHttpUrlWithSecretExample = `${window.location.origin}/mcp?mcp_secret=${mcpSecretExample}`;
         const platformToNpxPath: Record<typeof mcpInstructionsPlatform, string> = {
           osx: "/opt/homebrew/bin/npx",
           linux: "npx",
@@ -549,6 +550,8 @@ const AppContent = () => {
               <p className="app__status">
                 Use the MCP secret above to connect your editor to this server. The MCP endpoint for your tenant is
                 <code style={{ marginLeft: "0.35rem" }}>{mcpHttpUrlExample}</code>.
+                Pass the secret via the <code>X-MCP-Secret</code> header, or append
+                <code>?mcp_secret=YOUR_SECRET</code> to the URL if your client does not support custom headers.
               </p>
               <p className="app__status" style={{ marginTop: "-0.5rem", fontWeight: 600 }}>
                 IMPORTANT: make sure to adjust these examples to your system.
@@ -588,7 +591,7 @@ const AppContent = () => {
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
                     {`"jira-thing": {
   "command": "${npxPathForPlatform}",
-  "args": ["mcp-remote", "${mcpHttpUrlExample}"],
+  "args": ["mcp-remote", "${mcpHttpUrlWithSecretExample}"],
   "env": {
     "PATH": "${pathEnvForPlatform}"
   }
@@ -608,7 +611,7 @@ const AppContent = () => {
                 <li>
                   Any MCP client that supports HTTP or SSE can connect. Example:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-                    {`npx mcp-remote "${mcpHttpUrlExample}"`}
+                    {`npx mcp-remote "${mcpHttpUrlWithSecretExample}"`}
                   </pre>
                 </li>
                 <li>

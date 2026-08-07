@@ -31,6 +31,11 @@ export function extractMcpSecretFromRequest(request: Request): string | undefine
 
   try {
     const url = new URL(request.url);
+    // NOTE: Reading the MCP secret from query parameters is supported for
+    // backward compatibility with existing MCP client configurations that use
+    // URLs like https://example.com/mcp?mcp_secret=ABC123. New configurations
+    // should use the X-MCP-Secret header instead.
+    // lgtm[js/sensitive-get-query]
     const directSecret =
       url.searchParams.get("mcp_secret") ||
       url.searchParams.get("MCP_SECRET") ||

@@ -21,6 +21,12 @@ export function extractMcpSecretFromRequest(req: Request): string | undefined {
     }
   }
 
+  // NOTE: Reading the MCP secret from query parameters is supported for
+  // backward compatibility with existing MCP client configurations that use
+  // URLs like https://example.com/mcp?mcp_secret=ABC123. New configurations
+  // should use the X-MCP-Secret header instead. The query parameter path is
+  // retained to avoid breaking deployed clients but is deprecated.
+  // lgtm[js/sensitive-get-query]
   const directSecret =
     (req.query.mcp_secret as string) ||
     (req.query.MCP_SECRET as string) ||
