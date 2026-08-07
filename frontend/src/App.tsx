@@ -356,6 +356,7 @@ const AppContent = () => {
         const mcpSecretExample = mcpSecret ?? "<YOUR_SECRET>";
         const mcpHttpUrlExample = `${window.location.origin}/mcp`;
         const mcpHttpUrlWithSecretExample = `${window.location.origin}/mcp?mcp_secret=${mcpSecretExample}`;
+        const mcpHeaderExample = `X-MCP-Secret: ${mcpSecretExample}`;
         const platformToNpxPath: Record<typeof mcpInstructionsPlatform, string> = {
           osx: "/opt/homebrew/bin/npx",
           linux: "npx",
@@ -597,6 +598,12 @@ const AppContent = () => {
   }
 }`}
                   </pre>
+                  <p style={{ marginTop: "0.5rem", marginBottom: 0, fontSize: "0.8rem", color: "#856404" }}>
+                    <strong>Warning:</strong> The <code>?mcp_secret=</code> query parameter exposes your secret in
+                    access logs, browser history, and proxy logs. This form is required for <code>mcp-remote</code>
+                    which does not support custom headers via URL, but prefer the <code>X-MCP-Secret</code> header
+                    with clients that support it (see below).
+                  </p>
                 </li>
                 <li>
                   If Cursor logs <code>spawn npx ENOENT</code> or <code>env: node: No such file or directory</code>,
@@ -609,10 +616,23 @@ const AppContent = () => {
               </h4>
               <ul className="app__status" style={{ paddingLeft: "1.25rem", margin: 0 }}>
                 <li>
-                  Any MCP client that supports HTTP or SSE can connect. Example:
+                  <strong>Recommended:</strong> If your MCP client supports custom headers, pass the secret via the
+                  <code>X-MCP-Secret</code> header and use the plain endpoint URL <code>{mcpHttpUrlExample}</code>:
+                  <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
+                    {`# Header-based auth (recommended)
+curl -H "${mcpHeaderExample}" ${mcpHttpUrlExample}`}
+                  </pre>
+                </li>
+                <li>
+                  <strong>Fallback:</strong> For clients like <code>mcp-remote</code> that do not support custom
+                  headers via URL, append the secret as a query parameter:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
                     {`npx mcp-remote "${mcpHttpUrlWithSecretExample}"`}
                   </pre>
+                  <p style={{ marginTop: "0.5rem", marginBottom: 0, fontSize: "0.8rem", color: "#856404" }}>
+                    <strong>Warning:</strong> The <code>?mcp_secret=</code> query parameter exposes your secret in
+                    access logs, browser history, and proxy logs. Use this only when custom headers are not supported.
+                  </p>
                 </li>
                 <li>
                   This server supports both HTTP (<code>/mcp</code>) and SSE (<code>/sse</code>) transports.

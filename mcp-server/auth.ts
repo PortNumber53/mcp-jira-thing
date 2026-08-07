@@ -1,9 +1,19 @@
 import type { Request } from "express";
 
-export function extractMcpSecretFromRequest(req: Request): string | undefined {
+export interface ExtractedSecret {
+  secret: string;
+  fromDeprecatedQueryParam: boolean;
+}
+
+const DEPRECATION_WARNING =
+  "[mcp] Deprecation: MCP secret was provided via query parameter. " +
+  "Use the X-MCP-Secret header instead. The query-parameter form exposes " +
+  "the secret in access logs, browser history, and proxy logs.";
+
+export function extractMcpSecretFromRequest(req: Request): ExtractedSecret | undefined {
   const headerSecret = req.headers["x-mcp-secret"] as string | undefined;
   if (headerSecret && headerSecret.trim().length > 0) {
-    return headerSecret.trim();
+    return { secret: headerSecret.trim(), fromDeprecatedQueryParam: false };
   }
 
   const cookieHeader = req.headers.cookie;
@@ -15,7 +25,7 @@ export function extractMcpSecretFromRequest(req: Request): string | undefined {
       if (name.trim() === "MCP_SECRET") {
         const value = rest.join("=").trim();
         if (value) {
-          return value;
+          return { secret: value, fromDeprecatedQueryParam: false };
         }
       }
     }
@@ -32,16 +42,22 @@ export function extractMcpSecretFromRequest(req: Request): string | undefined {
     (req.query.MCP_SECRET as string) ||
     (req.query.mcpSecret as string);
   if (directSecret && directSecret.trim().length > 0) {
-    return directSecret.trim();
+    console.warn(DEPRECATION_WARNING);
+    return { secret: directSecret.trim(), fromDeprecatedQueryParam: true };
   }
 
+  // NOTE: Same backward-compatibility query-parameter path as above — the
+  // secret may also be embedded inside a "query" query parameter. This is
+  // deprecated for the same reason: use the X-MCP-Secret header instead.
+  // lgtm[js/sensitive-get-query]
   const queryParams = req.query.query;
   if (typeof queryParams === "string") {
     const match = queryParams.match(/MCP_SECRET=([^&\s]+)/);
     if (match && match[1]) {
       const extracted = match[1].trim();
       if (extracted.length > 0) {
-        return extracted;
+        console.warn(DEPRECATION_WARNING);
+        return { secret: extracted, fromDeprecatedQueryParam: true };
       }
     }
   } else if (Array.isArray(queryParams)) {
@@ -51,7 +67,8 @@ export function extractMcpSecretFromRequest(req: Request): string | undefined {
       if (match && match[1]) {
         const extracted = match[1].trim();
         if (extracted.length > 0) {
-          return extracted;
+          console.warn(DEPRECATION_WARNING);
+          return { secret: extracted, fromDeprecatedQueryParam: true };
         }
       }
     }
