@@ -21,7 +21,7 @@ type MCPTransportSession struct {
 	UserLogin   *string         `json:"user_login,omitempty"`
 	UserEmail   *string         `json:"user_email,omitempty"`
 	UserName    *string         `json:"user_name,omitempty"`
-	MCPSecret   *string         `json:"mcp_secret,omitempty"`
+	MCPSecret   *string         `json:"-"`
 	InitRequest json.RawMessage `json:"init_request"`
 	ExpiresAt   time.Time       `json:"expires_at"`
 	LastSeenAt  time.Time       `json:"last_seen_at"`

@@ -41,9 +41,9 @@ func TestCreateAndGetMCPTransportSession(t *testing.T) {
 		WithArgs(session.SessionID).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"session_id", "transport", "user_id", "init_request", "expires_at", "last_seen_at", "created_at", "updated_at",
-			"login", "email", "name", "mcp_secret",
+			"login", "email", "name",
 		}).AddRow(session.SessionID, session.Transport, userID, session.InitRequest, session.ExpiresAt, now, now, now,
-			"octocat", "cat@example.com", "Octo Cat", "secret"))
+			"octocat", "cat@example.com", "Octo Cat"))
 
 	got, err := s.GetMCPTransportSession(context.Background(), session.SessionID)
 	if err != nil {
