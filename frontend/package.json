@@ -50,5 +50,8 @@
 		"vite": "^7.1.2",
 		"vitest": "^2.1.9",
 		"wrangler": "^4.43.0"
+	},
+	"overrides": {
+		"esbuild": "0.25.0"
 	}
 }
