@@ -60,8 +60,7 @@ func (s *Store) GetMCPTransportSession(ctx context.Context, sessionID string) (*
 			s.updated_at,
 			u.login,
 			u.email,
-			u.name,
-			u.mcp_secret
+			u.name
 		FROM mcp_transport_sessions s
 		LEFT JOIN users u ON u.id = s.user_id
 		WHERE s.session_id = $1 AND s.expires_at > now()
@@ -77,7 +76,6 @@ func (s *Store) GetMCPTransportSession(ctx context.Context, sessionID string) (*
 		&session.UserLogin,
 		&session.UserEmail,
 		&session.UserName,
-		&session.MCPSecret,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrMCPTransportSessionNotFound

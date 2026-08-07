@@ -99,12 +99,13 @@ app.get("/sse", async (req, res) => {
     const transport = new SSEServerTransport("/sse/message", res as any);
     const sessionId = transport.sessionId;
     persistedSessionId = sessionId;
+    const mcpSecret = extractMcpSecretFromRequest(req);
     const persisted = await transportSessionStore.create({
       sessionId,
       transport: "sse",
-      mcpSecret: extractMcpSecretFromRequest(req),
+      mcpSecret,
     });
-    const { context, cleanup } = await createSessionContext(baseEnv, propsFromPersistedSession(persisted));
+    const { context, cleanup } = await createSessionContext(baseEnv, propsFromPersistedSession(persisted, mcpSecret));
 
     sseSessions.set(sessionId, { transport, entry: { context, cleanup } });
     await context.server.connect(transport);
@@ -184,13 +185,14 @@ app.post("/mcp", async (req, res) => {
 
     const sessionId = randomUUID();
     newlyPersistedSessionId = sessionId;
+    const mcpSecret = extractMcpSecretFromRequest(req);
     const persisted = await transportSessionStore.create({
       sessionId,
       transport: "streamable_http",
-      mcpSecret: extractMcpSecretFromRequest(req),
+      mcpSecret,
       initRequest: req.body,
     });
-    const { context, cleanup } = await createSessionContext(baseEnv, propsFromPersistedSession(persisted));
+    const { context, cleanup } = await createSessionContext(baseEnv, propsFromPersistedSession(persisted, mcpSecret));
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => sessionId,
     });

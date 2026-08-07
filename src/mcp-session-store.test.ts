@@ -12,7 +12,6 @@ const persistedSession: PersistedTransportSession = {
   user_login: "octocat",
   user_email: "cat@example.com",
   user_name: "Octo Cat",
-  mcp_secret: "secret",
   init_request: {
     method: "initialize",
     params: {
@@ -71,12 +70,16 @@ describe("TransportSessionStore", () => {
   });
 
   it("reconstructs MCP props from the persisted user reference", () => {
-    expect(propsFromPersistedSession(persistedSession)).toEqual({
+    expect(propsFromPersistedSession(persistedSession, "secret")).toEqual({
       login: "octocat",
       name: "Octo Cat",
       email: "cat@example.com",
       accessToken: "",
       mcpSecret: "secret",
     });
+  });
+
+  it("returns undefined when no user identity or MCP secret is available", () => {
+    expect(propsFromPersistedSession({ ...persistedSession, user_login: undefined, user_email: undefined })).toBeUndefined();
   });
 });

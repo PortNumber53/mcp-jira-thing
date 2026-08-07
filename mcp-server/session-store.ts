@@ -8,7 +8,6 @@ export type PersistedTransportSession = {
   user_login?: string;
   user_email?: string;
   user_name?: string;
-  mcp_secret?: string;
   init_request: unknown;
   expires_at: string;
   last_seen_at: string;
@@ -146,13 +145,16 @@ export function restorePersistedTransportState(
   protocolInternals._clientVersion = init?.params?.clientInfo;
 }
 
-export function propsFromPersistedSession(session: PersistedTransportSession): Props | undefined {
-  if (!session.user_login && !session.user_email && !session.mcp_secret) return undefined;
+export function propsFromPersistedSession(
+  session: PersistedTransportSession,
+  mcpSecret?: string,
+): Props | undefined {
+  if (!session.user_login && !session.user_email && !mcpSecret) return undefined;
   return {
     login: session.user_login || session.user_email || "",
     name: session.user_name || "",
     email: session.user_email || "",
     accessToken: "",
-    mcpSecret: session.mcp_secret,
+    mcpSecret,
   };
 }
