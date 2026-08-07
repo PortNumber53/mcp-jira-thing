@@ -1,8 +1,11 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // Config captures runtime configuration values used by the backend service.
@@ -41,6 +44,7 @@ const (
 // Load reads configuration from environment variables, applies defaults, and returns
 // a Config structure. Required values return an error when missing.
 func Load() (Config, error) {
+	loadConfigINI()
 	cfg := Config{
 		ServerAddress:      firstNonEmpty(os.Getenv(envServerAddress), defaultServerAddress),
 		DatabaseURL:        os.Getenv(envDatabaseURL),
@@ -66,4 +70,38 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func loadConfigINI() {
+	paths := []string{"/etc/mcp-jira-thing/config.ini"}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		paths = append(paths, filepath.Join(home, ".config", "mcp-jira-thing", "config.ini"))
+	}
+	for _, p := range paths {
+		f, err := os.Open(p)
+		if err != nil {
+			continue
+		}
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			line := strings.TrimSpace(sc.Text())
+			if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+				continue
+			}
+			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+				continue
+			}
+			key, val, ok := strings.Cut(line, "=")
+			if !ok {
+				continue
+			}
+			key = strings.TrimSpace(key)
+			val = strings.TrimSpace(val)
+			val = strings.Trim(val, "'")
+			if key != "" && os.Getenv(key) == "" {
+				os.Setenv(key, val)
+			}
+		}
+		f.Close()
+	}
 }
