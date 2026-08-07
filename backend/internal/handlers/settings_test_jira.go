@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/session"
 )
@@ -51,11 +53,18 @@ func TestJiraSettings(cookieSecret string) http.HandlerFunc {
 			return
 		}
 
+		if parsedURL.Hostname() == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Jira base URL must include a hostname"})
+			return
+		}
+
 		if err := validatePublicHost(parsedURL.Hostname()); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 
+		// Strip userinfo to prevent credential leakage via the URL itself.
+		parsedURL.User = nil
 		baseURL := strings.TrimRight(parsedURL.String(), "/")
 		basicToken := base64.StdEncoding.EncodeToString([]byte(payload.JiraEmail + ":" + payload.AtlassianAPIKey))
 
@@ -66,7 +75,7 @@ func TestJiraSettings(cookieSecret string) http.HandlerFunc {
 			}
 			req.Header.Set("Accept", "application/json")
 			req.Header.Set("Authorization", "Basic "+basicToken)
-			return http.DefaultClient.Do(req)
+			return safeHTTPClient.Do(req)
 		}
 
 		resp, err := makeRequest("/rest/api/3/myself")
@@ -127,7 +136,7 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 func validatePublicHost(hostname string) error {
 	ips, err := net.LookupIP(hostname)
 	if err != nil {
-		return fmt.Errorf("Unable to resolve hostname: %v", err)
+		return fmt.Errorf("unable to resolve hostname: %w", err)
 	}
 	for _, ip := range ips {
 		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
@@ -135,4 +144,37 @@ func validatePublicHost(hostname string) error {
 		}
 	}
 	return nil
+}
+
+// safeHTTPClient is a dedicated HTTP client that guards against SSRF bypasses:
+//   - CheckRedirect re-validates the scheme and hostname of every redirect target.
+//   - DialContext validates the resolved IP at dial time, closing the DNS
+//     rebinding / TOCTOU window between pre-flight validation and connection.
+//   - A timeout prevents indefinite hangs on attacker-controlled URLs.
+var safeHTTPClient = &http.Client{
+	Timeout: 15 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 3 {
+			return fmt.Errorf("too many redirects")
+		}
+		if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+			return fmt.Errorf("disallowed redirect scheme")
+		}
+		if err := validatePublicHost(req.URL.Hostname()); err != nil {
+			return err
+		}
+		return nil
+	},
+	Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid address %q: %w", addr, err)
+			}
+			if err := validatePublicHost(host); err != nil {
+				return nil, err
+			}
+			return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(host, port))
+		},
+	},
 }
