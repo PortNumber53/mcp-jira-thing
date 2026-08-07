@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -150,7 +151,7 @@ func touchMCPTransportSession(sessionStore MCPTransportSessionStore) http.Handle
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload touchMCPTransportSessionRequest
 		if r.Body != nil {
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
 				writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON payload"})
 				return
 			}
