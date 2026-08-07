@@ -75,3 +75,24 @@ func TestTouchMCPTransportSessionNotFound(t *testing.T) {
 		t.Fatalf("expected ErrMCPTransportSessionNotFound, got %v", err)
 	}
 }
+
+func TestDeleteMCPTransportSessionNotFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	s := &Store{db: db}
+
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM mcp_transport_sessions")).
+		WithArgs("missing").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	if err := s.DeleteMCPTransportSession(context.Background(), "missing"); err != ErrMCPTransportSessionNotFound {
+		t.Fatalf("expected ErrMCPTransportSessionNotFound, got %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

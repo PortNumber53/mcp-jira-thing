@@ -117,8 +117,16 @@ func (s *Store) DeleteMCPTransportSession(ctx context.Context, sessionID string)
 		return errors.New("store: db cannot be nil")
 	}
 
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM mcp_transport_sessions WHERE session_id = $1`, sessionID); err != nil {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM mcp_transport_sessions WHERE session_id = $1`, sessionID)
+	if err != nil {
 		return fmt.Errorf("store: delete MCP transport session: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("store: read deleted MCP transport session rows: %w", err)
+	}
+	if rows == 0 {
+		return ErrMCPTransportSessionNotFound
 	}
 	return nil
 }
