@@ -175,7 +175,12 @@ func touchMCPTransportSession(sessionStore MCPTransportSessionStore) http.Handle
 
 func deleteMCPTransportSession(sessionStore MCPTransportSessionStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := sessionStore.DeleteMCPTransportSession(r.Context(), chi.URLParam(r, "sessionID")); err != nil {
+		err := sessionStore.DeleteMCPTransportSession(r.Context(), chi.URLParam(r, "sessionID"))
+		if errors.Is(err, store.ErrMCPTransportSessionNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": "session not found"})
+			return
+		}
+		if err != nil {
 			log.Printf("delete MCP transport session: %v", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete MCP transport session"})
 			return
