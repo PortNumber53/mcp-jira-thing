@@ -151,6 +151,7 @@ Create a copy of `backend/env.example` and provide the required values:
 | ------------------------------ | -------- | ------------------------------------------------------------- |
 | `BACKEND_ADDR`                 | optional | Address the HTTP server listens on. Defaults to `:18111`.      |
 | `DATABASE_URL`                 | ✅       | Postgres DSN used by the backend at runtime. |
+| `MCP_SESSION_API_TOKEN`        | optional | Internal Node MCP → backend credential; defaults to `COOKIE_SECRET`. |
 | `BACKEND_HTTP_TIMEOUT_SECONDS` | optional | Outbound request timeout, defaults to 15 seconds.             |
 
 
@@ -371,22 +372,13 @@ You can connect your MCP server to other MCP clients like Windsurf by opening th
 
 ## How does it work?
 
-#### OAuth Provider
+#### MCP transport and persistence
 
-The OAuth Provider library serves as a complete OAuth 2.1 server implementation for Cloudflare Workers. It handles the complexities of the OAuth flow, including token issuance, validation, and management. In this project, it plays the dual role of:
+Cloudflare Workers route `/sse` and `/mcp` traffic to the standalone Node.js MCP server configured by `MCP_SERVER_URL`. The Node service does not connect to the database directly. It persists transport-session identity, initialization metadata, tenant ownership, expiry, and last-seen timestamps through the Go backend's protected internal API. The Go backend is the only database owner and stores those records in PostgreSQL.
 
-- Authenticating MCP clients that connect to your server
-- Managing the connection to GitHub's OAuth services
-- Securely storing tokens and authentication state in KV storage
+Streamable HTTP sessions can be reconstructed from PostgreSQL after a Node process restart. Live response streams and legacy SSE sockets necessarily remain process-local; if an SSE socket is interrupted, the client reconnects and creates a new persisted session.
 
-#### Durable MCP
-
-Durable MCP extends the base MCP functionality with Cloudflare's Durable Objects, providing:
-
-- Persistent state management for your MCP server
-- Secure storage of authentication context between requests
-- Access to authenticated user information via `this.props`
-- Support for conditional tool availability based on user identity
+Set `MCP_SESSION_API_TOKEN` to the same value on the Go backend and Node MCP service. If omitted, both services can use the existing shared `COOKIE_SECRET`/`SESSION_SECRET`. `MCP_SESSION_TTL_SECONDS` controls the Node service's sliding session lifetime and defaults to 24 hours.
 
 #### MCP Remote
 

@@ -20,7 +20,7 @@ import {
   JiraPriority,
   JiraDocument,
 } from "./interfaces";
-import { JiraClientCore } from "./client/core";
+import { JiraClientCore, type JiraEnvironment } from "./client/core";
 import { JiraIssues, JiraGetIssueOptions, JiraSearchIssuesOptions } from "./client/issues";
 import { JiraSprints } from "./client/sprints";
 import { JiraDashboards } from "./client/dashboards";
@@ -41,7 +41,7 @@ export class JiraClient extends JiraClientCore {
   private users: JiraUsers;
   public issueTypes: JiraIssueTypes;
 
-  constructor(env: Env) {
+  constructor(env: JiraEnvironment) {
     super(env);
     this.issues = new JiraIssues(env);
     this.sprints = new JiraSprints(env);

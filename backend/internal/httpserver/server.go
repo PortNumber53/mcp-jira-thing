@@ -103,6 +103,12 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 		router.Delete("/api/integrations/tokens", handlers.IntegrationTokens(integrationStore))
 	}
 
+	// Internal API used by the Node MCP service. PostgreSQL is the source of
+	// truth for transport session identity and reconstruction metadata.
+	if s != nil {
+		handlers.RegisterMCPTransportSessionRoutes(router, s, cfg.MCPSessionAPIToken)
+	}
+
 	// Billing endpoints
 	router.Post("/api/billing/save-subscription", handlers.SaveSubscription(billingStore, userStore))
 	router.Post("/api/billing/save-payment", handlers.SavePayment(billingStore, userStore))

@@ -83,8 +83,11 @@ pipeline {
         // Google OAuth credentials (shared with Cloudflare Worker stage).
         GOOGLE_CLIENT_ID = credentials('prod-google-client-id-api-jira-thing')
         GOOGLE_CLIENT_SECRET = credentials('prod-google-client-secret-api-jira-thing')
-        // Cookie/session signing key (shared with Cloudflare Worker).
+        // Cookie/session signing key shared with the Cloudflare Worker.
         COOKIE_SECRET = credentials('prod-jwt-secret-api-jira-thing')
+        // Internal MCP session API credential. Use the same production secret
+        // so the Node MCP service and Go backend authenticate consistently.
+        MCP_SESSION_API_TOKEN = credentials('prod-jwt-secret-api-jira-thing')
         COOKIE_DOMAIN = credentials('prod-cookie-domain-api-jira-thing')
       }
       steps {

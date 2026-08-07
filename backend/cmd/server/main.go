@@ -62,6 +62,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create store: %v", err)
 	}
+	if deleted, err := appStore.DeleteExpiredMCPTransportSessions(context.Background()); err != nil {
+		log.Printf("failed to prune expired MCP transport sessions: %v", err)
+	} else if deleted > 0 {
+		log.Printf("pruned %d expired MCP transport sessions", deleted)
+	}
 
 	// Initialize job store and worker
 	jobStore, err := store.NewJobStore(db)
