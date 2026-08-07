@@ -84,3 +84,31 @@ func TestMCPTransportSessionTTLCapsWithoutOverflow(t *testing.T) {
 		t.Fatalf("expected max TTL %v, got %v", maxMCPTransportSessionTTL, got)
 	}
 }
+
+func TestTouchMCPTransportSessionAcceptsEmptyBody(t *testing.T) {
+	fakeStore := &fakeMCPTransportSessionStore{}
+	router := chi.NewRouter()
+	RegisterMCPTransportSessionRoutes(router, fakeStore, "internal-token")
+	req := httptest.NewRequest(http.MethodPatch, "/internal/mcp/sessions/session-1", nil)
+	req.Header.Set("X-MCP-Session-Token", "internal-token")
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for empty PATCH body, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestTouchMCPTransportSessionRejectsInvalidJSON(t *testing.T) {
+	fakeStore := &fakeMCPTransportSessionStore{}
+	router := chi.NewRouter()
+	RegisterMCPTransportSessionRoutes(router, fakeStore, "internal-token")
+	req := httptest.NewRequest(http.MethodPatch, "/internal/mcp/sessions/session-1", bytes.NewBufferString(`{bad`))
+	req.Header.Set("X-MCP-Session-Token", "internal-token")
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid JSON, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
