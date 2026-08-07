@@ -75,6 +75,14 @@ func TestJiraSettings(cookieSecret string) http.HandlerFunc {
 			}
 			req.Header.Set("Accept", "application/json")
 			req.Header.Set("Authorization", "Basic "+basicToken)
+			// The base URL is validated above (scheme allowlist, non-empty
+			// hostname, and IP classification via validatePublicHost) before
+			// reaching this sink. safeHTTPClient additionally enforces dial-time
+			// validation (Transport.DialContext) and re-validates every redirect
+			// target (CheckRedirect), closing the DNS-rebinding and redirect
+			// bypass vectors. CodeQL's taint tracker does not model these custom
+			// sanitizers, so the go/request-forgery alert is a false positive.
+			// codeql[go/request-forgery]
 			return safeHTTPClient.Do(req)
 		}
 
