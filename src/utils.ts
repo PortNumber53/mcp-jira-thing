@@ -111,3 +111,23 @@ export type Props = {
   accessToken: string;
   mcpSecret?: string;
 };
+
+/**
+ * Escapes a user-provided string for safe interpolation into a Google Drive
+ * API search query single-quoted string literal.
+ *
+ * Within a single-quoted value the Google Drive API requires:
+ *   - backslash (\) to be doubled (\\)
+ *   - single quote (') to be escaped (\')
+ *
+ * Backslashes MUST be escaped first so that a backslash preceding a quote
+ * in the input (e.g. \') is doubled before the quote-escaping pass runs.
+ * Otherwise the quote would end up unescaped, allowing injection of
+ * arbitrary query directives.
+ *
+ * @param {string} s - The raw user input to escape.
+ * @returns {string} The escaped string, safe to embed inside single quotes.
+ */
+export function escapeDriveQueryString(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}

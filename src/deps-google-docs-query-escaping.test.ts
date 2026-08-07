@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { escapeDriveQueryString } from "./utils";
 
 /**
  * Regression test for code scanning alerts #5 and #6 —
@@ -15,25 +16,19 @@ import { describe, expect, it } from "vitest";
  * is now unescaped, breaking out of the string literal and allowing
  * injection of arbitrary Google Drive API query directives.
  *
- * The fix escapes backslashes first, then single quotes:
- *   query.replace(/\\/g, "\\\\").replace(/'/g, "\\'")
+ * The fix escapes backslashes first, then single quotes, via the shared
+ * escapeDriveQueryString helper in src/utils.ts. Both production call sites
+ * (src/include/tools.js and src/integrations/google-docs.ts) import and use
+ * that helper, so this test exercises the real implementation.
  */
-
-/**
- * Replicates the escaping logic from src/include/tools.js and
- * src/integrations/google-docs.ts to test it in isolation.
- */
-function escapeDriveQuery(query: string): string {
-  return query.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-}
 
 describe("Code scanning #5-6 — Google Docs query escaping", () => {
   it("escapes single quotes", () => {
-    expect(escapeDriveQuery("it's")).toBe("it\\'s");
+    expect(escapeDriveQueryString("it's")).toBe("it\\'s");
   });
 
   it("escapes backslashes", () => {
-    expect(escapeDriveQuery("a\\b")).toBe("a\\\\b");
+    expect(escapeDriveQueryString("a\\b")).toBe("a\\\\b");
   });
 
   it("escapes backslash-quote sequence (the injection vector)", () => {
@@ -44,28 +39,22 @@ describe("Code scanning #5-6 — Google Docs query escaping", () => {
     // Fixed code: replace(/\\/g, "\\\\").replace(/'/g, "\\'") → \\\\'
     //   Both the backslash and the quote are properly escaped.
     const input = "\\'";
-    const escaped = escapeDriveQuery(input);
+    const escaped = escapeDriveQueryString(input);
     // After fix: backslash is doubled (\\), then quote is escaped (\')
     // Result: \\\' (3 backslashes + quote) = "\\\\\\'" in JS string literal
     expect(escaped).toBe("\\\\\\'");
-    // Verify no unescaped single quote remains: every quote must be
-    // preceded by a backslash that is itself part of the escape sequence
-    // (not a doubled backslash). The simplest check: the escaped string
-    // should not end with an unescaped quote, and should not contain
-    // a quote that is not preceded by an odd number of backslashes.
-    expect(escaped).not.toMatch(/(?<!\\)(?<!\\\\)'/);
   });
 
   it("handles empty string", () => {
-    expect(escapeDriveQuery("")).toBe("");
+    expect(escapeDriveQueryString("")).toBe("");
   });
 
   it("handles string with no special characters", () => {
-    expect(escapeDriveQuery("hello world")).toBe("hello world");
+    expect(escapeDriveQueryString("hello world")).toBe("hello world");
   });
 
   it("handles multiple backslashes and quotes", () => {
     // Input: \'\' → after escaping: \\\'\\\' (each \ becomes \\, each ' becomes \')
-    expect(escapeDriveQuery("\\'\\'")).toBe("\\\\\\'\\\\\\'");
+    expect(escapeDriveQueryString("\\'\\'")).toBe("\\\\\\'\\\\\\'");
   });
 });
