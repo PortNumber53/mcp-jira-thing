@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.0.5",
-    "@modelcontextprotocol/sdk": "^1.12.3",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "hono": "^4.12.34",
     "ini": "^4.1.2",
     "just-pick": "^4.2.0",
@@ -28,7 +28,7 @@
     "baseline-browser-mapping": "^2.9.19",
     "prettier": "^3.5.3",
     "typescript": "^5.8.3",
-    "vitest": "^4.0.18",
-    "wrangler": "^4.20.5"
+    "vitest": "^4.1.0",
+    "wrangler": "^4.119.0"
   }
 }
