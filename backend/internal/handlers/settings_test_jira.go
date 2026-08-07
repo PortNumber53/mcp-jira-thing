@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/session"
@@ -38,7 +40,23 @@ func TestJiraSettings(cookieSecret string) http.HandlerFunc {
 			return
 		}
 
-		baseURL := strings.TrimRight(payload.JiraBaseURL, "/")
+		parsedURL, err := url.Parse(payload.JiraBaseURL)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Invalid Jira base URL"})
+			return
+		}
+
+		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Jira base URL must use http or https scheme"})
+			return
+		}
+
+		if err := validatePublicHost(parsedURL.Hostname()); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+
+		baseURL := strings.TrimRight(parsedURL.String(), "/")
 		basicToken := base64.StdEncoding.EncodeToString([]byte(payload.JiraEmail + ":" + payload.AtlassianAPIKey))
 
 		makeRequest := func(path string) (*http.Response, error) {
@@ -101,4 +119,20 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
+}
+
+// validatePublicHost checks that a hostname does not resolve to a private,
+// loopback, or link-local address, preventing SSRF attacks where an
+// authenticated user supplies an internal URL as the Jira base URL.
+func validatePublicHost(hostname string) error {
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return fmt.Errorf("Unable to resolve hostname: %v", err)
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("Jira base URL must not point to a private, loopback, or link-local address")
+		}
+	}
+	return nil
 }
