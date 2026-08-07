@@ -280,7 +280,7 @@ export async function registerTools() {
 
       const params = new URLSearchParams();
       const mimeFilter = "mimeType='application/vnd.google-apps.document'";
-      const nameFilter = query ? ` and name contains '${query.replace(/'/g, "\\'")}'` : "";
+      const nameFilter = query ? ` and name contains '${query.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'` : "";
       params.set("q", `${mimeFilter}${nameFilter}`);
       params.set("fields", "files(id,name,mimeType,modifiedTime,webViewLink),nextPageToken");
       params.set("pageSize", String(pageSize ?? 20));
