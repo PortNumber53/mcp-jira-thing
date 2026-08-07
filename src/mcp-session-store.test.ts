@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  isSupportedSdkVersion,
+  MCP_SDK_VERSION,
   propsFromPersistedSession,
   restorePersistedTransportState,
   TransportSessionStore,
@@ -78,5 +80,37 @@ describe("TransportSessionStore", () => {
       accessToken: "",
       mcpSecret: "secret",
     });
+  });
+});
+
+describe("SDK version guard", () => {
+  it("resolves the installed SDK version", () => {
+    expect(MCP_SDK_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it("reports the installed version as supported", () => {
+    expect(isSupportedSdkVersion(MCP_SDK_VERSION)).toBe(true);
+  });
+
+  it("accepts versions within the supported range", () => {
+    expect(isSupportedSdkVersion("1.12.3")).toBe(true);
+    expect(isSupportedSdkVersion("1.30.0")).toBe(true);
+    expect(isSupportedSdkVersion("1.99.99")).toBe(true);
+  });
+
+  it("rejects versions below the minimum", () => {
+    expect(isSupportedSdkVersion("1.12.2")).toBe(false);
+    expect(isSupportedSdkVersion("1.0.0")).toBe(false);
+    expect(isSupportedSdkVersion("0.9.0")).toBe(false);
+  });
+
+  it("rejects versions at or above the next major", () => {
+    expect(isSupportedSdkVersion("2.0.0")).toBe(false);
+    expect(isSupportedSdkVersion("3.0.0")).toBe(false);
+  });
+
+  it("rejects undefined or unparseable versions", () => {
+    expect(isSupportedSdkVersion(undefined)).toBe(false);
+    expect(isSupportedSdkVersion("not-a-version")).toBe(false);
   });
 });

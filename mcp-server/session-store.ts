@@ -1,3 +1,6 @@
+import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Props } from "./jira-env.js";
 
 export type TransportKind = "sse" | "streamable_http";
@@ -121,11 +124,71 @@ export class SessionNotFoundError extends Error {
 // The MCP SDK does not currently expose a public constructor for restoring an
 // initialized transport. This compatibility shim supports both the original
 // Node transport and the newer wrapper around the Web Standard transport.
+//
+// The shim pokes at private SDK internals (_webStandardTransport, _initialized,
+// _clientCapabilities, _clientVersion) that are not part of the public API and
+// may change between SDK releases. A version guard ensures we only touch those
+// fields when the installed SDK version is within the tested range, avoiding
+// crashes or silent state corruption on incompatible upgrades.
+const MIN_SUPPORTED_SDK_VERSION = { major: 1, minor: 12, patch: 3 };
+const MAX_SUPPORTED_SDK_MAJOR = 2;
+const SUPPORTED_SDK_RANGE = ">=1.12.3 <2.0.0";
+
+function resolveSdkVersion(): string | undefined {
+  try {
+    const require = createRequire(import.meta.url);
+    const entryPath = require.resolve("@modelcontextprotocol/sdk/server");
+    let dir = dirname(entryPath);
+    for (let i = 0; i < 10; i++) {
+      try {
+        const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+        if (pkg.name === "@modelcontextprotocol/sdk") return pkg.version as string;
+      } catch {
+        // not a readable package.json — keep walking up
+      }
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  } catch {
+    // SDK not installed or resolvable — leave version undefined
+  }
+  return undefined;
+}
+
+function parseSemver(version: string): { major: number; minor: number; patch: number } | undefined {
+  const match = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return undefined;
+  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
+}
+
+export function isSupportedSdkVersion(version: string | undefined): boolean {
+  if (!version) return false;
+  const parsed = parseSemver(version);
+  if (!parsed) return false;
+  if (parsed.major < MIN_SUPPORTED_SDK_VERSION.major) return false;
+  if (parsed.major > MIN_SUPPORTED_SDK_VERSION.major) return parsed.major < MAX_SUPPORTED_SDK_MAJOR;
+  if (parsed.minor < MIN_SUPPORTED_SDK_VERSION.minor) return false;
+  if (parsed.minor > MIN_SUPPORTED_SDK_VERSION.minor) return true;
+  return parsed.patch >= MIN_SUPPORTED_SDK_VERSION.patch;
+}
+
+export const MCP_SDK_VERSION = resolveSdkVersion();
+
 export function restorePersistedTransportState(
   transport: unknown,
   protocol: unknown,
   session: PersistedTransportSession,
 ): void {
+  if (!isSupportedSdkVersion(MCP_SDK_VERSION)) {
+    console.warn(
+      `[mcp] Skipping transport state restoration: @modelcontextprotocol/sdk version ` +
+        `${MCP_SDK_VERSION ?? "(unknown)"} is outside the supported range ` +
+        `(${SUPPORTED_SDK_RANGE}). Session ${session.session_id} may not be fully restored.`,
+    );
+    return;
+  }
+
   const transportInternals = transport as {
     sessionId?: string;
     _initialized?: boolean;
