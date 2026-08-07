@@ -592,17 +592,18 @@ const AppContent = () => {
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
                     {`"jira-thing": {
   "command": "${npxPathForPlatform}",
-  "args": ["mcp-remote", "${mcpHttpUrlWithSecretExample}"],
+  "args": ["mcp-remote", "${mcpHttpUrlExample}", "--header", "X-MCP-Secret:\${MCP_SECRET}"],
   "env": {
+    "MCP_SECRET": "${mcpSecretExample}",
     "PATH": "${pathEnvForPlatform}"
   }
 }`}
                   </pre>
-                  <p style={{ marginTop: "0.5rem", marginBottom: 0, fontSize: "0.8rem", color: "#856404" }}>
-                    <strong>Warning:</strong> The <code>?mcp_secret=</code> query parameter exposes your secret in
-                    access logs, browser history, and proxy logs. This form is required for <code>mcp-remote</code>
-                    which does not support custom headers via URL, but prefer the <code>X-MCP-Secret</code> header
-                    with clients that support it (see below).
+                  <p style={{ marginTop: "0.5rem", marginBottom: 0, fontSize: "0.8rem", color: "#31708f" }}>
+                    <strong>Note:</strong> The <code>--header</code> flag passes the secret via the
+                    <code>X-MCP-Secret</code> HTTP header, keeping it out of URLs. The
+                    <code>{"${MCP_SECRET}"}</code> placeholder is substituted from the <code>env</code> block —
+                    no space around the <code>:</code> avoids a known Cursor args-spacing bug.
                   </p>
                 </li>
                 <li>
@@ -616,16 +617,20 @@ const AppContent = () => {
               </h4>
               <ul className="app__status" style={{ paddingLeft: "1.25rem", margin: 0 }}>
                 <li>
-                  <strong>Recommended:</strong> If your MCP client supports custom headers, pass the secret via the
-                  <code>X-MCP-Secret</code> header and use the plain endpoint URL <code>{mcpHttpUrlExample}</code>:
+                  <strong>Recommended:</strong> Use the <code>X-MCP-Secret</code> header with the plain endpoint URL
+                  <code>{mcpHttpUrlExample}</code>. For <code>mcp-remote</code>, pass the header via the
+                  <code>--header</code> flag with env-var substitution:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-                    {`# Header-based auth (recommended)
+                    {`# mcp-remote with header (recommended)
+MCP_SECRET=${mcpSecretExample} npx mcp-remote "${mcpHttpUrlExample}" --header "X-MCP-Secret:\${MCP_SECRET}"
+
+# or with curl for direct testing
 curl -H "${mcpHeaderExample}" ${mcpHttpUrlExample}`}
                   </pre>
                 </li>
                 <li>
-                  <strong>Fallback:</strong> For clients like <code>mcp-remote</code> that do not support custom
-                  headers via URL, append the secret as a query parameter:
+                  <strong>Fallback:</strong> For older versions of <code>mcp-remote</code> that do not support the
+                  <code>--header</code> flag, append the secret as a query parameter:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
                     {`npx mcp-remote "${mcpHttpUrlWithSecretExample}"`}
                   </pre>
