@@ -11,7 +11,10 @@ export function registerSearchJiraIssuesTool(server: McpServer, jiraClient: Jira
       maxResults: z.number().optional().describe("[OPTIONAL] Maximum number of results to return. Default is 50 if not specified. Maximum allowed is 100.")
     },
     async ({ jql, maxResults }) => {
-      const searchResults = await jiraClient.searchIssues(jql, maxResults);
+      const searchResults = await jiraClient.searchIssues(
+        jql,
+        maxResults === undefined ? undefined : { maxResults },
+      );
       const issuesText = searchResults.issues.map(issue => `${issue.key}: ${issue.fields.summary}`).join('\n');
       return {
         content: [{ text: `Found ${searchResults.total} issues:\n${issuesText}`, type: "text" }],

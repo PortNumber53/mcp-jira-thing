@@ -43,5 +43,27 @@ func TestLoadCustomServerAddress(t *testing.T) {
 	}
 }
 
+func TestLoadMCPSessionAPIToken(t *testing.T) {
+	t.Setenv(envDatabaseURL, "postgresql://user:pass@db.example.com:5432/app")
+	t.Setenv("COOKIE_SECRET", "cookie-secret")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.MCPSessionAPIToken != "cookie-secret" {
+		t.Fatalf("expected COOKIE_SECRET fallback, got %q", cfg.MCPSessionAPIToken)
+	}
+
+	t.Setenv("MCP_SESSION_API_TOKEN", "dedicated-token")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.MCPSessionAPIToken != "dedicated-token" {
+		t.Fatalf("expected dedicated token, got %q", cfg.MCPSessionAPIToken)
+	}
+}
+
 // Note: DATABASE_URL is treated as the primary DB DSN and is not parsed/validated
 // beyond being required; sql.Open will surface connectivity/DSN issues at runtime.

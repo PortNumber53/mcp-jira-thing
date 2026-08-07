@@ -33,6 +33,10 @@ type Config struct {
 
 	// BackendURL is the public origin of this API server, used to build OAuth redirect URIs.
 	BackendURL string
+
+	// MCPSessionAPIToken authenticates the Node MCP service to the internal
+	// transport-session API. It falls back to CookieSecret for compatibility.
+	MCPSessionAPIToken string
 }
 
 const (
@@ -54,6 +58,7 @@ func Load() (Config, error) {
 		CookieDomain:       os.Getenv("COOKIE_DOMAIN"),
 		FrontendURL:        os.Getenv("FRONTEND_URL"),
 		BackendURL:         os.Getenv("BACKEND_URL"),
+		MCPSessionAPIToken: firstNonEmpty(os.Getenv("MCP_SESSION_API_TOKEN"), os.Getenv("COOKIE_SECRET"), os.Getenv("SESSION_SECRET")),
 	}
 
 	if cfg.DatabaseURL == "" {

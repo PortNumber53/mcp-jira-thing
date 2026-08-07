@@ -80,6 +80,9 @@ if [[ "${DEPLOY_PUBLISH_CONFIG_INI:-}" == "1" ]]; then
     if [[ -n "${COOKIE_SECRET:-}" ]]; then
       echo "COOKIE_SECRET=${COOKIE_SECRET}"
     fi
+    if [[ -n "${MCP_SESSION_API_TOKEN:-}" ]]; then
+      echo "MCP_SESSION_API_TOKEN=${MCP_SESSION_API_TOKEN}"
+    fi
     if [[ -n "${COOKIE_DOMAIN:-}" ]]; then
       echo "COOKIE_DOMAIN=${COOKIE_DOMAIN}"
     fi

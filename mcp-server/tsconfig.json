@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "es2022",
-    "lib": ["es2022"],
+    "lib": ["es2022", "dom"],
     "module": "es2022",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
@@ -16,5 +16,5 @@
     "esModuleInterop": true
   },
   "include": ["**/*.ts", "**/*.js", "../src/include/**/*.js", "../src/tools/jira/**/*.ts", "../src/integrations/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "../src/**/*.test.ts"]
 }

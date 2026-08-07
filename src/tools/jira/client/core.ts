@@ -11,6 +11,12 @@ type JiraRequestConfig = {
   retry?: RetryOptions;
 };
 
+export interface JiraEnvironment {
+  JIRA_BASE_URL: string;
+  JIRA_EMAIL: string;
+  ATLASSIAN_API_KEY: string;
+}
+
 const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
   maxAttempts: 3,
   initialDelayMs: 200,
@@ -22,7 +28,7 @@ export class JiraClientCore {
   protected baseUrl: string;
   protected email: string;
 
-  constructor(env: Env) {
+  constructor(env: JiraEnvironment) {
     this.apiKey = env.ATLASSIAN_API_KEY;
     this.baseUrl = env.JIRA_BASE_URL;
     this.email = env.JIRA_EMAIL;
@@ -90,7 +96,7 @@ export class JiraClientCore {
           return {} as T;
         }
 
-        return await response.json();
+        return (await response.json()) as T;
       } catch (error) {
         lastError = error;
 
