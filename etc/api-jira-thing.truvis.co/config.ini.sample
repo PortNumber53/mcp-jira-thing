@@ -17,6 +17,8 @@ BACKEND_ADDR=:18003
 
 # Session/cookie signing key (must match the Cloudflare Worker's SESSION_SECRET)
 #COOKIE_SECRET=
+# Optional; defaults to COOKIE_SECRET. Must match the Node MCP service.
+#MCP_SESSION_API_TOKEN=
 #COOKIE_DOMAIN=.example.com
 
 # Origins for OAuth redirects
