@@ -10,6 +10,20 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "MyMCP"
+      ]
+    },
+    {
+      "tag": "v2",
+      "deleted_classes": [
+        "MyMCP"
+      ]
+    }
+  ],
   "kv_namespaces": [
     {
       "binding": "OAUTH_KV",
@@ -35,6 +49,20 @@
   },
   "env": {
     "production": {
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_sqlite_classes": [
+            "MyMCP"
+          ]
+        },
+        {
+          "tag": "v2",
+          "deleted_classes": [
+            "MyMCP"
+          ]
+        }
+      ],
       "kv_namespaces": [
         {
           "binding": "OAUTH_KV",
