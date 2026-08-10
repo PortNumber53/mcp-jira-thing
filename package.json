@@ -14,7 +14,7 @@
     "mcp-server:start": "npm run start --prefix mcp-server"
   },
   "dependencies": {
-    "@cloudflare/workers-oauth-provider": "^0.0.5",
+    "@cloudflare/workers-oauth-provider": "^0.10.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "hono": "^4.12.34",
     "ini": "^4.1.2",
