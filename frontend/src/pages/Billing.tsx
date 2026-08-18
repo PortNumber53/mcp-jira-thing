@@ -2,6 +2,7 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import CheckoutForm from '../components/CheckoutForm';
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../api';
 
 const stripeKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51RNrRAB6cvhL4KKMOTYhjbmh2RY4ePS6TKbmMcq4Ce0sPAqux7yHGU2Rdh3K1HgjGT1qA1KiOYI6rVI9mERizd3Z00FRjlBT8X';
 
@@ -34,12 +35,11 @@ const Billing = () => {
     setCancelMessage(null);
 
     try {
-      const response = await fetch('/api/billing/cancel-subscription', {
+      const response = await apiFetch('/api/billing/cancel-subscription', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({
           subscriptionId,
         }),

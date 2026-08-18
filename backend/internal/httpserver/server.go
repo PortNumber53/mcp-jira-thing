@@ -32,6 +32,13 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 
+	// CORS: allow the frontend origin to call the backend directly
+	allowedOrigins := cfg.AllowedOrigins
+	if allowedOrigins == "" {
+		allowedOrigins = cfg.FrontendURL
+	}
+	router.Use(requesttracking.CORS(allowedOrigins))
+
 	// Add custom MCP auth middleware function
 	mcpAuthMiddleware := func(db *sql.DB, store *store.Store) func(next http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
@@ -88,6 +95,9 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 	// Google OAuth flow (browser-based login + callback)
 	router.Get("/api/auth/google/login", handlers.GoogleOAuthLogin(cfg))
 	router.Get("/callback/google", handlers.GoogleOAuthCallback(cfg, authStore))
+	// GitHub OAuth flow (browser-based login + callback)
+	router.Get("/api/auth/login", handlers.GitHubOAuthLogin(cfg))
+	router.Get("/callback/github", handlers.GitHubOAuthCallback(cfg, authStore))
 	router.Get("/api/auth/session", handlers.SessionCheck(cfg))
 	router.Post("/api/auth/logout", handlers.SessionLogout(cfg))
 	jiraSettingsHandler := handlers.UserSettings(settingsStore, cfg.CookieSecret)
@@ -101,6 +111,8 @@ func New(cfg config.Config, db *sql.DB, userClient handlers.UserLister, authStor
 		router.Get("/api/integrations/tokens", handlers.IntegrationTokens(integrationStore))
 		router.Post("/api/integrations/tokens", handlers.IntegrationTokens(integrationStore))
 		router.Delete("/api/integrations/tokens", handlers.IntegrationTokens(integrationStore))
+		router.Get("/api/integrations/google-docs/connect", handlers.GoogleDocsConnect(cfg))
+		router.Get("/callback/google-docs", handlers.GoogleDocsCallback(cfg, integrationStore))
 	}
 
 	// Internal API used by the Node MCP service. PostgreSQL is the source of

@@ -3,12 +3,16 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/PortNumber53/mcp-jira-thing/backend/internal/config"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/models"
+	"github.com/PortNumber53/mcp-jira-thing/backend/internal/session"
 	"github.com/PortNumber53/mcp-jira-thing/backend/internal/store"
 	stripeClient "github.com/PortNumber53/mcp-jira-thing/backend/internal/stripe"
 	"github.com/go-chi/chi/v5"
@@ -37,10 +41,11 @@ type StripeHandler struct {
 	UserStore     UserStore
 	Stripe        *stripeClient.Client
 	WebhookSecret string
+	cfg           config.Config
 }
 
 // NewStripeHandler creates a new StripeHandler
-func NewStripeHandler(planStore *store.PlanStore, billingStore BillingStore, subLookup SubscriptionLookupStore, userStore UserStore, stripe *stripeClient.Client, webhookSecret string) *StripeHandler {
+func NewStripeHandler(planStore *store.PlanStore, billingStore BillingStore, subLookup SubscriptionLookupStore, userStore UserStore, stripe *stripeClient.Client, webhookSecret string, cfg config.Config) *StripeHandler {
 	return &StripeHandler{
 		PlanStore:     planStore,
 		BillingStore:  billingStore,
@@ -48,6 +53,7 @@ func NewStripeHandler(planStore *store.PlanStore, billingStore BillingStore, sub
 		UserStore:     userStore,
 		Stripe:        stripe,
 		WebhookSecret: webhookSecret,
+		cfg:           cfg,
 	}
 }
 
@@ -56,7 +62,10 @@ func (h *StripeHandler) RegisterRoutes(router chi.Router) {
 	router.Get("/api/plans", h.ListPlans())
 	router.Post("/api/checkout", h.CreateCheckout())
 	router.Post("/api/webhooks/stripe", h.HandleWebhook())
+	router.Post("/webhook/stripe", h.HandleWebhook())
 	router.Get("/api/billing/current-plan", h.GetCurrentPlan())
+	router.Post("/api/billing/create-subscription", h.CreateSubscription())
+	router.Post("/api/billing/cancel-subscription", h.CancelSubscription())
 }
 
 // ListPlans returns all available membership plans with pricing
@@ -412,4 +421,227 @@ func extractPriceID(obj map[string]interface{}) string {
 	}
 	id, _ := price["id"].(string)
 	return id
+}
+
+// CreateSubscription handles POST /api/billing/create-subscription.
+// It reads the session cookie, creates a Stripe customer, attaches the provided
+// payment method, sets it as the default, creates a subscription, and saves it
+// to the database.
+func (h *StripeHandler) CreateSubscription() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess, err := session.ReadSession(r, h.cfg.CookieSecret)
+		if err != nil {
+			http.Error(w, "Not authenticated", http.StatusUnauthorized)
+			return
+		}
+
+		if h.cfg.StripeSecretKey == "" {
+			http.Error(w, "Stripe is not configured", http.StatusInternalServerError)
+			return
+		}
+
+		if h.cfg.StripePriceID == "" {
+			http.Error(w, "Stripe price ID is not configured", http.StatusInternalServerError)
+			return
+		}
+
+		var req struct {
+			PaymentMethodID string `json:"paymentMethodId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+			return
+		}
+
+		if req.PaymentMethodID == "" {
+			http.Error(w, "Payment method ID is required", http.StatusBadRequest)
+			return
+		}
+
+		email := ""
+		if sess.Email != nil {
+			email = *sess.Email
+		}
+		name := ""
+		if sess.Name != nil && *sess.Name != "" {
+			name = *sess.Name
+		}
+		if name == "" {
+			name = sess.Login
+		}
+
+		metadata := map[string]string{
+			"user_id":      fmt.Sprintf("%d", sess.ID),
+			"github_login": sess.Login,
+		}
+
+		customerID, err := h.Stripe.CreateCustomer(email, name, metadata)
+		if err != nil {
+			log.Printf("CreateSubscription: failed to create customer: %v", err)
+			http.Error(w, "Failed to create customer", http.StatusInternalServerError)
+			return
+		}
+
+		if err := h.Stripe.AttachPaymentMethod(req.PaymentMethodID, customerID); err != nil {
+			log.Printf("CreateSubscription: failed to attach payment method: %v", err)
+			http.Error(w, "Failed to attach payment method", http.StatusInternalServerError)
+			return
+		}
+
+		if err := h.Stripe.SetDefaultPaymentMethod(customerID, req.PaymentMethodID); err != nil {
+			log.Printf("CreateSubscription: failed to set default payment method: %v", err)
+			http.Error(w, "Failed to set default payment method", http.StatusInternalServerError)
+			return
+		}
+
+		subObj, err := h.Stripe.CreateSubscription(customerID, h.cfg.StripePriceID)
+		if err != nil {
+			log.Printf("CreateSubscription: failed to create subscription: %v", err)
+			http.Error(w, "Failed to create subscription", http.StatusInternalServerError)
+			return
+		}
+
+		subID, _ := subObj["id"].(string)
+		status, _ := subObj["status"].(string)
+		priceID := extractPriceID(subObj)
+
+		var periodStart, periodEnd time.Time
+		if v, ok := subObj["current_period_start"].(float64); ok {
+			periodStart = time.Unix(int64(v), 0)
+		}
+		if v, ok := subObj["current_period_end"].(float64); ok {
+			periodEnd = time.Unix(int64(v), 0)
+		}
+
+		if email != "" {
+			user, err := h.UserStore.GetUserByEmail(r.Context(), email)
+			if err != nil {
+				log.Printf("CreateSubscription: failed to get user: %v", err)
+			} else {
+				sub := &models.Subscription{
+					UserID:               user.ID,
+					StripeCustomerID:     customerID,
+					StripeSubscriptionID: subID,
+					StripePriceID:        priceID,
+					Status:               status,
+					CurrentPeriodStart:   periodStart,
+					CurrentPeriodEnd:     periodEnd,
+				}
+				if err := h.BillingStore.SaveSubscription(r.Context(), sub); err != nil {
+					log.Printf("CreateSubscription: failed to save subscription: %v", err)
+				}
+			}
+		}
+
+		var clientSecret string
+		if latestInvoice, ok := subObj["latest_invoice"].(map[string]interface{}); ok {
+			if pi, ok := latestInvoice["payment_intent"].(map[string]interface{}); ok {
+				clientSecret, _ = pi["client_secret"].(string)
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"subscriptionId": subID,
+			"clientSecret":   clientSecret,
+		})
+	}
+}
+
+// CancelSubscription handles POST /api/billing/cancel-subscription.
+// It reads the session cookie, retrieves the subscription from Stripe, and
+// cancels it at period end (or syncs the existing cancellation state), then
+// updates the database.
+func (h *StripeHandler) CancelSubscription() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, err := session.ReadSession(r, h.cfg.CookieSecret); err != nil {
+			http.Error(w, "Not authenticated", http.StatusUnauthorized)
+			return
+		}
+
+		if h.cfg.StripeSecretKey == "" {
+			http.Error(w, "Stripe is not configured", http.StatusInternalServerError)
+			return
+		}
+
+		var req struct {
+			SubscriptionID string `json:"subscriptionId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON payload", http.StatusBadRequest)
+			return
+		}
+
+		if req.SubscriptionID == "" {
+			http.Error(w, "Subscription ID is required", http.StatusBadRequest)
+			return
+		}
+
+		existing, err := h.Stripe.GetSubscription(req.SubscriptionID)
+		if err != nil {
+			log.Printf("CancelSubscription: failed to retrieve subscription: %v", err)
+			http.Error(w, "Failed to retrieve subscription", http.StatusInternalServerError)
+			return
+		}
+
+		status, _ := existing["status"].(string)
+		cancelAtPeriodEnd, _ := existing["cancel_at_period_end"].(bool)
+		priceID := extractPriceID(existing)
+		customerID, _ := existing["customer"].(string)
+		subID, _ := existing["id"].(string)
+
+		var periodStart, periodEnd time.Time
+		if v, ok := existing["current_period_start"].(float64); ok {
+			periodStart = time.Unix(int64(v), 0)
+		}
+		if v, ok := existing["current_period_end"].(float64); ok {
+			periodEnd = time.Unix(int64(v), 0)
+		}
+
+		var canceledAt *time.Time
+		if v, ok := existing["canceled_at"].(float64); ok && v > 0 {
+			t := time.Unix(int64(v), 0)
+			canceledAt = &t
+		}
+
+		alreadyCanceled := status == "canceled"
+		if !alreadyCanceled && !cancelAtPeriodEnd {
+			if err := h.Stripe.CancelAtPeriodEnd(subID); err != nil {
+				log.Printf("CancelSubscription: failed to cancel subscription: %v", err)
+				http.Error(w, "Failed to cancel subscription", http.StatusInternalServerError)
+				return
+			}
+			cancelAtPeriodEnd = true
+		}
+
+		sub, _ := h.SubLookup.GetSubscriptionByStripeID(r.Context(), subID)
+		if sub != nil {
+			sub.Status = status
+			sub.StripePriceID = priceID
+			sub.StripeCustomerID = customerID
+			sub.CancelAtPeriodEnd = cancelAtPeriodEnd
+			sub.CurrentPeriodStart = periodStart
+			sub.CurrentPeriodEnd = periodEnd
+			sub.CanceledAt = canceledAt
+			if alreadyCanceled {
+				sub.Status = "canceled"
+			}
+			if err := h.BillingStore.UpdateSubscription(r.Context(), sub); err != nil {
+				log.Printf("CancelSubscription: failed to update subscription: %v", err)
+			}
+		}
+
+		message := "Subscription will be canceled at the end of the billing period"
+		if alreadyCanceled {
+			message = "Subscription is already canceled"
+		} else if cancelAtPeriodEnd && !alreadyCanceled {
+			message = "Subscription is already set to cancel at the end of the billing period"
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"subscription": existing,
+			"message":      message,
+		})
+	}
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiFetch, apiUrl } from "../api";
 
 type IntegrationTokenPublic = {
   provider: string;
@@ -23,7 +24,7 @@ const KNOWN_INTEGRATIONS: IntegrationDef[] = [
     id: "google_docs",
     name: "Google Docs",
     description: "Read and modify Google Docs through the MCP agent. Enables document search, text extraction, and content editing.",
-    connectUrl: "/api/integrations/google-docs/connect",
+    connectUrl: apiUrl("/api/integrations/google-docs/connect"),
     icon: "📄",
   },
   {
@@ -60,7 +61,7 @@ const Integrations = () => {
   useEffect(() => {
     const loadTokens = async () => {
       try {
-        const resp = await fetch("/api/integrations/tokens", { method: "GET", credentials: "include" });
+        const resp = await apiFetch("/api/integrations/tokens", { method: "GET" });
         if (resp.ok) {
           const data = (await resp.json()) as { integrations: IntegrationTokenPublic[] };
           setTokens(data.integrations || []);
@@ -77,9 +78,8 @@ const Integrations = () => {
   const handleDisconnect = async (provider: string) => {
     setDisconnecting(provider);
     try {
-      const resp = await fetch(`/api/integrations/tokens?provider=${encodeURIComponent(provider)}`, {
+      const resp = await apiFetch(`/api/integrations/tokens?provider=${encodeURIComponent(provider)}`, {
         method: "DELETE",
-        credentials: "include",
       });
       if (resp.ok) {
         setTokens((prev) => prev.filter((t) => t.provider !== provider));

@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	SessionCookie   = "mjt_session"
-	StateCookie     = "mjt_oauth_state"
-	SessionTTL      = 7 * 24 * time.Hour
-	StateTTL        = 5 * time.Minute
+	SessionCookie         = "mjt_session"
+	StateCookie           = "mjt_oauth_state"
+	GoogleDocsStateCookie = "mjt_gdocs_state"
+	SessionTTL            = 7 * 24 * time.Hour
+	StateTTL              = 5 * time.Minute
 )
 
 // Payload is the data stored in the session cookie, matching the frontend format.

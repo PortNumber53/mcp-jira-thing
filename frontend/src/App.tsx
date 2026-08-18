@@ -6,6 +6,7 @@ import Pricing from './pages/Pricing';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import Integrations from './pages/Integrations';
+import { apiUrl, apiFetch, apiOrigin } from './api';
 
 type SessionUser = {
   id: number;
@@ -59,10 +60,10 @@ type ConnectedAccountsResponse = {
   connected_accounts: ConnectedAccount[];
 };
 
-const SESSION_ENDPOINT = "/api/auth/session";
-const LOGIN_ENDPOINT = "/api/auth/login";
-const LOGOUT_ENDPOINT = "/api/auth/logout";
-const GOOGLE_LOGIN_ENDPOINT = "/api/auth/google/login";
+const SESSION_ENDPOINT = apiUrl("/api/auth/session");
+const LOGIN_ENDPOINT = apiUrl("/api/auth/login");
+const LOGOUT_ENDPOINT = apiUrl("/api/auth/logout");
+const GOOGLE_LOGIN_ENDPOINT = apiUrl("/api/auth/google/login");
 
 const isSessionResponse = (value: unknown): value is SessionResponse => {
   if (typeof value !== "object" || value === null) {
@@ -112,7 +113,7 @@ const AppContent = () => {
 
     const loadSession = async () => {
       try {
-        const response = await fetch(SESSION_ENDPOINT, { credentials: "include", signal });
+        const response = await apiFetch(SESSION_ENDPOINT, { signal });
         if (!response.ok) {
           throw new Error(`Request failed with status ${response.status}`);
         }
@@ -157,9 +158,9 @@ const AppContent = () => {
     const loadSettings = async () => {
       try {
         const [settingsResp, secretResp, connectedAccountsResp] = await Promise.all([
-          fetch("/api/settings/jira", { method: "GET" }),
-          fetch("/api/mcp/secret", { method: "GET" }),
-          fetch("/api/auth/connected-accounts", { method: "GET" }),
+          apiFetch("/api/settings/jira", { method: "GET" }),
+          apiFetch("/api/mcp/secret", { method: "GET" }),
+          apiFetch("/api/auth/connected-accounts", { method: "GET" }),
         ]);
 
         if (settingsResp.ok) {
@@ -217,7 +218,7 @@ const AppContent = () => {
   }, [route]);
 
   const beginLoginWithGitHub = () => {
-    const loginUrl = new URL(LOGIN_ENDPOINT, window.location.origin);
+    const loginUrl = new URL(LOGIN_ENDPOINT);
     loginUrl.searchParams.set("redirect", "/dashboard");
     window.location.href = loginUrl.toString();
   };
@@ -231,7 +232,7 @@ const AppContent = () => {
   const beginLogout = () => {
     const logout = async () => {
       try {
-        await fetch(LOGOUT_ENDPOINT, {
+        await apiFetch(LOGOUT_ENDPOINT, {
           method: "POST",
           credentials: "include",
         });
@@ -255,7 +256,7 @@ const AppContent = () => {
     setIsDeleting(true);
 
     try {
-      const response = await fetch("/api/account/delete", {
+      const response = await apiFetch("/api/account/delete", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -371,7 +372,7 @@ const AppContent = () => {
         const testSettings = async () => {
           setJiraTestStatus({ status: "testing" });
           try {
-            const response = await fetch("/api/settings/jira/test", {
+            const response = await apiFetch("/api/settings/jira/test", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -418,7 +419,7 @@ const AppContent = () => {
                 event.preventDefault();
                 const save = async () => {
                   try {
-                    const response = await fetch("/api/settings/jira", {
+                    const response = await apiFetch("/api/settings/jira", {
                       method: "POST",
                       headers: {
                         "Content-Type": "application/json",
@@ -523,7 +524,7 @@ const AppContent = () => {
                   onClick={() => {
                     const rotate = async () => {
                       try {
-                        const response = await fetch("/api/mcp/secret", { method: "POST" });
+                        const response = await apiFetch("/api/mcp/secret", { method: "POST" });
                         if (!response.ok) {
                           const text = await response.text();
                           console.error("Failed to rotate MCP secret", response.status, text);
@@ -657,11 +658,9 @@ const AppContent = () => {
                         onClick={() => {
                           console.log('Connect button clicked for provider:', provider);
                           const endpoint = provider === 'github' ? LOGIN_ENDPOINT : GOOGLE_LOGIN_ENDPOINT;
-                          console.log('Using endpoint:', endpoint);
-                          const loginUrl = new URL(endpoint, window.location.origin);
+                          const loginUrl = new URL(endpoint);
                           loginUrl.searchParams.set("redirect", "/settings");
                           loginUrl.searchParams.set("link", "true");
-                          console.log('Navigating to:', loginUrl.toString());
                           window.location.href = loginUrl.toString();
                         }}
                       >

@@ -92,6 +92,89 @@ func (c *Client) UpdateSubscriptionPrice(subscriptionID, newPriceID string) erro
 	return nil
 }
 
+// CreateCustomer creates a Stripe customer and returns the customer ID.
+func (c *Client) CreateCustomer(email, name string, metadata map[string]string) (string, error) {
+	data := url.Values{}
+	data.Set("email", email)
+	if name != "" {
+		data.Set("name", name)
+	}
+	for k, v := range metadata {
+		data.Set("metadata["+k+"]", v)
+	}
+
+	resp, err := c.post("/customers", data)
+	if err != nil {
+		return "", fmt.Errorf("create customer: %w", err)
+	}
+
+	customerID, _ := resp["id"].(string)
+	if customerID == "" {
+		return "", fmt.Errorf("create customer: missing customer ID in response")
+	}
+	return customerID, nil
+}
+
+// AttachPaymentMethod attaches a payment method to a customer.
+func (c *Client) AttachPaymentMethod(paymentMethodID, customerID string) error {
+	data := url.Values{}
+	data.Set("customer", customerID)
+
+	_, err := c.post("/payment_methods/"+paymentMethodID+"/attach", data)
+	if err != nil {
+		return fmt.Errorf("attach payment method: %w", err)
+	}
+	return nil
+}
+
+// SetDefaultPaymentMethod sets the default payment method for a customer's invoices.
+func (c *Client) SetDefaultPaymentMethod(customerID, paymentMethodID string) error {
+	data := url.Values{}
+	data.Set("invoice_settings[default_payment_method]", paymentMethodID)
+
+	_, err := c.post("/customers/"+customerID, data)
+	if err != nil {
+		return fmt.Errorf("set default payment method: %w", err)
+	}
+	return nil
+}
+
+// CreateSubscription creates a Stripe subscription for a customer and returns
+// the raw subscription object (with latest_invoice.payment_intent expanded).
+func (c *Client) CreateSubscription(customerID, priceID string) (map[string]interface{}, error) {
+	data := url.Values{}
+	data.Set("customer", customerID)
+	data.Set("items[0][price]", priceID)
+	data.Set("expand[0]", "latest_invoice.payment_intent")
+
+	resp, err := c.post("/subscriptions", data)
+	if err != nil {
+		return nil, fmt.Errorf("create subscription: %w", err)
+	}
+	return resp, nil
+}
+
+// GetSubscription retrieves a Stripe subscription by ID and returns the raw object.
+func (c *Client) GetSubscription(subscriptionID string) (map[string]interface{}, error) {
+	resp, err := c.get("/subscriptions/" + subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("get subscription: %w", err)
+	}
+	return resp, nil
+}
+
+// CancelAtPeriodEnd marks a subscription to be canceled at the end of the current period.
+func (c *Client) CancelAtPeriodEnd(subscriptionID string) error {
+	data := url.Values{}
+	data.Set("cancel_at_period_end", "true")
+
+	_, err := c.post("/subscriptions/"+subscriptionID, data)
+	if err != nil {
+		return fmt.Errorf("cancel subscription at period end: %w", err)
+	}
+	return nil
+}
+
 // CancelSubscription cancels a Stripe subscription
 func (c *Client) CancelSubscription(subscriptionID string, atPeriodEnd bool) error {
 	if atPeriodEnd {

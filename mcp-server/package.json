@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
-    "start": "tsx index.ts",
-    "dev": "tsx watch index.ts"
+    "start": "node --env-file=.env --import tsx/esm index.ts",
+    "dev": "node --env-file=.env --import tsx/esm --watch index.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.3",

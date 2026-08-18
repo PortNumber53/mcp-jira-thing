@@ -21,14 +21,25 @@ export default defineConfig({
       "mcp-jirathing16.dev.portnumber53.com",
     ],
     proxy: {
-      // All API and auth routes go to the Go backend
+      // All API and auth routes go to the local Go backend
       '/api': {
-        target: 'https://api-jirathing14.dev.portnumber53.com',
+        target: process.env.VITE_BACKEND_ORIGIN || 'http://localhost:18111',
         changeOrigin: true,
       },
       '/callback': {
-        target: 'https://api-jirathing14.dev.portnumber53.com',
+        target: process.env.VITE_BACKEND_ORIGIN || 'http://localhost:18111',
         changeOrigin: true,
+      },
+      // MCP routes go directly to the Node MCP server (bypasses Worker)
+      '/mcp': {
+        target: process.env.MCP_SERVER_URL || 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true,
+      },
+      '/sse': {
+        target: process.env.MCP_SERVER_URL || 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

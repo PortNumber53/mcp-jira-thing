@@ -118,7 +118,7 @@ func main() {
 	stripeWebhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
 	if stripeKey != "" {
 		sc := stripeClient.NewClient(stripeKey)
-		stripeHandler = handlers.NewStripeHandler(planStore, appStore, appStore, appStore, sc, stripeWebhookSecret)
+		stripeHandler = handlers.NewStripeHandler(planStore, appStore, appStore, appStore, sc, stripeWebhookSecret, cfg)
 
 		// Register billing worker jobs
 		worker.RegisterBillingJobs(jobWorker, planStore, sc)

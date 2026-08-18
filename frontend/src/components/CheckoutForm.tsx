@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { apiFetch } from '../api';
 
 const CheckoutForm = () => {
   const stripe = useStripe();
@@ -38,12 +39,11 @@ const CheckoutForm = () => {
       console.log('Payment method created:', paymentMethod?.id);
 
       // Send payment method to backend to create subscription
-      const response = await fetch('/api/billing/create-subscription', {
+      const response = await apiFetch('/api/billing/create-subscription', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({
           paymentMethodId: paymentMethod?.id,
         }),
