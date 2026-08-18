@@ -1,0 +1,15 @@
+[Unit]
+Description=Jira Thing Node MCP server (api-jira-thing)
+After=network.target api-jira-thing.service
+
+[Service]
+Type=simple
+User=grimlock
+Group=grimlock
+WorkingDirectory=/var/www/vhosts/api-jira-thing.truvis.co/mcp-server
+ExecStart=/usr/bin/node --env-file=.env --import tsx/esm index.ts
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

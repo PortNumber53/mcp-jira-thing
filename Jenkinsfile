@@ -61,8 +61,9 @@ pipeline {
         sh 'echo "$GOOGLE_CLIENT_SECRET" | npx wrangler secret put GOOGLE_CLIENT_SECRET --env production'
         // Remove COOKIE_DOMAIN secret (was mistakenly uploaded as a secret; now passed as a plain var).
         sh 'npx wrangler secret delete COOKIE_DOMAIN --env production --force || true'
-        // Deploy the merged Worker (serves SPA at / and MCP at /sse).
-        sh 'npx wrangler deploy --env production --var BACKEND_BASE_URL:$BACKEND_BASE_URL --var GITHUB_CLIENT_ID:$GITHUB_CLIENT_ID --var GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID --var COOKIE_DOMAIN:$COOKIE_DOMAIN --var INTEGRATION_GOOGLE_DOCS_ENABLED:true'
+        // Deploy the merged Worker (serves SPA at / and proxies /sse, /mcp to the Node MCP server).
+        // MCP_SERVER_URL points at the public nginx endpoint that proxies to the Node MCP server on port 3001.
+        sh 'npx wrangler deploy --env production --var BACKEND_BASE_URL:$BACKEND_BASE_URL --var MCP_SERVER_URL:https://api-jira-thing.truvis.co --var GITHUB_CLIENT_ID:$GITHUB_CLIENT_ID --var GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_ID --var COOKIE_DOMAIN:$COOKIE_DOMAIN --var INTEGRATION_GOOGLE_DOCS_ENABLED:true'
       }
     }
 
@@ -105,6 +106,28 @@ pipeline {
           'ALLOWED_ORIGINS=https://jira-thing.truvis.co',
         ]) {
           sh 'scripts/deploy-backend.sh'
+        }
+      }
+    }
+
+    stage('Deploy MCP Server') {
+      when {
+        branch 'master'
+      }
+      environment {
+        // Shared session secret — must match the backend's COOKIE_SECRET.
+        MCP_SESSION_API_TOKEN = credentials('prod-jwt-secret-api-jira-thing')
+        GOOGLE_CLIENT_ID = credentials('prod-google-client-id-api-jira-thing')
+        GOOGLE_CLIENT_SECRET = credentials('prod-google-client-secret-api-jira-thing')
+      }
+      steps {
+        withEnv([
+          'DEPLOY_HOST=web1',
+          'DEPLOY_USER=grimlock',
+          'DEPLOY_PATH=/var/www/vhosts/api-jira-thing.truvis.co',
+          'BACKEND_BASE_URL=http://localhost:18111',
+        ]) {
+          sh 'scripts/deploy-mcp-server.sh'
         }
       }
     }
