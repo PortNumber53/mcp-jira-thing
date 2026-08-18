@@ -6,7 +6,7 @@ import Pricing from './pages/Pricing';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import Integrations from './pages/Integrations';
-import { apiUrl, apiFetch, apiOrigin } from './api';
+import { apiUrl, apiFetch } from './api';
 
 type SessionUser = {
   id: number;
