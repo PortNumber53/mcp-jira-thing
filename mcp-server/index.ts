@@ -99,7 +99,11 @@ app.get("/sse", async (req, res) => {
     const transport = new SSEServerTransport("/sse/message", res as any);
     const sessionId = transport.sessionId;
     persistedSessionId = sessionId;
-    const mcpSecret = extractMcpSecretFromRequest(req);
+    const extractedSecret = extractMcpSecretFromRequest(req);
+    const mcpSecret = extractedSecret?.secret;
+    if (extractedSecret?.fromDeprecatedQueryParam && !res.headersSent) {
+      res.setHeader("Deprecation", "true");
+    }
     const persisted = await transportSessionStore.create({
       sessionId,
       transport: "sse",
@@ -185,7 +189,11 @@ app.post("/mcp", async (req, res) => {
 
     const sessionId = randomUUID();
     newlyPersistedSessionId = sessionId;
-    const mcpSecret = extractMcpSecretFromRequest(req);
+    const extractedSecret = extractMcpSecretFromRequest(req);
+    const mcpSecret = extractedSecret?.secret;
+    if (extractedSecret?.fromDeprecatedQueryParam && !res.headersSent) {
+      res.setHeader("Deprecation", "true");
+    }
     const persisted = await transportSessionStore.create({
       sessionId,
       transport: "streamable_http",

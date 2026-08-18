@@ -355,7 +355,9 @@ const AppContent = () => {
     if (session.status === "authenticated") {
       if (route === "/settings") {
         const mcpSecretExample = mcpSecret ?? "<YOUR_SECRET>";
-        const mcpHttpUrlExample = `${window.location.origin}/mcp?mcp_secret=${mcpSecretExample}`;
+        const mcpHttpUrlExample = `${window.location.origin}/mcp`;
+        const mcpHttpUrlWithSecretExample = `${window.location.origin}/mcp?mcp_secret=${mcpSecretExample}`;
+        const mcpHeaderExample = `X-MCP-Secret: ${mcpSecretExample}`;
         const platformToNpxPath: Record<typeof mcpInstructionsPlatform, string> = {
           osx: "/opt/homebrew/bin/npx",
           linux: "npx",
@@ -550,6 +552,8 @@ const AppContent = () => {
               <p className="app__status">
                 Use the MCP secret above to connect your editor to this server. The MCP endpoint for your tenant is
                 <code style={{ marginLeft: "0.35rem" }}>{mcpHttpUrlExample}</code>.
+                Pass the secret via the <code>X-MCP-Secret</code> header, or append
+                <code>?mcp_secret=YOUR_SECRET</code> to the URL if your client does not support custom headers.
               </p>
               <p className="app__status" style={{ marginTop: "-0.5rem", fontWeight: 600 }}>
                 IMPORTANT: make sure to adjust these examples to your system.
@@ -589,12 +593,19 @@ const AppContent = () => {
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
                     {`"jira-thing": {
   "command": "${npxPathForPlatform}",
-  "args": ["mcp-remote", "${mcpHttpUrlExample}"],
+  "args": ["mcp-remote", "${mcpHttpUrlExample}", "--header", "X-MCP-Secret:\${MCP_SECRET}"],
   "env": {
+    "MCP_SECRET": "${mcpSecretExample}",
     "PATH": "${pathEnvForPlatform}"
   }
 }`}
                   </pre>
+                  <p style={{ marginTop: "0.5rem", marginBottom: 0, fontSize: "0.8rem", color: "#31708f" }}>
+                    <strong>Note:</strong> The <code>--header</code> flag passes the secret via the
+                    <code>X-MCP-Secret</code> HTTP header, keeping it out of URLs. The
+                    <code>{"${MCP_SECRET}"}</code> placeholder is substituted from the <code>env</code> block —
+                    no space around the <code>:</code> avoids a known Cursor args-spacing bug.
+                  </p>
                 </li>
                 <li>
                   If Cursor logs <code>spawn npx ENOENT</code> or <code>env: node: No such file or directory</code>,
@@ -607,10 +618,27 @@ const AppContent = () => {
               </h4>
               <ul className="app__status" style={{ paddingLeft: "1.25rem", margin: 0 }}>
                 <li>
-                  Any MCP client that supports HTTP or SSE can connect. Example:
+                  <strong>Recommended:</strong> Use the <code>X-MCP-Secret</code> header with the plain endpoint URL
+                  <code>{mcpHttpUrlExample}</code>. For <code>mcp-remote</code>, pass the header via the
+                  <code>--header</code> flag with env-var substitution:
                   <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-                    {`npx mcp-remote "${mcpHttpUrlExample}"`}
+                    {`# mcp-remote with header (recommended)
+MCP_SECRET=${mcpSecretExample} npx mcp-remote "${mcpHttpUrlExample}" --header "X-MCP-Secret:\${MCP_SECRET}"
+
+# or with curl for direct testing
+curl -H "${mcpHeaderExample}" ${mcpHttpUrlExample}`}
                   </pre>
+                </li>
+                <li>
+                  <strong>Fallback:</strong> For older versions of <code>mcp-remote</code> that do not support the
+                  <code>--header</code> flag, append the secret as a query parameter:
+                  <pre style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
+                    {`npx mcp-remote "${mcpHttpUrlWithSecretExample}"`}
+                  </pre>
+                  <p style={{ marginTop: "0.5rem", marginBottom: 0, fontSize: "0.8rem", color: "#856404" }}>
+                    <strong>Warning:</strong> The <code>?mcp_secret=</code> query parameter exposes your secret in
+                    access logs, browser history, and proxy logs. Use this only when custom headers are not supported.
+                  </p>
                 </li>
                 <li>
                   This server supports both HTTP (<code>/mcp</code>) and SSE (<code>/sse</code>) transports.
