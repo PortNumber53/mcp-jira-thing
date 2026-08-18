@@ -96,6 +96,7 @@ async function restoreHTTPSessionFromStore(sessionId: string): Promise<HTTPSessi
 app.get("/sse", async (req, res) => {
   let persistedSessionId: string | undefined;
   try {
+    res.setHeader("X-Accel-Buffering", "no");
     const transport = new SSEServerTransport("/sse/message", res as any);
     const sessionId = transport.sessionId;
     persistedSessionId = sessionId;
