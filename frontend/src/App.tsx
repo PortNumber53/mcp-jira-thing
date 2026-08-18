@@ -224,7 +224,7 @@ const AppContent = () => {
   };
 
   const beginLoginWithGoogle = () => {
-    const loginUrl = new URL("/api/auth/google/login", window.location.origin);
+    const loginUrl = new URL(GOOGLE_LOGIN_ENDPOINT);
     loginUrl.searchParams.set("redirect", "/dashboard");
     window.location.href = loginUrl.toString();
   };

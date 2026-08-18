@@ -92,6 +92,9 @@ if [[ "${DEPLOY_PUBLISH_CONFIG_INI:-}" == "1" ]]; then
     if [[ -n "${BACKEND_URL:-}" ]]; then
       echo "BACKEND_URL=${BACKEND_URL}"
     fi
+    if [[ -n "${ALLOWED_ORIGINS:-}" ]]; then
+      echo "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}"
+    fi
   } > "$LOCAL_TMP_CONFIG"
 
   ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -euo pipefail; sudo mkdir -pv '$CONFIG_DIR'"

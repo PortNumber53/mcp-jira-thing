@@ -30,7 +30,7 @@ pipeline {
 
     stage('Build Frontend') {
       steps {
-        sh 'cd frontend && npm ci && npm run build'
+        sh 'cd frontend && npm ci && VITE_BACKEND_ORIGIN=https://api-jira-thing.truvis.co npm run build'
       }
     }
 
@@ -102,6 +102,7 @@ pipeline {
           // Frontend and API origins for OAuth redirects.
           'FRONTEND_URL=https://jira-thing.truvis.co',
           'BACKEND_URL=https://api-jira-thing.truvis.co',
+          'ALLOWED_ORIGINS=https://jira-thing.truvis.co',
         ]) {
           sh 'scripts/deploy-backend.sh'
         }
