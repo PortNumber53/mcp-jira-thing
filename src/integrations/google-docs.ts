@@ -14,6 +14,7 @@ import {
   IntegrationStatus,
   integrationRegistry,
 } from "./registry";
+import { escapeDriveQueryString } from "../utils";
 
 interface GoogleDocsDocument {
   documentId: string;
@@ -127,7 +128,7 @@ export class GoogleDocsIntegration implements IntegrationModule {
   ): Promise<GoogleDocsListResponse> {
     const params = new URLSearchParams();
     const mimeFilter = "mimeType='application/vnd.google-apps.document'";
-    const nameFilter = options?.query ? ` and name contains '${options.query.replace(/'/g, "\\'")}'` : "";
+    const nameFilter = options?.query ? ` and name contains '${escapeDriveQueryString(options.query)}'` : "";
     params.set("q", `${mimeFilter}${nameFilter}`);
     params.set("fields", "files(id,name,mimeType,modifiedTime,webViewLink),nextPageToken");
     params.set("pageSize", String(options?.pageSize ?? 20));
