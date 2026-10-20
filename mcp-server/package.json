@@ -9,9 +9,9 @@
     "dev": "node --env-file=.env --import tsx/esm --watch index.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.3",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "cors": "^2.8.5",
-    "express": "^4.21.0",
+    "express": "^4.22.3",
     "octokit": "^5.0.3",
     "zod": "^3.25.67"
   },
